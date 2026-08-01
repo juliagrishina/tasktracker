@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Варианты Backlog — TaskTracker</title>
+  <link rel="stylesheet" href="mockup-shell.css">
+</head>
+<body>
+<main class="shell">
+<style>
+  :root { --ink:#172033; --muted:#727b89; --line:#e5e9ef; --blue:#0a84ff; --green:#33ad66; --soft:#f5f7fa; --yellow:#fff3cf; }
+  .intro { display:flex; gap:18px; justify-content:space-between; align-items:flex-start; margin-bottom:22px; }
+  .recommendation { max-width:440px; padding:12px 14px; border-radius:14px; background:#eef7ff; color:#174f82; font-size:14px; line-height:1.45; }
+  .cards { grid-template-columns:repeat(2,minmax(310px,1fr)); align-items:start; max-width:940px; margin:0 auto; }
+  .card-image { padding:16px; background:linear-gradient(145deg,#f7f9fc,#edf2f7); }
+  .phone { width:100%; max-width:335px; height:660px; margin:auto; background:#f7f8fb; border:1px solid #cdd3dc; border-radius:39px; overflow:hidden; box-shadow:0 12px 35px rgba(27,39,58,.13); position:relative; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; }
+  .status { height:25px; padding:10px 20px 0; display:flex; justify-content:space-between; font-size:11px; font-weight:700; background:#fff; }
+  .top { padding:14px 16px 12px; background:#fff; border-bottom:1px solid var(--line); }
+  .topline { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .title { font-size:26px; font-weight:780; letter-spacing:-.7px; }
+  .sub { margin-top:3px; color:var(--muted); font-size:11px; }
+  .iconbtn { width:34px; height:34px; display:grid; place-items:center; border-radius:50%; background:#eef5ff; color:#0875dc; font-size:21px; }
+  .scroll { padding:12px 12px 80px; height:524px; overflow:hidden; }
+  .section { background:#fff; border:1px solid var(--line); border-radius:17px; margin-bottom:10px; overflow:hidden; box-shadow:0 2px 9px rgba(25,37,56,.035); }
+  .section-head { display:flex; align-items:center; justify-content:space-between; padding:11px 12px; }
+  .section-name { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:800; }
+  .glyph { width:27px; height:27px; border-radius:9px; display:grid; place-items:center; background:#eef5ff; color:#0875dc; }
+  .glyph.rem { background:var(--yellow); color:#775a00; }
+  .count { min-width:23px; height:23px; padding:0 6px; display:grid; place-items:center; border-radius:999px; background:#f0f2f5; color:var(--muted); font-size:9px; }
+  .row { display:grid; grid-template-columns:18px 1fr auto; gap:8px; align-items:center; padding:9px 12px; border-top:1px solid var(--line); }
+  .check { width:15px; height:15px; border:1.5px solid #aeb5bf; border-radius:50%; }
+  .copy strong { display:block; font-size:10px; }
+  .copy span { color:var(--muted); font-size:8.5px; }
+  .chev { color:#a1a8b2; font-size:12px; }
+  .project { border-top:1px solid var(--line); }
+  .project-head { display:flex; align-items:center; gap:7px; padding:9px 12px 7px; font-size:10px; font-weight:800; }
+  .project-head span:last-child { margin-left:auto; color:var(--muted); font-size:8px; font-weight:600; }
+  .child { padding-left:28px; }
+  .grandchild { padding-left:45px; background:#fcfdfe; }
+  .more { padding:8px 12px 10px; border-top:1px solid var(--line); color:#0a84ff; font-size:9px; text-align:center; }
+  .fab { position:absolute; right:16px; bottom:71px; width:47px; height:47px; border-radius:50%; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:25px; box-shadow:0 5px 14px rgba(10,132,255,.35); z-index:4; }
+  .tabbar { position:absolute; left:0; right:0; bottom:0; height:59px; background:rgba(250,250,252,.98); border-top:1px solid var(--line); display:grid; grid-template-columns:repeat(4,1fr); z-index:5; }
+  .tab { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; color:#737b86; font-size:8px; }
+  .tab b { font-size:16px; line-height:1; font-weight:600; }
+  .tab.active { color:var(--blue); font-weight:700; }
+  .root-card { background:#fff; border:1px solid var(--line); border-radius:18px; padding:13px; margin-bottom:10px; box-shadow:0 2px 9px rgba(25,37,56,.035); }
+  .root-top { display:flex; align-items:center; gap:9px; }
+  .root-top .grow { flex:1; }
+  .root-top strong { display:block; font-size:12px; }
+  .root-top span { color:var(--muted); font-size:9px; }
+  .preview { margin-top:10px; background:#f7f9fb; border-radius:12px; overflow:hidden; }
+  .preview-row { display:grid; grid-template-columns:15px 1fr auto; align-items:center; gap:7px; padding:8px 9px; border-bottom:1px solid #e9edf2; }
+  .preview-row:last-child { border-bottom:0; }
+  .preview-row strong { font-size:9.5px; }
+  .preview-row small { color:var(--muted); font-size:8px; }
+  .open { margin-top:9px; display:flex; justify-content:space-between; align-items:center; color:#0a84ff; font-size:9px; font-weight:700; }
+  .hint { margin:3px 1px 11px; padding:9px 10px; background:#edf7ff; color:#235e91; border-radius:12px; font-size:9px; line-height:1.35; }
+  .rec { color:#0874d8; background:#eaf4ff; padding:3px 6px; border-radius:999px; font-size:9px; text-transform:uppercase; letter-spacing:.5px; }
+  @media(max-width:840px){ .cards{grid-template-columns:1fr;} .intro{flex-direction:column;} }
+</style>
+
+<div class="intro">
+  <div>
+    <h2>Backlog: обзор сразу или вход через категории?</h2>
+    <p class="subtitle">Оба варианта сохраняют обязательный порядок: «Напоминания», «Без проекта», «Проекты». Поиска и фильтров нет — как и требует MVP.</p>
+  </div>
+  <div class="recommendation"><strong>Рекомендация: 1 — раскрываемые секции.</strong><br>Пользователь видит иерархию и конкретные задачи без лишнего перехода, а длинные проекты можно сворачивать.</div>
+</div>
+
+<div class="cards">
+  <div class="card" data-choice="backlog-1-sections" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="phone">
+      <div class="status"><span>09:41</span><span>●●● Wi‑Fi ▰</span></div>
+      <div class="top"><div class="topline"><div><div class="title">Backlog</div><div class="sub">Все незапланированные дела</div></div><div class="iconbtn">＋</div></div></div>
+      <div class="scroll">
+        <div class="section"><div class="section-head"><div class="section-name"><span class="glyph rem">◷</span>Напоминания</div><span class="count">3</span></div><div class="row"><span class="check"></span><div class="copy"><strong>Заказать пропуск</strong><span>Без даты · без оценки</span></div><span class="chev">›</span></div><div class="row"><span class="check"></span><div class="copy"><strong>Проверить ответ поставщика</strong><span>Оценка 10 минут</span></div><span class="chev">›</span></div><div class="more">Показать ещё 1</div></div>
+        <div class="section"><div class="section-head"><div class="section-name"><span class="glyph">□</span>Без проекта</div><span class="count">2</span></div><div class="row"><span class="check"></span><div class="copy"><strong>Разобрать заметки</strong><span>45 минут</span></div><span class="chev">›</span></div><div class="row"><span class="check"></span><div class="copy"><strong>Купить кабель</strong><span>Без оценки</span></div><span class="chev">›</span></div></div>
+        <div class="section"><div class="section-head"><div class="section-name"><span class="glyph">▤</span>Проекты</div><span class="count">2</span></div><div class="project"><div class="project-head"><span>⌄</span><span>iOS-планировщик</span><span>3 задачи</span></div><div class="row child"><span class="check"></span><div class="copy"><strong>Согласовать структуру</strong><span>60 минут</span></div><span class="chev">›</span></div><div class="row child"><span>⌄</span><div class="copy"><strong>Подготовить прототип</strong><span>2 подзадачи</span></div><span class="chev">›</span></div><div class="row grandchild"><span class="check"></span><div class="copy"><strong>Экран дня</strong><span>Подзадача · 90 минут</span></div><span class="chev">›</span></div></div><div class="project"><div class="project-head"><span>›</span><span>Ремонт кабинета</span><span>4 задачи</span></div></div></div>
+      </div>
+      <div class="fab">＋</div>
+      <div class="tabbar"><div class="tab"><b>▣</b>План</div><div class="tab active"><b>☷</b>Backlog</div><div class="tab"><b>✓</b>Готово</div><div class="tab"><b>⚙︎</b>Настройки</div></div>
+    </div></div>
+    <div class="card-body"><h3>1. Раскрываемые секции <span class="rec">Рекомендуем</span></h3><p>Все уровни видны в одном прокручиваемом экране. Задача открывается сразу, проект раскрывается на месте.</p></div>
+  </div>
+
+  <div class="card selected" data-choice="backlog-2-categories" onclick="toggleSelect(this)">
+    <div class="card-image"><div class="phone">
+      <div class="status"><span>09:41</span><span>●●● Wi‑Fi ▰</span></div>
+      <div class="top"><div class="topline"><div><div class="title">Backlog</div><div class="sub">12 дел ждут планирования</div></div><div class="iconbtn">＋</div></div></div>
+      <div class="scroll">
+        <div class="hint">Нажатие на задачу открывает форму планирования с датой «сегодня», ближайшими 5 минутами и длительностью 60 минут.</div>
+        <div class="root-card"><div class="root-top"><span class="glyph rem">◷</span><div class="grow"><strong>Напоминания</strong><span>3 без даты</span></div><span class="chev">›</span></div><div class="preview"><div class="preview-row"><span class="check"></span><strong>Заказать пропуск</strong><small>без оценки</small></div><div class="preview-row"><span class="check"></span><strong>Проверить ответ поставщика</strong><small>10 мин</small></div></div><div class="open"><span>Открыть раздел</span><span>3 →</span></div></div>
+        <div class="root-card"><div class="root-top"><span class="glyph">□</span><div class="grow"><strong>Без проекта</strong><span>2 задачи</span></div><span class="chev">›</span></div><div class="preview"><div class="preview-row"><span class="check"></span><strong>Разобрать заметки</strong><small>45 мин</small></div><div class="preview-row"><span class="check"></span><strong>Купить кабель</strong><small>без оценки</small></div></div><div class="open"><span>Открыть раздел</span><span>2 →</span></div></div>
+        <div class="root-card"><div class="root-top"><span class="glyph">▤</span><div class="grow"><strong>Проекты</strong><span>2 проекта · 7 задач</span></div><span class="chev">›</span></div><div class="preview"><div class="preview-row"><span>▣</span><strong>iOS-планировщик</strong><small>3 задачи</small></div><div class="preview-row"><span>▣</span><strong>Ремонт кабинета</strong><small>4 задачи</small></div></div><div class="open"><span>Перейти к проектам</span><span>2 →</span></div></div>
+      </div>
+      <div class="fab">＋</div>
+      <div class="tabbar"><div class="tab"><b>▣</b>План</div><div class="tab active"><b>☷</b>Backlog</div><div class="tab"><b>✓</b>Готово</div><div class="tab"><b>⚙︎</b>Настройки</div></div>
+    </div></div>
+    <div class="card-body"><h3>2. Карточки-категории</h3><p>Чище и спокойнее при большом объёме, но для просмотра иерархии нужен дополнительный переход внутрь раздела.</p></div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:20px">Выберите вариант 1 или 2. В обоих случаях кнопка «＋» открывает выбор: проект, задача или напоминание.</p>
+<script src="mockup-shell.js"></script>
+</main>
+</body>
+</html>

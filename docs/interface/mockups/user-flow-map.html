@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Карта экранов и пользовательских путей — TaskTracker</title>
+  <link rel="stylesheet" href="mockup-shell.css">
+</head>
+<body>
+<main class="shell">
+<style>
+  :root { --ink:#172033; --muted:#6f7987; --line:#dfe5ec; --blue:#0a84ff; --blue-soft:#eaf4ff; --green:#2fa866; --green-soft:#e8f7ed; --yellow:#f0ad25; --yellow-soft:#fff5dc; --red:#d94a43; --red-soft:#fff0ef; --purple:#7456c8; --purple-soft:#f1edff; }
+  body { min-width:900px; }
+  .lead { display:flex; justify-content:space-between; gap:22px; align-items:flex-start; margin-bottom:18px; }
+  .selection { display:flex; flex-wrap:wrap; gap:7px; max-width:550px; }
+  .chosen { padding:7px 10px; border-radius:999px; background:#eef7ff; color:#176db8; font-size:11px; font-weight:750; }
+  .legend { display:flex; gap:10px; flex-wrap:wrap; color:var(--muted); font-size:10px; }
+  .legend span { display:flex; align-items:center; gap:5px; }
+  .legend i { width:9px; height:9px; border-radius:3px; display:inline-block; }
+  .map { display:grid; grid-template-columns:repeat(4,minmax(205px,1fr)); gap:14px; margin-top:14px; position:relative; }
+  .tabcol { background:#f6f8fb; border:1px solid var(--line); border-radius:19px; padding:12px; min-height:340px; }
+  .tabhead { display:flex; align-items:center; gap:9px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+  .tabicon { width:34px; height:34px; border-radius:11px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:17px; }
+  .tabhead strong { display:block; font-size:13px; }
+  .tabhead span { color:var(--muted); font-size:9px; }
+  .node { position:relative; background:#fff; border:1px solid var(--line); border-radius:13px; padding:9px 10px; margin-top:9px; font-size:10px; line-height:1.35; box-shadow:0 2px 7px rgba(24,36,54,.035); }
+  .node strong { display:block; font-size:10.5px; margin-bottom:2px; }
+  .node small { color:var(--muted); font-size:8.5px; }
+  .node.selected { border-color:#91c9ff; background:#f4faff; box-shadow:0 0 0 2px rgba(10,132,255,.08); }
+  .node.sub { margin-left:18px; }
+  .node.sub:before { content:"↳"; position:absolute; left:-17px; top:9px; color:#97a0ac; }
+  .node.green { background:var(--green-soft); border-color:#bfe7ce; }
+  .node.purple { background:var(--purple-soft); border-color:#d5caf8; }
+  .flow-title { margin:28px 0 12px; display:flex; justify-content:space-between; align-items:end; gap:12px; }
+  .flow-title h3 { margin:0; font-size:17px; }
+  .flow-title p { margin:0; color:var(--muted); font-size:10px; }
+  .lanes { display:grid; gap:12px; }
+  .lane { display:grid; grid-template-columns:140px 1fr; gap:10px; align-items:stretch; }
+  .lane-label { padding:12px; border-radius:15px; background:#edf5ff; color:#225f95; display:flex; flex-direction:column; justify-content:center; }
+  .lane-label strong { font-size:11px; }
+  .lane-label span { font-size:8.5px; opacity:.8; margin-top:3px; }
+  .steps { display:flex; align-items:center; gap:7px; padding:9px 10px; border:1px solid var(--line); border-radius:15px; background:#fafbfd; overflow:auto; }
+  .step { min-width:116px; max-width:150px; padding:9px 10px; border-radius:11px; background:#fff; border:1px solid var(--line); font-size:9px; line-height:1.3; }
+  .step b { display:block; font-size:9.5px; margin-bottom:2px; }
+  .step.action { background:var(--blue-soft); border-color:#b9dbfb; }
+  .step.success { background:var(--green-soft); border-color:#bee5cb; }
+  .step.decision { background:var(--yellow-soft); border-color:#efd99c; }
+  .step.outlook { background:var(--purple-soft); border-color:#d4c8f5; }
+  .arrow { color:#9aa3af; font-size:16px; flex:0 0 auto; }
+  .branch { display:flex; flex-direction:column; gap:4px; min-width:150px; }
+  .branch .step { min-width:130px; }
+  .branchline { display:flex; align-items:center; gap:5px; }
+  .branchmark { color:#9aa3af; font-size:9px; min-width:18px; }
+  .states { display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:12px; margin-top:13px; }
+  .statebox { border:1px solid var(--line); border-radius:16px; padding:12px; background:#fff; }
+  .statebox h4 { margin:0 0 8px; font-size:11px; }
+  .stateitem { display:flex; gap:8px; align-items:flex-start; padding:7px 0; border-top:1px solid #edf0f4; font-size:9px; line-height:1.3; }
+  .stateitem:first-of-type { border-top:0; }
+  .badge { flex:0 0 auto; min-width:48px; text-align:center; padding:3px 5px; border-radius:999px; font-size:7.5px; font-weight:800; }
+  .badge.err { background:var(--red-soft); color:#ad3731; }
+  .badge.sheet { background:var(--blue-soft); color:#236cab; }
+  .badge.rule { background:var(--yellow-soft); color:#7d5c11; }
+  .footer-note { margin-top:14px; padding:11px 13px; border-radius:14px; background:#f4f6f9; color:#5f6976; font-size:9.5px; line-height:1.4; }
+</style>
+
+<div class="lead">
+  <div>
+    <h2>Согласованная структура интерфейса</h2>
+    <p class="subtitle">Четыре постоянные вкладки, выбранные варианты экранов и ключевые пользовательские циклы MVP.</p>
+  </div>
+  <div class="selection"><span class="chosen">План · B Дашборд</span><span class="chosen">Backlog · 2 Категории</span><span class="chosen">Завершённые · 1 По датам</span><span class="chosen">Настройки · 2 Панель</span></div>
+</div>
+
+<div class="legend"><span><i style="background:var(--blue)"></i>основной экран</span><span><i style="background:var(--green)"></i>результат действия</span><span><i style="background:var(--yellow)"></i>вопрос или подтверждение</span><span><i style="background:var(--purple)"></i>Microsoft 365 / Outlook</span></div>
+
+<div class="map">
+  <div class="tabcol"><div class="tabhead"><span class="tabicon">▣</span><div><strong>План</strong><span>Главная вкладка</span></div></div><div class="node selected"><strong>День · дашборд</strong><small>Выполнение, загрузка, энергия, ближайшее действие, дела без времени, расписание.</small></div><div class="node sub"><strong>Подробный таймлайн</strong><small>Открывается из блока «Расписание»; задачи зелёные, встречи Outlook нейтральные.</small></div><div class="node"><strong>Неделя</strong><small>7 дней, дата и точная загрузка; нажатие на дату → «День».</small></div><div class="node"><strong>Месяц</strong><small>Сетка с процентом загрузки; нажатие на дату → «День».</small></div><div class="node purple"><strong>Карточка встречи Outlook</strong><small>Только чтение: участники, место, описание, ссылка.</small></div></div>
+  <div class="tabcol"><div class="tabhead"><span class="tabicon">☷</span><div><strong>Backlog</strong><span>Незапланированные дела</span></div></div><div class="node selected"><strong>Карточки-категории</strong><small>1. Напоминания · 2. Без проекта · 3. Проекты.</small></div><div class="node sub"><strong>Список категории</strong><small>Напоминания или задачи без проекта.</small></div><div class="node sub"><strong>Список проектов</strong><small>Проект → задачи → подзадачи; проект завершается только вручную.</small></div><div class="node"><strong>Форма элемента</strong><small>Название обязательно; остальные поля необязательны.</small></div><div class="node green"><strong>Форма планирования</strong><small>Сегодня · ближайшие 5 минут · 60 минут по умолчанию.</small></div></div>
+  <div class="tabcol"><div class="tabhead"><span class="tabicon">✓</span><div><strong>Завершённые</strong><span>Архив по датам</span></div></div><div class="node selected"><strong>История завершений</strong><small>Группы по дате, фильтры Сегодня / Неделя / Месяц / Год.</small></div><div class="node"><strong>Поиск</strong><small>По названию проекта, задачи, подзадачи или напоминания.</small></div><div class="node sub"><strong>Детали элемента</strong><small>Дата завершения и исходный проект.</small></div><div class="node"><strong>Удалить окончательно</strong><small>Только вручную и после подтверждения; корзины нет.</small></div><div class="node purple"><strong>Встречи исключены</strong><small>Outlook-встречи не попадают в архив.</small></div></div>
+  <div class="tabcol"><div class="tabhead"><span class="tabicon">⚙︎</span><div><strong>Настройки</strong><span>Панель состояния</span></div></div><div class="node selected purple"><strong>Microsoft 365</strong><small>Подключить, повторный вход, отключить, обновить сейчас, последняя синхронизация.</small></div><div class="node"><strong>План дня</strong><small>Рабочий диапазон 08:00–22:00; вечерняя проверка 21:00.</small></div><div class="node"><strong>Уведомления</strong><small>Разрешение iOS и предварительное время 10 минут.</small></div><div class="node"><strong>Данные Outlook</strong><small>Удаление локальной копии с подтверждением.</small></div><div class="node"><strong>Служебное</strong><small>Версия приложения; часовой пояс берётся с устройства.</small></div></div>
+</div>
+
+<div class="flow-title"><div><h3>Ключевые пользовательские пути</h3><p>Переходы, которые должны быть очевидны без обучения.</p></div><p>Стрелка → означает переход или сохранение результата.</p></div>
+
+<div class="lanes">
+  <div class="lane"><div class="lane-label"><strong>1. Запланировать задачу</strong><span>Основной цикл Backlog → План</span></div><div class="steps"><div class="step"><b>Backlog</b>Выбрать категорию</div><span class="arrow">→</span><div class="step"><b>Список</b>Открыть задачу</div><span class="arrow">→</span><div class="step action"><b>Планирование</b>Дата, время, длительность</div><span class="arrow">→</span><div class="step decision"><b>Есть конфликт?</b>Отмена или сохранить</div><span class="arrow">→</span><div class="step success"><b>План · День</b>Задача в расписании</div></div></div>
+  <div class="lane"><div class="lane-label"><strong>2. Завершить задачу</strong><span>После последнего временного блока</span></div><div class="steps"><div class="step"><b>План / уведомление</b>Блок закончился</div><span class="arrow">→</span><div class="step decision"><b>Удалось закончить?</b>Да или нет</div><span class="arrow">→</span><div class="branch"><div class="branchline"><span class="branchmark">Да</span><div class="step success"><b>Завершённые</b>Запись в архиве</div></div><div class="branchline"><span class="branchmark">Нет</span><div class="step action"><b>Выбор</b>Продолжить / перенести / Backlog</div></div></div><span class="arrow">→</span><div class="step decision"><b>Требуется ответ?</b>После успешного выполнения</div><span class="arrow">→</span><div class="step success"><b>Связанное напоминание</b>3 / 7 / 14 дней или дата</div></div></div>
+  <div class="lane"><div class="lane-label"><strong>3. Получить ответ</strong><span>Цикл связанного напоминания</span></div><div class="steps"><div class="step"><b>Напоминание</b>Наступила дата проверки</div><span class="arrow">→</span><div class="step decision"><b>Ответ получен?</b>Да или нет</div><span class="arrow">→</span><div class="branch"><div class="branchline"><span class="branchmark">Да</span><div class="step success"><b>Закрыть</b>Или создать новую задачу</div></div><div class="branchline"><span class="branchmark">Нет</span><div class="step action"><b>Перенести</b>3 / 7 / 14 дней или дата</div></div></div></div></div>
+  <div class="lane"><div class="lane-label"><strong>4. Outlook-встреча</strong><span>Только чтение Microsoft 365</span></div><div class="steps"><div class="step outlook"><b>Настройки</b>Подключить Microsoft 365</div><span class="arrow">→</span><div class="step outlook"><b>Синхронизация</b>Встреча появляется в плане</div><span class="arrow">→</span><div class="step"><b>Карточка встречи</b>Детали и Teams-ссылка</div><span class="arrow">→</span><div class="step decision"><b>Встреча состоялась?</b>После окончания</div><span class="arrow">→</span><div class="branch"><div class="branchline"><span class="branchmark">Да</span><div class="step action"><b>Создать задачу</b>Или закрыть</div></div><div class="branchline"><span class="branchmark">Нет</span><div class="step"><b>Закрыть</b>Без действий</div></div></div></div></div>
+</div>
+
+<div class="flow-title"><div><h3>Общие состояния, диалоги и ошибки</h3><p>Эти элементы переиспользуются в нескольких сценариях.</p></div></div>
+<div class="states">
+  <div class="statebox"><h4>Модальные формы и sheets</h4><div class="stateitem"><span class="badge sheet">Sheet</span><span>Создание и редактирование проекта, задачи, подзадачи или напоминания.</span></div><div class="stateitem"><span class="badge sheet">Sheet</span><span>Планирование: дата, период, блоки времени, повторение.</span></div><div class="stateitem"><span class="badge sheet">Menu</span><span>Переключатель вида содержит ровно «День / Неделя / Месяц».</span></div><div class="stateitem"><span class="badge sheet">Prompt</span><span>Неблокирующая оценка энергии при первом открытии дня.</span></div></div>
+  <div class="statebox"><h4>Подтверждения и правила</h4><div class="stateitem"><span class="badge rule">Серия</span><span>«Только этот экземпляр / Всю серию / Отмена».</span></div><div class="stateitem"><span class="badge rule">Удаление</span><span>Подтверждение для архива и локальных данных Outlook.</span></div><div class="stateitem"><span class="badge rule">Перенос</span><span>Необязательная причина; история переноса сохраняется.</span></div><div class="stateitem"><span class="badge rule">Вечер</span><span>Незавершённые дела без времени проверяются в 21:00.</span></div></div>
+  <div class="statebox"><h4>Ошибки синхронизации</h4><div class="stateitem"><span class="badge err">Нет сети</span><span>Показать сохранённый план и статус «Не удалось обновить».</span></div><div class="stateitem"><span class="badge err">Токен</span><span>Сначала тихое обновление; затем предложить повторный вход.</span></div><div class="stateitem"><span class="badge err">Политика</span><span>Объяснить необходимость обратиться к IT-администратору.</span></div><div class="stateitem"><span class="badge err">Лимит</span><span>Повтор с увеличивающейся задержкой; успех только после всех страниц.</span></div></div>
+</div>
+
+<div class="footer-note"><strong>Граница MVP:</strong> без drag-and-drop, поиска в Backlog, видимых статусных плашек, процентов выполнения отдельных задач, редактирования Outlook и отдельной кнопки быстрого Backlog поверх плана. Все основные экраны рассчитаны на вертикальный iPhone и Dynamic Type.</div>
+</main>
+</body>
+</html>

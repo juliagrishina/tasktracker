@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+
+# Build products
+DerivedData/
+build/
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods / Carthage
+Pods/
+Carthage/Build/
+
+# Local tooling and secrets
+.superpowers/
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+
+# Codex scratch/output folders
+work/
+outputs/

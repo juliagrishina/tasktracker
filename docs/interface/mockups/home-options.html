@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Варианты главного экрана — TaskTracker</title>
+  <link rel="stylesheet" href="mockup-shell.css">
+</head>
+<body>
+<main class="shell">
+<style>
+  :root { --ink:#162033; --muted:#6e7785; --line:#e5e9ef; --blue:#0a84ff; --green:#d9f7e2; --green-ink:#176b3a; --meeting:#e9eef6; --warn:#fff2c7; }
+  .intro { display:flex; gap:18px; align-items:flex-start; justify-content:space-between; margin-bottom:22px; }
+  .recommendation { max-width:430px; padding:12px 14px; border-radius:14px; background:#eef7ff; color:#174f82; font-size:14px; line-height:1.45; }
+  .cards { grid-template-columns:repeat(3,minmax(290px,1fr)); align-items:start; }
+  .card { min-width:0; }
+  .card-image { padding:14px; background:linear-gradient(145deg,#f7f9fc,#eef2f7); }
+  .phone { width:100%; max-width:318px; height:635px; margin:auto; background:#fff; border:1px solid #cdd3dc; border-radius:38px; overflow:hidden; box-shadow:0 12px 35px rgba(27,39,58,.13); position:relative; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; }
+  .status { height:25px; padding:10px 20px 0; display:flex; justify-content:space-between; font-size:11px; font-weight:700; }
+  .top { padding:13px 16px 10px; border-bottom:1px solid var(--line); }
+  .topline { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .date { font-size:22px; font-weight:760; letter-spacing:-.4px; }
+  .sub { color:var(--muted); font-size:12px; margin-top:3px; }
+  .actions { display:flex; gap:7px; }
+  .pill { border-radius:999px; background:#f0f3f7; padding:7px 10px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .pill.blue { background:#eaf4ff; color:#0869c8; }
+  .summary { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:10px; }
+  .metric { background:#f5f7fa; border-radius:11px; padding:8px 10px; }
+  .metric strong { display:block; font-size:15px; }
+  .metric span { color:var(--muted); font-size:10px; }
+  .untimed { padding:9px 12px 8px; border-bottom:1px solid var(--line); background:#fbfcfe; }
+  .label-mini { font-size:9px; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); font-weight:800; margin-bottom:5px; }
+  .chip { display:inline-flex; align-items:center; margin:2px 3px 2px 0; padding:6px 8px; border-radius:9px; background:#fff3cf; color:#6f5500; font-size:10px; border:1px solid #f3dc93; }
+  .timeline { padding:6px 11px 67px; position:relative; }
+  .hour { height:52px; border-top:1px solid var(--line); position:relative; margin-left:37px; }
+  .hour > span { position:absolute; left:-37px; top:-7px; color:#8a929d; font-size:9px; }
+  .event { position:absolute; left:57px; right:13px; border-radius:8px; padding:6px 8px; font-size:10px; line-height:1.25; overflow:hidden; }
+  .event.task { background:var(--green); color:var(--green-ink); border-left:3px solid #39ad67; }
+  .event.meeting { background:var(--meeting); color:#33435b; border-left:3px solid #7a91af; }
+  .event.cancel { background:#f0f1f3; color:#9298a1; text-decoration:line-through; border-left:3px solid #adb2ba; }
+  .now { position:absolute; left:44px; right:9px; height:1.5px; background:#ff3b30; top:188px; z-index:2; }
+  .now:before { content:""; position:absolute; left:-3px; top:-3px; width:7px; height:7px; background:#ff3b30; border-radius:50%; }
+  .tabbar { position:absolute; left:0; right:0; bottom:0; height:58px; background:rgba(250,250,252,.97); border-top:1px solid var(--line); display:grid; grid-template-columns:repeat(4,1fr); z-index:5; }
+  .tab { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; color:#737b86; font-size:8px; }
+  .tab b { font-size:16px; line-height:1; font-weight:600; }
+  .tab.active { color:var(--blue); font-weight:700; }
+  .fab { position:absolute; right:15px; bottom:72px; width:44px; height:44px; border-radius:50%; background:var(--blue); color:white; display:grid; place-items:center; font-size:25px; box-shadow:0 5px 14px rgba(10,132,255,.35); z-index:4; }
+  .dashboard { padding:10px 13px 70px; }
+  .hero { background:linear-gradient(135deg,#eaf5ff,#f4f9ff); border:1px solid #d9eaff; border-radius:18px; padding:13px; }
+  .hero-row { display:flex; align-items:center; gap:13px; }
+  .ring { width:58px; height:58px; border-radius:50%; display:grid; place-items:center; background:conic-gradient(var(--blue) 0 35%,#dce8f4 35% 100%); position:relative; font-size:13px; font-weight:800; }
+  .ring:after { content:""; position:absolute; inset:7px; border-radius:50%; background:#f5faff; }
+  .ring span { z-index:1; }
+  .hero h4 { margin:0 0 4px; font-size:15px; }
+  .hero p { margin:0; font-size:10px; color:var(--muted); }
+  .next { margin-top:9px; padding:10px; background:#fff; border-radius:12px; box-shadow:0 2px 10px rgba(30,50,75,.06); }
+  .next strong { display:block; font-size:12px; }
+  .next span { font-size:10px; color:var(--muted); }
+  .section-title { display:flex; justify-content:space-between; align-items:center; margin:14px 1px 7px; font-size:12px; font-weight:800; }
+  .mini-list { display:grid; gap:6px; }
+  .list-row { display:flex; align-items:center; gap:9px; padding:9px 10px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  .timebox { min-width:36px; color:var(--muted); font-size:9px; }
+  .dot { width:9px; height:9px; border-radius:3px; background:#48bf79; }
+  .dot.meet { background:#8aa0bd; }
+  .list-copy { min-width:0; }
+  .list-copy strong { display:block; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .list-copy span { font-size:9px; color:var(--muted); }
+  .loadbar { height:8px; background:#e7ebf0; border-radius:10px; overflow:hidden; margin-top:6px; }
+  .loadbar i { display:block; width:63%; height:100%; background:#ffcc57; border-radius:10px; }
+  .agenda { padding:7px 12px 70px; }
+  .agenda-section { margin-bottom:12px; }
+  .agenda-title { font-size:11px; font-weight:800; margin:8px 0 6px; display:flex; justify-content:space-between; }
+  .agenda-item { display:grid; grid-template-columns:41px 1fr; gap:8px; padding:9px 2px; border-bottom:1px solid var(--line); }
+  .agenda-item .when { color:#737d8a; font-size:9px; line-height:1.25; }
+  .agenda-item strong { display:block; font-size:11px; }
+  .agenda-item small { color:var(--muted); font-size:9px; }
+  .agenda-item .badge { display:inline-block; margin-top:4px; padding:3px 5px; background:#e2f7e8; color:#247344; border-radius:5px; font-size:8px; }
+  .conflict { background:#fff6df; border-radius:11px; padding:8px 9px; margin-top:7px; color:#795600; font-size:9px; }
+  .card-body h3 { display:flex; align-items:center; gap:7px; }
+  .rec { color:#0874d8; background:#eaf4ff; padding:3px 6px; border-radius:999px; font-size:9px; text-transform:uppercase; letter-spacing:.5px; }
+  @media (max-width:1080px){ .cards{grid-template-columns:1fr;} .intro{flex-direction:column;} }
+</style>
+
+<div class="intro">
+  <div>
+    <h2>Как должен работать главный экран «План — День»?</h2>
+    <p class="subtitle">Три варианта используют требования ТЗ: дела без времени сверху, задачи и Outlook-встречи в плане, выполнение и загрузка дня, переключатель «День / Неделя / Месяц».</p>
+  </div>
+  <div class="recommendation"><strong>Рекомендация: A — «Таймлайн прежде всего».</strong><br>Он сохраняет пространственное ощущение времени, быстрее показывает конфликты и ближе всего к ежедневному сценарию MVP.</div>
+</div>
+
+<div class="cards">
+  <div class="card" data-choice="home-a-timeline" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="status"><span>09:41</span><span>●●●  Wi‑Fi  ▰</span></div>
+        <div class="top">
+          <div class="topline"><div><div class="date">3 августа</div><div class="sub">Понедельник · синхр. 09:38</div></div><div class="actions"><span class="pill blue">День⌄</span><span class="pill">↻</span></div></div>
+          <div class="summary"><div class="metric"><strong>35%</strong><span>выполнено</span></div><div class="metric"><strong>6 ч 20 м</strong><span>запланировано</span></div></div>
+        </div>
+        <div class="untimed"><div class="label-mini">Без времени и на весь день</div><span class="chip">Позвонить в банк</span><span class="chip">Отчёт до пятницы</span></div>
+        <div class="timeline">
+          <div class="hour"><span>09:00</span></div><div class="hour"><span>10:00</span></div><div class="hour"><span>11:00</span></div><div class="hour"><span>12:00</span></div><div class="hour"><span>13:00</span></div><div class="hour"><span>14:00</span></div><div class="hour"><span>15:00</span></div>
+          <div class="event meeting" style="top:19px;height:48px"><b>Планёрка команды</b><br>09:15–10:00 · Teams</div>
+          <div class="event task" style="top:91px;height:55px"><b>Собрать прототип</b><br>10:30–11:30</div>
+          <div class="event cancel" style="top:163px;height:35px"><b>Синк с подрядчиком</b> · Отменено</div>
+          <div class="event task" style="top:226px;height:62px"><b>Подготовить презентацию</b><br>13:00–14:30</div>
+          <div class="now"></div>
+        </div>
+        <div class="fab">＋</div>
+        <div class="tabbar"><div class="tab active"><b>▣</b>План</div><div class="tab"><b>☷</b>Backlog</div><div class="tab"><b>✓</b>Готово</div><div class="tab"><b>⚙︎</b>Настройки</div></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A. Таймлайн прежде всего <span class="rec">Рекомендуем</span></h3><p>Максимум календаря на экране. Сводка компактна, дела без времени остаются заметными.</p></div>
+  </div>
+
+  <div class="card selected" data-choice="home-b-dashboard" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="status"><span>09:41</span><span>●●●  Wi‑Fi  ▰</span></div>
+        <div class="top"><div class="topline"><div><div class="date">Сегодня</div><div class="sub">3 августа, понедельник</div></div><div class="actions"><span class="pill blue">День⌄</span><span class="pill">↻</span></div></div></div>
+        <div class="dashboard">
+          <div class="hero"><div class="hero-row"><div class="ring"><span>35%</span></div><div><h4>План в норме</h4><p>6 ч 20 м из 14 ч · энергия 70%</p><div class="loadbar"><i></i></div></div></div><div class="next"><span>Следующее · через 18 минут</span><strong>Планёрка команды · Teams</strong></div></div>
+          <div class="section-title"><span>Без времени</span><span style="color:#0a84ff">2 дела</span></div>
+          <div class="mini-list"><div class="list-row"><div class="dot"></div><div class="list-copy"><strong>Позвонить в банк</strong><span>Без оценки</span></div></div><div class="list-row"><div class="dot"></div><div class="list-copy"><strong>Отчёт до пятницы</strong><span>Оценка 45 минут</span></div></div></div>
+          <div class="section-title"><span>Расписание</span><span style="color:#0a84ff">Открыть день</span></div>
+          <div class="mini-list"><div class="list-row"><div class="timebox">09:15<br>10:00</div><div class="dot meet"></div><div class="list-copy"><strong>Планёрка команды</strong><span>Microsoft Teams</span></div></div><div class="list-row"><div class="timebox">10:30<br>11:30</div><div class="dot"></div><div class="list-copy"><strong>Собрать прототип</strong><span>Проект «iOS MVP»</span></div></div><div class="list-row"><div class="timebox">13:00<br>14:30</div><div class="dot"></div><div class="list-copy"><strong>Подготовить презентацию</strong><span>1 ч 30 минут</span></div></div></div>
+        </div>
+        <div class="fab">＋</div>
+        <div class="tabbar"><div class="tab active"><b>▣</b>План</div><div class="tab"><b>☷</b>Backlog</div><div class="tab"><b>✓</b>Готово</div><div class="tab"><b>⚙︎</b>Настройки</div></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>B. Дашборд дня</h3><p>Сначала состояние дня и ближайшее действие, затем компактное расписание. Меньше пространства для таймлайна.</p></div>
+  </div>
+
+  <div class="card" data-choice="home-c-agenda" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone">
+        <div class="status"><span>09:41</span><span>●●●  Wi‑Fi  ▰</span></div>
+        <div class="top">
+          <div class="topline"><div><div class="date">Понедельник, 3</div><div class="sub">35% выполнено · 6 ч 20 м</div></div><div class="actions"><span class="pill blue">День⌄</span><span class="pill">↻</span></div></div>
+        </div>
+        <div class="agenda">
+          <div class="agenda-section"><div class="agenda-title"><span>На весь день</span><span style="color:#0a84ff">2</span></div><div class="agenda-item"><div class="when">без<br>времени</div><div><strong>Позвонить в банк</strong><small>Напоминание · без оценки</small></div></div><div class="agenda-item"><div class="when">до 7<br>авг.</div><div><strong>Отчёт до пятницы</strong><small>Задача · 45 минут</small></div></div></div>
+          <div class="agenda-section"><div class="agenda-title"><span>Расписание</span><span style="color:#0a84ff">＋ Добавить</span></div><div class="agenda-item"><div class="when">09:15<br>10:00</div><div><strong>Планёрка команды</strong><small>Outlook · Microsoft Teams</small><span class="badge">Встреча</span></div></div><div class="agenda-item"><div class="when">10:30<br>11:30</div><div><strong>Собрать прототип</strong><small>Проект «iOS MVP»</small><span class="badge">Задача</span></div></div><div class="conflict">⚠ В 13:00 есть пересечение: встреча и задача занимают 90 минут суммарно.</div><div class="agenda-item"><div class="when">13:00<br>14:30</div><div><strong>Подготовить презентацию</strong><small>Задача · 1 ч 30 минут</small><span class="badge">Задача</span></div></div><div class="agenda-item"><div class="when">13:30<br>14:00</div><div><strong>Синк с подрядчиком</strong><small style="text-decoration:line-through">Отменено · Outlook</small></div></div></div>
+        </div>
+        <div class="fab">＋</div>
+        <div class="tabbar"><div class="tab active"><b>▣</b>План</div><div class="tab"><b>☷</b>Backlog</div><div class="tab"><b>✓</b>Готово</div><div class="tab"><b>⚙︎</b>Настройки</div></div>
+      </div>
+    </div>
+    <div class="card-body"><h3>C. Гибридная повестка</h3><p>Быстро читается как список и хорошо масштабируется с Dynamic Type, но хуже передаёт свободные окна во времени.</p></div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:20px">Нажмите на вариант, который ближе по структуре. Можно переключаться между карточками перед окончательным выбором.</p>
+<script src="mockup-shell.js"></script>
+</main>
+</body>
+</html>
