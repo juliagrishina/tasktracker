@@ -10,6 +10,7 @@
 
 - [Исходное техническое задание](docs/requirements/ТЗ_iOS_планировщик_MVP.docx)
 - [Согласованная дизайн-спецификация](docs/superpowers/specs/2026-08-01-ios-planner-interface-design.md)
+- [Согласованное технологическое решение](docs/superpowers/specs/2026-08-01-ios-planner-technology-design.md)
 - [Интерактивные варианты интерфейса](docs/interface/README.md)
 
 ## Выбранные варианты
