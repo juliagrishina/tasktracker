@@ -108,6 +108,7 @@ const taskItems: readonly TaskItem[] = [
     parentTaskId: null,
     title: 'Заполнить итоги дня',
     ...taskDefaults,
+    completedAt: '2026-08-02T17:00:00.000Z',
     createdAt,
   },
   {
@@ -117,6 +118,7 @@ const taskItems: readonly TaskItem[] = [
     parentTaskId: null,
     title: 'Отправить краткий статус',
     ...taskDefaults,
+    completedAt: '2026-08-02T18:00:00.000Z',
     createdAt,
   },
 ];

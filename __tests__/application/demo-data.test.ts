@@ -2,6 +2,7 @@ import {
   loadDemoTaskGroups,
   seedDemoData,
 } from '../../src/application/demo-data';
+import { getBacklogView } from '../../src/application/backlog-use-cases';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 
 describe('development demo data', () => {
@@ -39,6 +40,24 @@ describe('development demo data', () => {
     expect(groups.completed).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ title: 'Заполнить итоги дня' }),
+      ]),
+    );
+
+    const backlog = await getBacklogView(source);
+
+    expect(backlog.reminders).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: 'Позвонить в страховую' }),
+      ]),
+    );
+    expect(backlog.unassignedTasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ task: expect.objectContaining({ title: 'Сохранить статьи для чтения' }) }),
+      ]),
+    );
+    expect(backlog.projects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ project: expect.objectContaining({ title: 'Личное' }) }),
       ]),
     );
   });

@@ -20,6 +20,8 @@ import {
 } from '../ui/demo-tasks';
 
 import { createAppRepositories } from './app-services';
+import type { BacklogView } from './backlog-types';
+import { getBacklogView } from './backlog-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 
@@ -28,6 +30,9 @@ interface AppServicesContextValue {
   projects: ProjectRepository;
   settings: AppSettings;
   demoTasks: DemoTaskGroups;
+  backlog: BacklogView;
+  refreshBacklog(): Promise<void>;
+  runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
 }
 
@@ -39,6 +44,13 @@ interface AppServicesProviderProps {
 
 const AppServicesContext = createContext<AppServicesContextValue | null>(null);
 
+const emptyBacklogView: BacklogView = {
+  categoryOrder: ['reminders', 'unassigned', 'projects'],
+  reminders: [],
+  unassignedTasks: [],
+  projects: [],
+};
+
 export function AppServicesProvider({
   children,
   source,
@@ -49,10 +61,23 @@ export function AppServicesProvider({
   const [isReady, setIsReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);
   const [demoTasks, setDemoTasks] = useState<DemoTaskGroups>(emptyDemoTaskGroups);
+  const [backlog, setBacklog] = useState<BacklogView>(emptyBacklogView);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const runStorageDiagnostic = useCallback(
     () => runPersistenceDiagnostic(appSource),
     [appSource],
+  );
+  const refreshBacklog = useCallback(async () => {
+    const loadedBacklog = await getBacklogView(appSource);
+    setBacklog(loadedBacklog);
+  }, [appSource]);
+  const runBacklogAction = useCallback(
+    async <T,>(action: () => Promise<T>): Promise<T> => {
+      const result = await action();
+      await refreshBacklog();
+      return result;
+    },
+    [refreshBacklog],
   );
 
   useEffect(() => {
@@ -68,10 +93,12 @@ export function AppServicesProvider({
         const loadedDemoTasks = seedDevelopmentData
           ? await loadDemoTaskGroups(appSource)
           : emptyDemoTaskGroups;
+        const loadedBacklog = await getBacklogView(appSource);
 
         if (isMounted) {
           setSettings(loadedSettings);
           setDemoTasks(loadedDemoTasks);
+          setBacklog(loadedBacklog);
           setIsReady(true);
         }
       } catch {
@@ -101,6 +128,9 @@ export function AppServicesProvider({
         projects: repositories.projects,
         settings,
         demoTasks,
+        backlog,
+        refreshBacklog,
+        runBacklogAction,
         runStorageDiagnostic,
       }}>
       {children}
