@@ -29,6 +29,8 @@ interface SettingsRow {
 interface ProjectRow {
   id: string;
   title: string;
+  description: string | null;
+  completed_at: string | null;
   created_at: string;
 }
 
@@ -38,15 +40,22 @@ interface TaskItemRow {
   project_id: string | null;
   parent_task_id: string | null;
   title: string;
+  description: string | null;
+  estimated_duration_minutes: number | null;
+  completed_at: string | null;
   created_at: string;
 }
 
 interface ReminderRow {
   id: string;
   title: string;
-  task_item_id: string | null;
-  project_id: string | null;
-  reminds_at: string;
+  reminds_on: string | null;
+  period_start_on: string | null;
+  period_end_on: string | null;
+  repeat_frequency: NonNullable<Reminder['repeatRule']>['frequency'] | null;
+  repeat_interval: number | null;
+  estimated_duration_minutes: number | null;
+  completed_at: string | null;
   created_at: string;
 }
 
@@ -134,12 +143,20 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     await database.runAsync(
-      `INSERT INTO projects (id, title, created_at)
-      VALUES (?, ?, ?)
+      `INSERT INTO projects (id, title, description, completed_at, created_at)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
+        description = excluded.description,
+        completed_at = excluded.completed_at,
         created_at = excluded.created_at`,
-      [project.id, project.title, project.createdAt],
+      [
+        project.id,
+        project.title,
+        project.description,
+        project.completedAt,
+        project.createdAt,
+      ],
     );
   }
 
@@ -147,7 +164,8 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ProjectRow>(
-      'SELECT id, title, created_at FROM projects WHERE id = ?',
+      `SELECT id, title, description, completed_at, created_at
+      FROM projects WHERE id = ?`,
       [id],
     );
 
@@ -156,10 +174,34 @@ class NativeDataSource implements AppDataSource {
       : {
           id: row.id,
           title: row.title,
-          description: null,
-          completedAt: null,
+          description: row.description,
+          completedAt: row.completed_at,
           createdAt: row.created_at,
         };
+  }
+
+  async listProjects(): Promise<readonly Project[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<ProjectRow>(
+      `SELECT id, title, description, completed_at, created_at
+      FROM projects
+      ORDER BY created_at ASC, id ASC`,
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      completedAt: row.completed_at,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async deleteProject(id: EntityId): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync('DELETE FROM projects WHERE id = ?', [id]);
   }
 
   async saveTaskItem(task: TaskItem): Promise<void> {
@@ -178,13 +220,19 @@ class NativeDataSource implements AppDataSource {
         project_id,
         parent_task_id,
         title,
+        description,
+        estimated_duration_minutes,
+        completed_at,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         kind = excluded.kind,
         project_id = excluded.project_id,
         parent_task_id = excluded.parent_task_id,
         title = excluded.title,
+        description = excluded.description,
+        estimated_duration_minutes = excluded.estimated_duration_minutes,
+        completed_at = excluded.completed_at,
         created_at = excluded.created_at`,
       [
         task.id,
@@ -192,6 +240,9 @@ class NativeDataSource implements AppDataSource {
         task.projectId,
         task.parentTaskId,
         task.title,
+        task.description,
+        task.estimatedDurationMinutes,
+        task.completedAt,
         task.createdAt,
       ],
     );
@@ -201,7 +252,8 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<TaskItemRow>(
-      `SELECT id, kind, project_id, parent_task_id, title, created_at
+      `SELECT id, kind, project_id, parent_task_id, title, description,
+        estimated_duration_minutes, completed_at, created_at
       FROM task_items
       WHERE id = ?`,
       [id],
@@ -218,9 +270,9 @@ class NativeDataSource implements AppDataSource {
         projectId: row.project_id,
         parentTaskId: null,
         title: row.title,
-        description: null,
-        estimatedDurationMinutes: null,
-        completedAt: null,
+        description: row.description,
+        estimatedDurationMinutes: row.estimated_duration_minutes,
+        completedAt: row.completed_at,
         createdAt: row.created_at,
       };
     }
@@ -235,11 +287,60 @@ class NativeDataSource implements AppDataSource {
       projectId: row.project_id,
       parentTaskId: row.parent_task_id,
       title: row.title,
-      description: null,
-      estimatedDurationMinutes: null,
-      completedAt: null,
+      description: row.description,
+      estimatedDurationMinutes: row.estimated_duration_minutes,
+      completedAt: row.completed_at,
       createdAt: row.created_at,
     };
+  }
+
+  async listTaskItems(): Promise<readonly TaskItem[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<TaskItemRow>(
+      `SELECT id, kind, project_id, parent_task_id, title, description,
+        estimated_duration_minutes, completed_at, created_at
+      FROM task_items
+      ORDER BY created_at ASC, id ASC`,
+    );
+
+    return rows.map((row) => {
+      if (row.kind === 'task') {
+        return {
+          id: row.id,
+          kind: 'task',
+          projectId: row.project_id,
+          parentTaskId: null,
+          title: row.title,
+          description: row.description,
+          estimatedDurationMinutes: row.estimated_duration_minutes,
+          completedAt: row.completed_at,
+          createdAt: row.created_at,
+        };
+      }
+
+      if (row.parent_task_id === null) {
+        throw new Error('В хранилище обнаружена подзадача без родителя');
+      }
+
+      return {
+        id: row.id,
+        kind: 'subtask',
+        projectId: row.project_id,
+        parentTaskId: row.parent_task_id,
+        title: row.title,
+        description: row.description,
+        estimatedDurationMinutes: row.estimated_duration_minutes,
+        completedAt: row.completed_at,
+        createdAt: row.created_at,
+      };
+    });
+  }
+
+  async deleteTaskItem(id: EntityId): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync('DELETE FROM task_items WHERE id = ?', [id]);
   }
 
   async saveReminder(reminder: Reminder): Promise<void> {
@@ -250,23 +351,35 @@ class NativeDataSource implements AppDataSource {
       `INSERT INTO reminders (
         id,
         title,
-        task_item_id,
-        project_id,
-        reminds_at,
+        reminds_on,
+        period_start_on,
+        period_end_on,
+        repeat_frequency,
+        repeat_interval,
+        estimated_duration_minutes,
+        completed_at,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
-        task_item_id = excluded.task_item_id,
-        project_id = excluded.project_id,
-        reminds_at = excluded.reminds_at,
+        reminds_on = excluded.reminds_on,
+        period_start_on = excluded.period_start_on,
+        period_end_on = excluded.period_end_on,
+        repeat_frequency = excluded.repeat_frequency,
+        repeat_interval = excluded.repeat_interval,
+        estimated_duration_minutes = excluded.estimated_duration_minutes,
+        completed_at = excluded.completed_at,
         created_at = excluded.created_at`,
       [
         reminder.id,
         reminder.title,
-        null,
-        null,
-        reminder.remindsOn ?? reminder.createdAt.slice(0, 10),
+        reminder.remindsOn,
+        reminder.periodStartOn,
+        reminder.periodEndOn,
+        reminder.repeatRule?.frequency ?? null,
+        reminder.repeatRule?.interval ?? null,
+        reminder.estimatedDurationMinutes,
+        reminder.completedAt,
         reminder.createdAt,
       ],
     );
@@ -276,7 +389,8 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ReminderRow>(
-      `SELECT id, title, task_item_id, project_id, reminds_at, created_at
+      `SELECT id, title, reminds_on, period_start_on, period_end_on,
+        repeat_frequency, repeat_interval, estimated_duration_minutes, completed_at, created_at
       FROM reminders
       WHERE id = ?`,
       [id],
@@ -287,14 +401,43 @@ class NativeDataSource implements AppDataSource {
       : {
           id: row.id,
           title: row.title,
-          remindsOn: row.reminds_at.slice(0, 10),
-          periodStartOn: null,
-          periodEndOn: null,
-          repeatRule: null,
-          estimatedDurationMinutes: null,
-          completedAt: null,
+          remindsOn: row.reminds_on,
+          periodStartOn: row.period_start_on,
+          periodEndOn: row.period_end_on,
+          repeatRule:
+            row.repeat_frequency === null || row.repeat_interval === null
+              ? null
+              : { frequency: row.repeat_frequency, interval: row.repeat_interval },
+          estimatedDurationMinutes: row.estimated_duration_minutes,
+          completedAt: row.completed_at,
           createdAt: row.created_at,
         };
+  }
+
+  async listReminders(): Promise<readonly Reminder[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<ReminderRow>(
+      `SELECT id, title, reminds_on, period_start_on, period_end_on,
+        repeat_frequency, repeat_interval, estimated_duration_minutes, completed_at, created_at
+      FROM reminders
+      ORDER BY created_at ASC, id ASC`,
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      remindsOn: row.reminds_on,
+      periodStartOn: row.period_start_on,
+      periodEndOn: row.period_end_on,
+      repeatRule:
+        row.repeat_frequency === null || row.repeat_interval === null
+          ? null
+          : { frequency: row.repeat_frequency, interval: row.repeat_interval },
+      estimatedDurationMinutes: row.estimated_duration_minutes,
+      completedAt: row.completed_at,
+      createdAt: row.created_at,
+    }));
   }
 
   async deleteReminder(id: EntityId): Promise<void> {
@@ -344,6 +487,24 @@ class NativeDataSource implements AppDataSource {
           endsAt: row.ends_at,
           createdAt: row.created_at,
         };
+  }
+
+  async listScheduleBlocks(): Promise<readonly ScheduleBlock[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<ScheduleBlockRow>(
+      `SELECT id, task_item_id, starts_at, ends_at, created_at
+      FROM schedule_blocks
+      ORDER BY created_at ASC, id ASC`,
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      taskItemId: row.task_item_id,
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      createdAt: row.created_at,
+    }));
   }
 
   async saveRecurrenceSeries(series: RecurrenceSeries): Promise<void> {
@@ -429,6 +590,21 @@ class NativeDataSource implements AppDataSource {
           completedAt: row.completed_at,
           createdAt: row.created_at,
         };
+  }
+
+  async transaction<T>(operation: () => Promise<T>): Promise<T> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    let result: { value: T } | undefined;
+    await database.withTransactionAsync(async () => {
+      result = { value: await operation() };
+    });
+
+    if (result === undefined) {
+      throw new Error('Транзакция не вернула результат');
+    }
+
+    return result.value;
   }
 
   private async initializeDatabase(): Promise<void> {

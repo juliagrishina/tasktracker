@@ -98,6 +98,71 @@ const schemaVersionTwo = `
   ALTER TABLE reminders ADD COLUMN title TEXT NOT NULL DEFAULT '';
 `;
 
+const schemaVersionThree = `
+  ALTER TABLE projects ADD COLUMN description TEXT;
+  ALTER TABLE projects ADD COLUMN completed_at TEXT;
+
+  ALTER TABLE task_items ADD COLUMN description TEXT;
+  ALTER TABLE task_items ADD COLUMN estimated_duration_minutes INTEGER
+    CHECK (estimated_duration_minutes IS NULL OR estimated_duration_minutes > 0);
+  ALTER TABLE task_items ADD COLUMN completed_at TEXT;
+
+  CREATE TABLE reminders_v3 (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    reminds_on TEXT,
+    period_start_on TEXT,
+    period_end_on TEXT,
+    repeat_frequency TEXT CHECK (
+      repeat_frequency IS NULL OR repeat_frequency IN ('daily', 'weekly', 'monthly')
+    ),
+    repeat_interval INTEGER CHECK (
+      repeat_interval IS NULL OR repeat_interval > 0
+    ),
+    estimated_duration_minutes INTEGER CHECK (
+      estimated_duration_minutes IS NULL OR estimated_duration_minutes > 0
+    ),
+    completed_at TEXT,
+    created_at TEXT NOT NULL,
+    CHECK (
+      (period_start_on IS NULL AND period_end_on IS NULL)
+      OR (period_start_on IS NOT NULL AND period_end_on IS NOT NULL AND period_start_on <= period_end_on)
+    ),
+    CHECK (
+      (repeat_frequency IS NULL AND repeat_interval IS NULL)
+      OR (repeat_frequency IS NOT NULL AND repeat_interval IS NOT NULL)
+    )
+  );
+
+  INSERT INTO reminders_v3 (
+    id,
+    title,
+    reminds_on,
+    period_start_on,
+    period_end_on,
+    repeat_frequency,
+    repeat_interval,
+    estimated_duration_minutes,
+    completed_at,
+    created_at
+  )
+  SELECT
+    id,
+    title,
+    date(reminds_at),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    created_at
+  FROM reminders;
+
+  DROP TABLE reminders;
+  ALTER TABLE reminders_v3 RENAME TO reminders;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -126,6 +191,12 @@ const migrations: readonly Migration[] = [
     version: 2,
     async apply(database) {
       await database.execAsync(schemaVersionTwo);
+    },
+  },
+  {
+    version: 3,
+    async apply(database) {
+      await database.execAsync(schemaVersionThree);
     },
   },
 ];
