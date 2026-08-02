@@ -1,14 +1,12 @@
-import { Platform, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { useAppServices } from '../../application/app-services-provider';
 import { EmptyPlanState } from '../../ui/empty-plan-state';
-import { getDemoTasks } from '../../ui/demo-tasks';
 import { ScreenShell } from '../../ui/screen-shell';
 import { TaskPreviewList } from '../../ui/task-preview-list';
 
 export default function PlanScreen() {
-  const { isReady } = useAppServices();
-  const demoTasks = getDemoTasks(Platform.OS);
+  const { demoTasks, isReady } = useAppServices();
 
   return (
     <ScreenShell title="План">
@@ -18,7 +16,7 @@ export default function PlanScreen() {
         ) : (
           <TaskPreviewList
             heading="План на сегодня"
-            supportingText="Демонстрационные задачи браузерного прототипа"
+            supportingText="Тестовые задачи development-версии"
             tasks={demoTasks.plan}
           />
         )

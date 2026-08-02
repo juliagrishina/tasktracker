@@ -1,11 +1,11 @@
-import { Platform, StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
-import { getDemoTasks } from '../../ui/demo-tasks';
+import { useAppServices } from '../../application/app-services-provider';
 import { ScreenShell } from '../../ui/screen-shell';
 import { TaskPreviewList } from '../../ui/task-preview-list';
 
 export default function CompletedScreen() {
-  const demoTasks = getDemoTasks(Platform.OS);
+  const { demoTasks } = useAppServices();
 
   return (
     <ScreenShell title="Завершённые">
@@ -16,7 +16,7 @@ export default function CompletedScreen() {
       ) : (
         <TaskPreviewList
           heading="Готово"
-          supportingText="Демонстрационные задачи браузерного прототипа"
+          supportingText="Тестовые задачи development-версии"
           tasks={demoTasks.completed}
         />
       )}

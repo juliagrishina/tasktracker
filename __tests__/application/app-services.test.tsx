@@ -8,23 +8,25 @@ import {
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 
 function ServicesProbe() {
-  const { isReady, settings } = useAppServices();
+  const { demoTasks, isReady, settings } = useAppServices();
 
   if (!isReady) {
     return <Text>loading</Text>;
   }
 
-  return <Text>{`${settings.workdayStartsAt}–${settings.workdayEndsAt}`}</Text>;
+  return (
+    <Text>{`${settings.notificationLeadMinutes}:${demoTasks.plan[0]?.title ?? 'нет данных'}`}</Text>
+  );
 }
 
 describe('AppServicesProvider', () => {
-  test('exposes default settings after initialization', async () => {
+  test('exposes seeded settings and Plan demo data after initialization', async () => {
     const view = await render(
       <AppServicesProvider source={createInMemoryDataSource()}>
         <ServicesProbe />
       </AppServicesProvider>,
     );
 
-    expect(view.getByText('08:00–22:00')).toBeOnTheScreen();
+    expect(view.getByText('15:Подготовить черновик недели')).toBeOnTheScreen();
   });
 });

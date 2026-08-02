@@ -14,20 +14,27 @@ import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
 import { getDefaultSettings } from '../data/default-settings';
 import { ProjectRepository } from '../data/repositories/project-repository';
+import {
+  emptyDemoTaskGroups,
+  type DemoTaskGroups,
+} from '../ui/demo-tasks';
 
 import { createAppRepositories } from './app-services';
+import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 
 interface AppServicesContextValue {
   isReady: boolean;
   projects: ProjectRepository;
   settings: AppSettings;
+  demoTasks: DemoTaskGroups;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
 }
 
 interface AppServicesProviderProps {
   children: ReactNode;
   source?: AppDataSource;
+  seedDevelopmentData?: boolean;
 }
 
 const AppServicesContext = createContext<AppServicesContextValue | null>(null);
@@ -35,11 +42,13 @@ const AppServicesContext = createContext<AppServicesContextValue | null>(null);
 export function AppServicesProvider({
   children,
   source,
+  seedDevelopmentData = __DEV__,
 }: AppServicesProviderProps) {
   const [appSource] = useState<AppDataSource>(() => source ?? createDataSource());
   const repositories = useMemo(() => createAppRepositories(appSource), [appSource]);
   const [isReady, setIsReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);
+  const [demoTasks, setDemoTasks] = useState<DemoTaskGroups>(emptyDemoTaskGroups);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const runStorageDiagnostic = useCallback(
     () => runPersistenceDiagnostic(appSource),
@@ -52,10 +61,17 @@ export function AppServicesProvider({
     void (async () => {
       try {
         await appSource.initialize();
+        if (seedDevelopmentData) {
+          await seedDemoData(appSource);
+        }
         const loadedSettings = await repositories.settings.get();
+        const loadedDemoTasks = seedDevelopmentData
+          ? await loadDemoTaskGroups(appSource)
+          : emptyDemoTaskGroups;
 
         if (isMounted) {
           setSettings(loadedSettings);
+          setDemoTasks(loadedDemoTasks);
           setIsReady(true);
         }
       } catch {
@@ -68,7 +84,7 @@ export function AppServicesProvider({
     return () => {
       isMounted = false;
     };
-  }, [appSource, repositories]);
+  }, [appSource, repositories, seedDevelopmentData]);
 
   if (initializationError !== null) {
     return (
@@ -84,6 +100,7 @@ export function AppServicesProvider({
         isReady,
         projects: repositories.projects,
         settings,
+        demoTasks,
         runStorageDiagnostic,
       }}>
       {children}
