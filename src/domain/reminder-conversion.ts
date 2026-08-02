@@ -11,6 +11,9 @@ export function createTaskFromReminder(
     projectId: null,
     parentTaskId: null,
     title: reminder.title,
+    description: null,
+    estimatedDurationMinutes: reminder.estimatedDurationMinutes,
+    completedAt: null,
     createdAt,
   };
 }

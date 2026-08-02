@@ -9,9 +9,12 @@ describe('convertReminderToTask', () => {
     await source.saveReminder({
       id: 'reminder-1',
       title: 'Позвонить в страховую',
-      taskItemId: null,
-      projectId: null,
-      remindsAt: '2026-08-02T10:00:00.000Z',
+      remindsOn: '2026-08-02',
+      periodStartOn: null,
+      periodEndOn: null,
+      repeatRule: null,
+      estimatedDurationMinutes: null,
+      completedAt: null,
       createdAt,
     });
 

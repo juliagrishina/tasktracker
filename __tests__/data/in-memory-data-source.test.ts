@@ -14,6 +14,8 @@ const createdAt = '2026-08-01T08:00:00.000Z';
 const project: Project = {
   id: 'project-1',
   title: 'Личный проект',
+  description: null,
+  completedAt: null,
   createdAt,
 };
 
@@ -23,6 +25,9 @@ const task: TaskItem = {
   projectId: project.id,
   parentTaskId: null,
   title: 'Подготовить план',
+  description: null,
+  estimatedDurationMinutes: null,
+  completedAt: null,
   createdAt,
 };
 
@@ -32,15 +37,21 @@ const subtask: TaskItem = {
   projectId: project.id,
   parentTaskId: task.id,
   title: 'Собрать материалы',
+  description: null,
+  estimatedDurationMinutes: null,
+  completedAt: null,
   createdAt,
 };
 
 const reminder: Reminder = {
   id: 'reminder-1',
   title: 'Позвонить в страховую',
-  taskItemId: null,
-  projectId: null,
-  remindsAt: '2026-08-02T10:00:00.000Z',
+  remindsOn: '2026-08-02',
+  periodStartOn: null,
+  periodEndOn: null,
+  repeatRule: null,
+  estimatedDurationMinutes: null,
+  completedAt: null,
   createdAt,
 };
 
@@ -135,6 +146,7 @@ describe('in-memory data source', () => {
     const nestedSubtask: TaskItem = {
       ...subtask,
       id: 'subtask-2',
+      kind: 'subtask',
       parentTaskId: subtask.id,
     };
 

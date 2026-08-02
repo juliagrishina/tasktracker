@@ -11,15 +11,37 @@ import type { DemoTask, DemoTaskGroups } from '../ui/demo-tasks';
 
 const createdAt = '2026-08-02T09:00:00.000Z';
 
+const projectDefaults = {
+  description: null,
+  completedAt: null,
+} as const;
+
+const taskDefaults = {
+  description: null,
+  estimatedDurationMinutes: null,
+  completedAt: null,
+} as const;
+
+const reminderDefaults = {
+  remindsOn: null,
+  periodStartOn: null,
+  periodEndOn: null,
+  repeatRule: null,
+  estimatedDurationMinutes: null,
+  completedAt: null,
+} as const;
+
 const projects: readonly Project[] = [
   {
     id: 'demo-project-personal',
     title: 'Личное',
+    ...projectDefaults,
     createdAt,
   },
   {
     id: 'demo-project-work',
     title: 'Работа',
+    ...projectDefaults,
     createdAt,
   },
 ];
@@ -31,6 +53,7 @@ const taskItems: readonly TaskItem[] = [
     projectId: 'demo-project-personal',
     parentTaskId: null,
     title: 'Подготовить черновик недели',
+    ...taskDefaults,
     createdAt,
   },
   {
@@ -39,6 +62,7 @@ const taskItems: readonly TaskItem[] = [
     projectId: 'demo-project-personal',
     parentTaskId: 'demo-plan-week-draft',
     title: 'Собрать пункты для черновика',
+    ...taskDefaults,
     createdAt,
   },
   {
@@ -47,6 +71,7 @@ const taskItems: readonly TaskItem[] = [
     projectId: 'demo-project-work',
     parentTaskId: null,
     title: 'Созвон с командой',
+    ...taskDefaults,
     createdAt,
   },
   {
@@ -55,6 +80,7 @@ const taskItems: readonly TaskItem[] = [
     projectId: 'demo-project-personal',
     parentTaskId: null,
     title: 'Разобрать входящие заметки',
+    ...taskDefaults,
     createdAt,
   },
   {
@@ -63,6 +89,7 @@ const taskItems: readonly TaskItem[] = [
     projectId: 'demo-project-personal',
     parentTaskId: null,
     title: 'Выбрать подарок маме',
+    ...taskDefaults,
     createdAt,
   },
   {
@@ -71,6 +98,7 @@ const taskItems: readonly TaskItem[] = [
     projectId: null,
     parentTaskId: null,
     title: 'Сохранить статьи для чтения',
+    ...taskDefaults,
     createdAt,
   },
   {
@@ -79,6 +107,7 @@ const taskItems: readonly TaskItem[] = [
     projectId: 'demo-project-personal',
     parentTaskId: null,
     title: 'Заполнить итоги дня',
+    ...taskDefaults,
     createdAt,
   },
   {
@@ -87,6 +116,7 @@ const taskItems: readonly TaskItem[] = [
     projectId: 'demo-project-work',
     parentTaskId: null,
     title: 'Отправить краткий статус',
+    ...taskDefaults,
     createdAt,
   },
 ];
@@ -95,9 +125,7 @@ const reminders: readonly Reminder[] = [
   {
     id: 'demo-reminder-insurance',
     title: 'Позвонить в страховую',
-    taskItemId: null,
-    projectId: null,
-    remindsAt: '2026-08-02T14:00:00.000Z',
+    ...reminderDefaults,
     createdAt,
   },
 ];

@@ -17,6 +17,8 @@ export async function runPersistenceDiagnostic(
   await source.saveProject({
     id: diagnosticProjectId,
     title: 'Проверка локального хранения',
+    description: null,
+    completedAt: null,
     createdAt,
   });
   await source.saveTaskItem({
@@ -25,6 +27,9 @@ export async function runPersistenceDiagnostic(
     projectId: diagnosticProjectId,
     parentTaskId: null,
     title: 'Тестовая запись хранения',
+    description: null,
+    estimatedDurationMinutes: null,
+    completedAt: null,
     createdAt,
   });
 

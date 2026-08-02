@@ -153,7 +153,13 @@ class NativeDataSource implements AppDataSource {
 
     return row === null
       ? null
-      : { id: row.id, title: row.title, createdAt: row.created_at };
+      : {
+          id: row.id,
+          title: row.title,
+          description: null,
+          completedAt: null,
+          createdAt: row.created_at,
+        };
   }
 
   async saveTaskItem(task: TaskItem): Promise<void> {
@@ -212,6 +218,9 @@ class NativeDataSource implements AppDataSource {
         projectId: row.project_id,
         parentTaskId: null,
         title: row.title,
+        description: null,
+        estimatedDurationMinutes: null,
+        completedAt: null,
         createdAt: row.created_at,
       };
     }
@@ -226,6 +235,9 @@ class NativeDataSource implements AppDataSource {
       projectId: row.project_id,
       parentTaskId: row.parent_task_id,
       title: row.title,
+      description: null,
+      estimatedDurationMinutes: null,
+      completedAt: null,
       createdAt: row.created_at,
     };
   }
@@ -252,9 +264,9 @@ class NativeDataSource implements AppDataSource {
       [
         reminder.id,
         reminder.title,
-        reminder.taskItemId,
-        reminder.projectId,
-        reminder.remindsAt,
+        null,
+        null,
+        reminder.remindsOn ?? reminder.createdAt.slice(0, 10),
         reminder.createdAt,
       ],
     );
@@ -275,9 +287,12 @@ class NativeDataSource implements AppDataSource {
       : {
           id: row.id,
           title: row.title,
-          taskItemId: row.task_item_id,
-          projectId: row.project_id,
-          remindsAt: row.reminds_at,
+          remindsOn: row.reminds_at.slice(0, 10),
+          periodStartOn: null,
+          periodEndOn: null,
+          repeatRule: null,
+          estimatedDurationMinutes: null,
+          completedAt: null,
           createdAt: row.created_at,
         };
   }

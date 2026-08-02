@@ -6,9 +6,12 @@ const createdAt = '2026-08-02T09:00:00.000Z';
 const reminder: Reminder = {
   id: 'reminder-1',
   title: 'Позвонить в страховую',
-  taskItemId: null,
-  projectId: null,
-  remindsAt: '2026-08-02T10:00:00.000Z',
+  remindsOn: '2026-08-02',
+  periodStartOn: null,
+  periodEndOn: null,
+  repeatRule: null,
+  estimatedDurationMinutes: 15,
+  completedAt: null,
   createdAt,
 };
 
@@ -20,6 +23,9 @@ describe('createTaskFromReminder', () => {
       projectId: null,
       parentTaskId: null,
       title: 'Позвонить в страховую',
+      description: null,
+      estimatedDurationMinutes: 15,
+      completedAt: null,
       createdAt,
     });
   });

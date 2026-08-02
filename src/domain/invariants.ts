@@ -1,5 +1,11 @@
 import type { Reminder, ScheduleBlock, TaskItem } from './entities';
 
+import {
+  assertBacklogTitle,
+  assertEstimatedDuration,
+  assertReminderScheduleShape,
+} from './backlog-invariants';
+
 export function assertTaskItemShape(task: TaskItem): void {
   if (task.kind === 'task' && task.parentTaskId !== null) {
     throw new Error('Задача верхнего уровня не может иметь родителя');
@@ -34,9 +40,9 @@ export function assertTaskItemParent(
 }
 
 export function assertReminderShape(reminder: Reminder): void {
-  if (reminder.projectId !== null) {
-    throw new Error('Напоминание не может относиться к проекту');
-  }
+  assertBacklogTitle(reminder.title);
+  assertEstimatedDuration(reminder.estimatedDurationMinutes);
+  assertReminderScheduleShape(reminder);
 }
 
 export function assertScheduleBlockShape(

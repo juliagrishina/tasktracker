@@ -1,8 +1,15 @@
 export type EntityId = string;
 
+export interface BacklogRepeatRule {
+  frequency: 'daily' | 'weekly' | 'monthly';
+  interval: number;
+}
+
 export interface Project {
   id: EntityId;
   title: string;
+  description: string | null;
+  completedAt: string | null;
   createdAt: string;
 }
 
@@ -13,6 +20,9 @@ export type TaskItem =
       projectId: EntityId | null;
       parentTaskId: null;
       title: string;
+      description: string | null;
+      estimatedDurationMinutes: number | null;
+      completedAt: string | null;
       createdAt: string;
     }
   | {
@@ -21,15 +31,21 @@ export type TaskItem =
       projectId: EntityId | null;
       parentTaskId: EntityId;
       title: string;
+      description: string | null;
+      estimatedDurationMinutes: number | null;
+      completedAt: string | null;
       createdAt: string;
     };
 
 export interface Reminder {
   id: EntityId;
   title: string;
-  taskItemId: EntityId | null;
-  projectId: EntityId | null;
-  remindsAt: string;
+  remindsOn: string | null;
+  periodStartOn: string | null;
+  periodEndOn: string | null;
+  repeatRule: BacklogRepeatRule | null;
+  estimatedDurationMinutes: number | null;
+  completedAt: string | null;
   createdAt: string;
 }
 

@@ -14,15 +14,21 @@ const task: TaskItem = {
   projectId: 'project-1',
   parentTaskId: null,
   title: 'Подготовить план',
+  description: null,
+  estimatedDurationMinutes: null,
+  completedAt: null,
   createdAt,
 };
 
 const reminder: Reminder = {
   id: 'reminder-1',
   title: 'Позвонить в страховую',
-  taskItemId: task.id,
-  projectId: null,
-  remindsAt: '2026-08-01T08:55:00.000Z',
+  remindsOn: null,
+  periodStartOn: null,
+  periodEndOn: null,
+  repeatRule: null,
+  estimatedDurationMinutes: null,
+  completedAt: null,
   createdAt,
 };
 
@@ -102,10 +108,10 @@ describe('domain invariants', () => {
     );
   });
 
-  test('rejects a reminder associated with a project', () => {
+  test('rejects an incomplete reminder period', () => {
     expect(() =>
-      assertReminderShape({ ...reminder, projectId: 'project-1' }),
-    ).toThrow('Напоминание не может относиться к проекту');
+      assertReminderShape({ ...reminder, periodStartOn: '2026-08-01' }),
+    ).toThrow('Период напоминания должен иметь начало и конец');
   });
 
   test('rejects a schedule block outside the five-minute grid', () => {
