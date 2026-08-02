@@ -34,3 +34,6 @@ Carthage/Build/
 # Codex scratch/output folders
 work/
 outputs/
+
+# Local Git worktrees
+.worktrees/
