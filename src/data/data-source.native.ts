@@ -1,7 +1,20 @@
 import * as SQLite from 'expo-sqlite';
 
-import type { AppSettings, EntityId, Project, TaskItem } from '../domain/entities';
-import { assertTaskItemShape } from '../domain/invariants';
+import type {
+  AppSettings,
+  CompletedItem,
+  EntityId,
+  Project,
+  RecurrenceSeries,
+  Reminder,
+  ScheduleBlock,
+  TaskItem,
+} from '../domain/entities';
+import {
+  assertReminderShape,
+  assertScheduleBlockShape,
+  assertTaskItemParent,
+} from '../domain/invariants';
 
 import type { AppDataSource } from './contracts';
 import { migrateDatabase } from './migrations';
@@ -25,6 +38,39 @@ interface TaskItemRow {
   project_id: string | null;
   parent_task_id: string | null;
   title: string;
+  created_at: string;
+}
+
+interface ReminderRow {
+  id: string;
+  title: string;
+  task_item_id: string | null;
+  project_id: string | null;
+  reminds_at: string;
+  created_at: string;
+}
+
+interface ScheduleBlockRow {
+  id: string;
+  task_item_id: string;
+  starts_at: string;
+  ends_at: string;
+  created_at: string;
+}
+
+interface RecurrenceSeriesRow {
+  id: string;
+  task_item_id: string;
+  frequency: RecurrenceSeries['frequency'];
+  interval: number;
+  starts_on: string;
+  created_at: string;
+}
+
+interface CompletedItemRow {
+  id: string;
+  task_item_id: string;
+  completed_at: string;
   created_at: string;
 }
 
@@ -65,12 +111,34 @@ class NativeDataSource implements AppDataSource {
     };
   }
 
+  async saveSettings(settings: AppSettings): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `UPDATE settings
+      SET workday_starts_at = ?,
+          workday_ends_at = ?,
+          evening_review_at = ?,
+          notification_lead_minutes = ?
+      WHERE id = 1`,
+      [
+        settings.workdayStartsAt,
+        settings.workdayEndsAt,
+        settings.eveningReviewAt,
+        settings.notificationLeadMinutes,
+      ],
+    );
+  }
+
   async saveProject(project: Project): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
     await database.runAsync(
-      `INSERT OR REPLACE INTO projects (id, title, created_at)
-      VALUES (?, ?, ?)`,
+      `INSERT INTO projects (id, title, created_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        created_at = excluded.created_at`,
       [project.id, project.title, project.createdAt],
     );
   }
@@ -90,18 +158,28 @@ class NativeDataSource implements AppDataSource {
 
   async saveTaskItem(task: TaskItem): Promise<void> {
     await this.initialize();
-    assertTaskItemShape(task);
+    const parent =
+      task.kind === 'subtask'
+        ? await this.getTaskItem(task.parentTaskId)
+        : null;
+    assertTaskItemParent(task, parent);
 
     const database = await this.getDatabase();
     await database.runAsync(
-      `INSERT OR REPLACE INTO task_items (
+      `INSERT INTO task_items (
         id,
         kind,
         project_id,
         parent_task_id,
         title,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        kind = excluded.kind,
+        project_id = excluded.project_id,
+        parent_task_id = excluded.parent_task_id,
+        title = excluded.title,
+        created_at = excluded.created_at`,
       [
         task.id,
         task.kind,
@@ -150,6 +228,192 @@ class NativeDataSource implements AppDataSource {
       title: row.title,
       createdAt: row.created_at,
     };
+  }
+
+  async saveReminder(reminder: Reminder): Promise<void> {
+    await this.initialize();
+    assertReminderShape(reminder);
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO reminders (
+        id,
+        title,
+        task_item_id,
+        project_id,
+        reminds_at,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        task_item_id = excluded.task_item_id,
+        project_id = excluded.project_id,
+        reminds_at = excluded.reminds_at,
+        created_at = excluded.created_at`,
+      [
+        reminder.id,
+        reminder.title,
+        reminder.taskItemId,
+        reminder.projectId,
+        reminder.remindsAt,
+        reminder.createdAt,
+      ],
+    );
+  }
+
+  async getReminder(id: EntityId): Promise<Reminder | null> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<ReminderRow>(
+      `SELECT id, title, task_item_id, project_id, reminds_at, created_at
+      FROM reminders
+      WHERE id = ?`,
+      [id],
+    );
+
+    return row === null
+      ? null
+      : {
+          id: row.id,
+          title: row.title,
+          taskItemId: row.task_item_id,
+          projectId: row.project_id,
+          remindsAt: row.reminds_at,
+          createdAt: row.created_at,
+        };
+  }
+
+  async deleteReminder(id: EntityId): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync('DELETE FROM reminders WHERE id = ?', [id]);
+  }
+
+  async saveScheduleBlock(block: ScheduleBlock): Promise<void> {
+    await this.initialize();
+    const task = await this.getTaskItem(block.taskItemId);
+
+    if (task === null) {
+      throw new Error('Задача для блока расписания не найдена');
+    }
+
+    assertScheduleBlockShape(block, task);
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO schedule_blocks (id, task_item_id, starts_at, ends_at, created_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        task_item_id = excluded.task_item_id,
+        starts_at = excluded.starts_at,
+        ends_at = excluded.ends_at,
+        created_at = excluded.created_at`,
+      [block.id, block.taskItemId, block.startsAt, block.endsAt, block.createdAt],
+    );
+  }
+
+  async getScheduleBlock(id: EntityId): Promise<ScheduleBlock | null> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<ScheduleBlockRow>(
+      `SELECT id, task_item_id, starts_at, ends_at, created_at
+      FROM schedule_blocks
+      WHERE id = ?`,
+      [id],
+    );
+
+    return row === null
+      ? null
+      : {
+          id: row.id,
+          taskItemId: row.task_item_id,
+          startsAt: row.starts_at,
+          endsAt: row.ends_at,
+          createdAt: row.created_at,
+        };
+  }
+
+  async saveRecurrenceSeries(series: RecurrenceSeries): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO recurrence_series (
+        id,
+        task_item_id,
+        frequency,
+        interval,
+        starts_on,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        task_item_id = excluded.task_item_id,
+        frequency = excluded.frequency,
+        interval = excluded.interval,
+        starts_on = excluded.starts_on,
+        created_at = excluded.created_at`,
+      [
+        series.id,
+        series.taskItemId,
+        series.frequency,
+        series.interval,
+        series.startsOn,
+        series.createdAt,
+      ],
+    );
+  }
+
+  async getRecurrenceSeries(id: EntityId): Promise<RecurrenceSeries | null> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<RecurrenceSeriesRow>(
+      `SELECT id, task_item_id, frequency, interval, starts_on, created_at
+      FROM recurrence_series
+      WHERE id = ?`,
+      [id],
+    );
+
+    return row === null
+      ? null
+      : {
+          id: row.id,
+          taskItemId: row.task_item_id,
+          frequency: row.frequency,
+          interval: row.interval,
+          startsOn: row.starts_on,
+          createdAt: row.created_at,
+        };
+  }
+
+  async saveCompletedItem(item: CompletedItem): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO completed_items (id, task_item_id, completed_at, created_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        task_item_id = excluded.task_item_id,
+        completed_at = excluded.completed_at,
+        created_at = excluded.created_at`,
+      [item.id, item.taskItemId, item.completedAt, item.createdAt],
+    );
+  }
+
+  async getCompletedItem(id: EntityId): Promise<CompletedItem | null> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<CompletedItemRow>(
+      `SELECT id, task_item_id, completed_at, created_at
+      FROM completed_items
+      WHERE id = ?`,
+      [id],
+    );
+
+    return row === null
+      ? null
+      : {
+          id: row.id,
+          taskItemId: row.task_item_id,
+          completedAt: row.completed_at,
+          createdAt: row.created_at,
+        };
   }
 
   private async initializeDatabase(): Promise<void> {

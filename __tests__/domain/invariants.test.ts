@@ -19,6 +19,7 @@ const task: TaskItem = {
 
 const reminder: Reminder = {
   id: 'reminder-1',
+  title: 'Позвонить в страховую',
   taskItemId: task.id,
   projectId: null,
   remindsAt: '2026-08-01T08:55:00.000Z',

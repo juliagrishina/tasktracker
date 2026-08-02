@@ -2,7 +2,10 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { getDefaultSettings } from './default-settings';
 
-const schemaVersion = 1;
+interface Migration {
+  version: number;
+  apply(database: SQLiteDatabase): Promise<void>;
+}
 
 const schemaVersionTable = `
   CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -91,6 +94,42 @@ const schemaVersionOne = `
   );
 `;
 
+const schemaVersionTwo = `
+  ALTER TABLE reminders ADD COLUMN title TEXT NOT NULL DEFAULT '';
+`;
+
+const migrations: readonly Migration[] = [
+  {
+    version: 1,
+    async apply(database) {
+      await database.execAsync(schemaVersionOne);
+      const defaults = getDefaultSettings();
+      await database.runAsync(
+        `INSERT OR IGNORE INTO settings (
+          id,
+          workday_starts_at,
+          workday_ends_at,
+          evening_review_at,
+          notification_lead_minutes
+        ) VALUES (?, ?, ?, ?, ?)`,
+        [
+          1,
+          defaults.workdayStartsAt,
+          defaults.workdayEndsAt,
+          defaults.eveningReviewAt,
+          defaults.notificationLeadMinutes,
+        ],
+      );
+    },
+  },
+  {
+    version: 2,
+    async apply(database) {
+      await database.execAsync(schemaVersionTwo);
+    },
+  },
+];
+
 export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
   await database.execAsync('PRAGMA foreign_keys = ON;');
   await database.execAsync(schemaVersionTable);
@@ -98,34 +137,19 @@ export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
   const latestMigration = await database.getFirstAsync<{ version: number }>(
     'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1',
   );
-
-  if (latestMigration?.version === schemaVersion) {
-    return;
-  }
+  const latestVersion = latestMigration?.version ?? 0;
 
   await database.withTransactionAsync(async () => {
-    await database.execAsync(schemaVersionOne);
+    for (const migration of migrations) {
+      if (migration.version <= latestVersion) {
+        continue;
+      }
 
-    const defaults = getDefaultSettings();
-    await database.runAsync(
-      `INSERT OR IGNORE INTO settings (
-        id,
-        workday_starts_at,
-        workday_ends_at,
-        evening_review_at,
-        notification_lead_minutes
-      ) VALUES (?, ?, ?, ?, ?)`,
-      [
-        1,
-        defaults.workdayStartsAt,
-        defaults.workdayEndsAt,
-        defaults.eveningReviewAt,
-        defaults.notificationLeadMinutes,
-      ],
-    );
-    await database.runAsync(
-      'INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      [schemaVersion, new Date().toISOString()],
-    );
+      await migration.apply(database);
+      await database.runAsync(
+        'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+        [migration.version, new Date().toISOString()],
+      );
+    }
   });
 }
