@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { AppSettings } from '../domain/entities';
+import type { AppSettings, Project, Reminder, TaskItem } from '../domain/entities';
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
 import { getDefaultSettings } from '../data/default-settings';
@@ -20,10 +20,47 @@ import {
 } from '../ui/demo-tasks';
 
 import { createAppRepositories } from './app-services';
-import type { BacklogView } from './backlog-types';
-import { getBacklogView } from './backlog-use-cases';
+import type {
+  BacklogView,
+  CompleteBacklogItemInput,
+  CreateProjectInput,
+  CreateReminderInput,
+  CreateSubtaskInput,
+  CreateTaskInput,
+  DeleteBacklogItemInput,
+  MoveTaskToProjectInput,
+  UpdateProjectInput,
+  UpdateReminderInput,
+  UpdateTaskItemInput,
+} from './backlog-types';
+import {
+  completeBacklogItem,
+  createProject,
+  createReminder,
+  createSubtask,
+  createTask,
+  deleteBacklogItem,
+  getBacklogView,
+  moveTaskToProject,
+  updateProject,
+  updateReminder,
+  updateTaskItem,
+} from './backlog-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
+
+interface BacklogActions {
+  createProject(input: CreateProjectInput): Promise<Project>;
+  createTask(input: CreateTaskInput): Promise<Extract<TaskItem, { kind: 'task' }>>;
+  createSubtask(input: CreateSubtaskInput): Promise<Extract<TaskItem, { kind: 'subtask' }>>;
+  createReminder(input: CreateReminderInput): Promise<Reminder>;
+  updateProject(input: UpdateProjectInput): Promise<Project>;
+  updateTaskItem(input: UpdateTaskItemInput): Promise<TaskItem>;
+  updateReminder(input: UpdateReminderInput): Promise<Reminder>;
+  moveTaskToProject(input: MoveTaskToProjectInput): Promise<void>;
+  completeItem(input: CompleteBacklogItemInput): Promise<void>;
+  deleteItem(input: DeleteBacklogItemInput): Promise<void>;
+}
 
 interface AppServicesContextValue {
   isReady: boolean;
@@ -31,6 +68,7 @@ interface AppServicesContextValue {
   settings: AppSettings;
   demoTasks: DemoTaskGroups;
   backlog: BacklogView;
+  backlogActions: BacklogActions;
   refreshBacklog(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
@@ -78,6 +116,30 @@ export function AppServicesProvider({
       return result;
     },
     [refreshBacklog],
+  );
+  const backlogActions = useMemo<BacklogActions>(
+    () => ({
+      createProject: (input) =>
+        runBacklogAction(() => createProject(appSource, input)),
+      createTask: (input) => runBacklogAction(() => createTask(appSource, input)),
+      createSubtask: (input) =>
+        runBacklogAction(() => createSubtask(appSource, input)),
+      createReminder: (input) =>
+        runBacklogAction(() => createReminder(appSource, input)),
+      updateProject: (input) =>
+        runBacklogAction(() => updateProject(appSource, input)),
+      updateTaskItem: (input) =>
+        runBacklogAction(() => updateTaskItem(appSource, input)),
+      updateReminder: (input) =>
+        runBacklogAction(() => updateReminder(appSource, input)),
+      moveTaskToProject: (input) =>
+        runBacklogAction(() => moveTaskToProject(appSource, input)),
+      completeItem: (input) =>
+        runBacklogAction(() => completeBacklogItem(appSource, input)),
+      deleteItem: (input) =>
+        runBacklogAction(() => deleteBacklogItem(appSource, input)),
+    }),
+    [appSource, runBacklogAction],
   );
 
   useEffect(() => {
@@ -129,6 +191,7 @@ export function AppServicesProvider({
         settings,
         demoTasks,
         backlog,
+        backlogActions,
         refreshBacklog,
         runBacklogAction,
         runStorageDiagnostic,

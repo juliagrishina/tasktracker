@@ -1,0 +1,34 @@
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
+
+import { AppServicesProvider } from '../../src/application/app-services-provider';
+import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import { BacklogRootScreen } from '../../src/ui/backlog/backlog-root-screen';
+
+describe('Backlog item form', () => {
+  test('keeps the form open and displays validation when saving a blank title', async () => {
+    const view = await render(
+      <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
+        <BacklogRootScreen />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.getByLabelText('Добавить элемент')).toBeOnTheScreen();
+    });
+
+    fireEvent.press(view.getByLabelText('Добавить элемент'));
+    await waitFor(() => {
+      expect(view.getByText('Новая задача')).toBeTruthy();
+    });
+    fireEvent.press(view.getByText('Новая задача'));
+    await waitFor(() => {
+      expect(view.getByText('Сохранить')).toBeTruthy();
+    });
+    fireEvent.press(view.getByText('Сохранить'));
+
+    await waitFor(() => {
+      expect(view.getByText('Название обязательно')).toBeTruthy();
+    });
+    expect(view.getByLabelText('Название')).toBeTruthy();
+  });
+});
