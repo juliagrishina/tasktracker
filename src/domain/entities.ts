@@ -26,6 +26,7 @@ export type TaskItem =
 
 export interface Reminder {
   id: EntityId;
+  title: string;
   taskItemId: EntityId | null;
   projectId: EntityId | null;
   remindsAt: string;

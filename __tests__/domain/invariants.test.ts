@@ -2,6 +2,7 @@ import type { Reminder, ScheduleBlock, TaskItem } from '../../src/domain/entitie
 import {
   assertReminderShape,
   assertScheduleBlockShape,
+  assertTaskItemParent,
   assertTaskItemShape,
 } from '../../src/domain/invariants';
 
@@ -54,6 +55,50 @@ describe('domain invariants', () => {
         { ...subtask, parentTaskId: null } as unknown as TaskItem,
       ),
     ).toThrow('Подзадача должна ссылаться на задачу-родителя');
+  });
+
+  test('rejects a subtask whose parent is another subtask', () => {
+    const parentSubtask: TaskItem = {
+      ...task,
+      id: 'subtask-parent',
+      kind: 'subtask',
+      parentTaskId: task.id,
+    };
+    const childSubtask: TaskItem = {
+      ...parentSubtask,
+      id: 'subtask-child',
+      parentTaskId: parentSubtask.id,
+    };
+
+    expect(() => assertTaskItemParent(childSubtask, parentSubtask)).toThrow(
+      'Родителем подзадачи может быть только задача',
+    );
+  });
+
+  test('rejects a subtask with a missing parent', () => {
+    const childSubtask: TaskItem = {
+      ...task,
+      id: 'subtask-child',
+      kind: 'subtask',
+      parentTaskId: 'missing-parent',
+    };
+
+    expect(() => assertTaskItemParent(childSubtask, null)).toThrow(
+      'Задача-родитель подзадачи не найдена',
+    );
+  });
+
+  test('rejects a subtask that points to itself', () => {
+    const childSubtask: TaskItem = {
+      ...task,
+      id: 'subtask-self',
+      kind: 'subtask',
+      parentTaskId: 'subtask-self',
+    };
+
+    expect(() => assertTaskItemParent(childSubtask, task)).toThrow(
+      'Подзадача не может быть собственным родителем',
+    );
   });
 
   test('rejects a reminder associated with a project', () => {

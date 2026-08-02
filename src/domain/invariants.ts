@@ -10,6 +10,29 @@ export function assertTaskItemShape(task: TaskItem): void {
   }
 }
 
+export function assertTaskItemParent(
+  task: TaskItem,
+  parent: TaskItem | null,
+): void {
+  assertTaskItemShape(task);
+
+  if (task.kind !== 'subtask') {
+    return;
+  }
+
+  if (task.parentTaskId === task.id) {
+    throw new Error('Подзадача не может быть собственным родителем');
+  }
+
+  if (parent === null) {
+    throw new Error('Задача-родитель подзадачи не найдена');
+  }
+
+  if (parent.kind !== 'task') {
+    throw new Error('Родителем подзадачи может быть только задача');
+  }
+}
+
 export function assertReminderShape(reminder: Reminder): void {
   if (reminder.projectId !== null) {
     throw new Error('Напоминание не может относиться к проекту');
