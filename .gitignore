@@ -37,3 +37,13 @@ outputs/
 
 # Local Git worktrees
 .worktrees/
+
+# JavaScript dependencies and build output
+node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+expo-env.d.ts
+*.tsbuildinfo
+*.local
