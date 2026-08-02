@@ -1,0 +1,73 @@
+import type { Reminder, ScheduleBlock, TaskItem } from '../../src/domain/entities';
+import {
+  assertReminderShape,
+  assertScheduleBlockShape,
+  assertTaskItemShape,
+} from '../../src/domain/invariants';
+
+const createdAt = '2026-08-01T08:00:00.000Z';
+
+const task: TaskItem = {
+  id: 'task-1',
+  kind: 'task',
+  projectId: 'project-1',
+  parentTaskId: null,
+  title: 'Подготовить план',
+  createdAt,
+};
+
+const reminder: Reminder = {
+  id: 'reminder-1',
+  taskItemId: task.id,
+  projectId: null,
+  remindsAt: '2026-08-01T08:55:00.000Z',
+  createdAt,
+};
+
+const block: ScheduleBlock = {
+  id: 'block-1',
+  taskItemId: task.id,
+  startsAt: '2026-08-01T09:00:00.000Z',
+  endsAt: '2026-08-01T09:30:00.000Z',
+  createdAt,
+};
+
+describe('domain invariants', () => {
+  test('rejects a top-level task with a parent', () => {
+    expect(() =>
+      assertTaskItemShape(
+        { ...task, parentTaskId: 'parent-1' } as unknown as TaskItem,
+      ),
+    ).toThrow('Задача верхнего уровня не может иметь родителя');
+  });
+
+  test('rejects a subtask without a parent', () => {
+    const subtask: TaskItem = {
+      ...task,
+      id: 'subtask-1',
+      kind: 'subtask',
+      parentTaskId: task.id,
+    };
+
+    expect(() =>
+      assertTaskItemShape(
+        { ...subtask, parentTaskId: null } as unknown as TaskItem,
+      ),
+    ).toThrow('Подзадача должна ссылаться на задачу-родителя');
+  });
+
+  test('rejects a reminder associated with a project', () => {
+    expect(() =>
+      assertReminderShape({ ...reminder, projectId: 'project-1' }),
+    ).toThrow('Напоминание не может относиться к проекту');
+  });
+
+  test('rejects a schedule block outside the five-minute grid', () => {
+    expect(() =>
+      assertScheduleBlockShape(
+        { ...block, startsAt: '2026-08-01T09:03:00.000Z' },
+        task,
+      ),
+    ).toThrow('Время блока должно иметь шаг пять минут');
+  });
+});

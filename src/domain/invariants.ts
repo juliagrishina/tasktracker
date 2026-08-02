@@ -1,0 +1,41 @@
+import type { Reminder, ScheduleBlock, TaskItem } from './entities';
+
+export function assertTaskItemShape(task: TaskItem): void {
+  if (task.kind === 'task' && task.parentTaskId !== null) {
+    throw new Error('Задача верхнего уровня не может иметь родителя');
+  }
+
+  if (task.kind === 'subtask' && task.parentTaskId === null) {
+    throw new Error('Подзадача должна ссылаться на задачу-родителя');
+  }
+}
+
+export function assertReminderShape(reminder: Reminder): void {
+  if (reminder.projectId !== null) {
+    throw new Error('Напоминание не может относиться к проекту');
+  }
+}
+
+export function assertScheduleBlockShape(
+  block: ScheduleBlock,
+  task: TaskItem,
+): void {
+  if (block.taskItemId !== task.id) {
+    throw new Error('Блок времени должен относиться к указанной задаче');
+  }
+
+  const startsAt = new Date(block.startsAt);
+  const endsAt = new Date(block.endsAt);
+
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    throw new Error('Время блока должно быть корректной датой');
+  }
+
+  if (startsAt.getTime() >= endsAt.getTime()) {
+    throw new Error('Окончание блока должно быть позже начала');
+  }
+
+  if (startsAt.getUTCMinutes() % 5 !== 0 || endsAt.getUTCMinutes() % 5 !== 0) {
+    throw new Error('Время блока должно иметь шаг пять минут');
+  }
+}
