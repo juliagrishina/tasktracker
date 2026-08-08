@@ -9,8 +9,17 @@ import { temporaryWebContentStyle } from '../screen-shell';
 
 import { planDemoModel, type PlanDemoListItem } from './plan-demo-model';
 import { ProgressRing } from './progress-ring';
+import { getPlanViewModeLabel } from './plan-view-menu';
+import type { PlanViewMode } from './plan-period-model';
 
-export function DayDashboard() {
+interface DayDashboardProps {
+  mode?: PlanViewMode;
+  onCreateTask?: () => void;
+  onSelectMode?: () => void;
+  selectedDate?: string;
+}
+
+export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode }: DayDashboardProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   return (
@@ -23,11 +32,17 @@ export function DayDashboard() {
           </View>
           <View style={styles.headerActions}>
             <Pressable
-              accessibilityLabel="Режим просмотра: День"
+              accessibilityLabel={`Режим просмотра: ${getPlanViewModeLabel(mode)}`}
               accessibilityRole="button"
-              onPress={() => setFeedback('Режим «День» выбран')}
+              onPress={() => {
+                if (onSelectMode === undefined) {
+                  setFeedback(`Режим «${getPlanViewModeLabel(mode)}» выбран`);
+                  return;
+                }
+                onSelectMode();
+              }}
               style={({ pressed }) => [styles.dayControl, pressed && styles.pressed]}>
-              <Text style={styles.dayControlLabel}>День</Text>
+              <Text style={styles.dayControlLabel}>{getPlanViewModeLabel(mode)}</Text>
               <Ionicons color={designTokens.color.primaryStrong} name="chevron-down" size={16} />
             </Pressable>
             <Pressable
@@ -79,7 +94,13 @@ export function DayDashboard() {
       <Pressable
         accessibilityLabel="Добавить в план"
         accessibilityRole="button"
-        onPress={() => setFeedback('Добавление в план доступно в демо-режиме')}
+        onPress={() => {
+          if (onCreateTask === undefined) {
+            setFeedback('Добавление в план доступно в демо-режиме');
+            return;
+          }
+          onCreateTask();
+        }}
         style={({ pressed }) => [styles.floatingAction, pressed && styles.pressed]}>
         <Ionicons color={designTokens.color.text.inverse} name="add" size={28} />
       </Pressable>

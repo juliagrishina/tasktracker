@@ -2,13 +2,13 @@ import { StyleSheet, Text } from 'react-native';
 
 import { useAppServices } from '../../application/app-services-provider';
 import { designTokens } from '../../ui/design/tokens';
-import { DayDashboard } from '../../ui/plan/day-dashboard';
+import { PlanScreen } from '../../ui/plan/plan-screen';
 
-export default function PlanScreen() {
+export default function PlanRoute() {
   const { isReady } = useAppServices();
 
   return (
-    isReady ? <DayDashboard /> : <Text style={styles.loading}>Загружаем план…</Text>
+    isReady ? <PlanScreen /> : <Text style={styles.loading}>Загружаем план…</Text>
   );
 }
 
