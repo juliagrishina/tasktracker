@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
 import { temporaryWebContentStyle } from '../screen-shell';
+import { ItemFormSheet } from '../backlog/item-form-sheet';
 import { DayDashboard } from './day-dashboard';
 import {
   formatPlanMonth,
@@ -25,6 +26,7 @@ export function PlanScreen() {
   const [mode, setMode] = useState<PlanViewMode>('day');
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState(demoSelectedDate);
+  const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
 
   const selectDate = (isoDate: string) => {
     setSelectedDate(isoDate);
@@ -34,11 +36,17 @@ export function PlanScreen() {
   return (
     <>
       {mode === 'day' ? (
-        <DayDashboard mode={mode} onSelectMode={() => setIsModeMenuVisible(true)} selectedDate={selectedDate} />
+        <DayDashboard
+          mode={mode}
+          onCreateTask={() => setIsTaskSheetVisible(true)}
+          onSelectMode={() => setIsModeMenuVisible(true)}
+          selectedDate={selectedDate}
+        />
       ) : (
         <PeriodPlanView
           mode={mode}
           onChangeAnchor={(amount) => setSelectedDate((currentDate) => shiftPlanAnchor(currentDate, mode, amount))}
+          onCreateTask={() => setIsTaskSheetVisible(true)}
           onSelectDate={selectDate}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
@@ -50,6 +58,15 @@ export function PlanScreen() {
         onSelectMode={setMode}
         visible={isModeMenuVisible}
       />
+      {isTaskSheetVisible ? (
+        <ItemFormSheet
+          mode="create"
+          onClose={() => setIsTaskSheetVisible(false)}
+          planningContext={{ defaultDate: selectedDate }}
+          type="task"
+          visible
+        />
+      ) : null}
     </>
   );
 }
@@ -57,12 +74,14 @@ export function PlanScreen() {
 function PeriodPlanView({
   mode,
   onChangeAnchor,
+  onCreateTask,
   onSelectDate,
   onSelectMode,
   selectedDate,
 }: {
   mode: Exclude<PlanViewMode, 'day'>;
   onChangeAnchor: (amount: number) => void;
+  onCreateTask: () => void;
   onSelectDate: (isoDate: string) => void;
   onSelectMode: () => void;
   selectedDate: string;
@@ -103,6 +122,7 @@ function PeriodPlanView({
       <Pressable
         accessibilityLabel="Добавить в план"
         accessibilityRole="button"
+        onPress={onCreateTask}
         style={({ pressed }) => [styles.floatingAction, pressed && styles.pressed]}>
         <Ionicons color={designTokens.color.text.inverse} name="add" size={28} />
       </Pressable>

@@ -13,6 +13,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppServices } from '../../application/app-services-provider';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
+import {
+  createDefaultBlock,
+  createInitialTaskPlanningDraft,
+  TaskPlanningFields,
+  type TaskPlanningDraft,
+  validateTaskPlanningDraft,
+} from './task-planning-fields';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
@@ -27,6 +34,10 @@ interface ItemFormSheetProps {
   parentTaskId?: string;
   projectId?: string | null;
   onSaved?: () => void;
+  planningContext?: {
+    defaultDate: string;
+    onPlanningDraftChange?: (draft: TaskPlanningDraft) => void;
+  };
 }
 
 function emptyToNull(value: string): string | null {
@@ -87,6 +98,7 @@ export function ItemFormSheet({
   parentTaskId,
   projectId,
   onSaved,
+  planningContext,
 }: ItemFormSheetProps) {
   const { backlog, backlogActions } = useAppServices();
   const [title, setTitle] = useState(() => item?.title ?? '');
@@ -101,6 +113,12 @@ export function ItemFormSheet({
   const [repeatInterval, setRepeatInterval] = useState(() => getInitialRepeatInterval(item));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
+  const defaultBlock = useMemo(
+    () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
+    [planningContext?.defaultDate],
+  );
+  const isPlanTaskForm = type === 'task' && planningContext !== undefined;
 
   const formTitle = useMemo(() => {
     const createTitle: Record<ItemFormType, string> = {
@@ -118,6 +136,12 @@ export function ItemFormSheet({
     setIsSaving(true);
 
     try {
+      if (isPlanTaskForm) {
+        const planningError = validateTaskPlanningDraft(planningDraft);
+        if (planningError !== null) {
+          throw new Error(planningError);
+        }
+      }
       const estimatedDurationMinutes = duration.trim() === '' ? null : Number(duration);
       const now = new Date().toISOString();
 
@@ -293,6 +317,16 @@ export function ItemFormSheet({
                 />
               </View>
             ) : null}
+            {isPlanTaskForm ? (
+              <TaskPlanningFields
+                defaultBlock={defaultBlock}
+                onChange={(draft) => {
+                  setPlanningDraft(draft);
+                  planningContext.onPlanningDraftChange?.(draft);
+                }}
+                value={planningDraft}
+              />
+            ) : null}
             {type === 'reminder' ? (
               <View style={styles.reminderFields}>
                 <Text style={styles.label}>Дата</Text>
@@ -329,7 +363,7 @@ export function ItemFormSheet({
               <Text style={styles.secondaryActionText}>Отмена</Text>
             </Pressable>
             <Pressable accessibilityState={{ disabled: isSaving }} onPress={() => void submit()} style={[styles.action, styles.primaryAction, isSaving && styles.disabledAction]}>
-              <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : 'Сохранить'}</Text>
+              <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? 'Создать' : 'Сохранить'}</Text>
             </Pressable>
           </View>
         </View>
