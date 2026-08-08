@@ -1,12 +1,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 import { useAppServices } from '../../../../application/app-services-provider';
 import type { BacklogItemKind } from '../../../../application/backlog-types';
 import type { Project, Reminder, TaskItem } from '../../../../domain/entities';
 import { ItemDetailActions } from '../../../../ui/backlog/item-detail-actions';
 import { ItemFormSheet, type ItemFormType } from '../../../../ui/backlog/item-form-sheet';
+import { designTokens } from '../../../../ui/design/tokens';
+import { SurfaceCard } from '../../../../ui/primitives/surface-card';
 import { ScreenShell } from '../../../../ui/screen-shell';
 
 type BacklogDetailItem = Project | Reminder | TaskItem;
@@ -75,10 +77,10 @@ export default function ItemRoute() {
 
   return (
     <ScreenShell onBack={() => router.back()} title={item.title}>
-      <View style={styles.details}>
+      <SurfaceCard style={styles.details}>
         {detailLines(item).length === 0 ? <Text style={styles.muted}>Дополнительных деталей пока нет.</Text> : null}
         {detailLines(item).map((line) => <Text key={line} style={styles.line}>{line}</Text>)}
-      </View>
+      </SurfaceCard>
       <ItemDetailActions
         id={item.id}
         kind={kind}
@@ -112,8 +114,20 @@ export default function ItemRoute() {
 }
 
 const styles = StyleSheet.create({
-  details: { gap: 10, borderRadius: 16, backgroundColor: '#FFFFFF', padding: 17 },
-  line: { color: '#475467', fontSize: 16, lineHeight: 23 },
-  muted: { color: '#98A2B3', fontSize: 16 },
-  empty: { color: '#667085', fontSize: 16, lineHeight: 23 },
+  details: { gap: designTokens.space[10], padding: designTokens.space[16] },
+  line: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+  },
+  muted: {
+    color: designTokens.color.text.tertiary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+  },
+  empty: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+  },
 });

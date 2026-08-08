@@ -46,6 +46,9 @@ export const designTokens = {
       inactive: '#737B86',
       background: '#FAFAFC',
     },
+    overlay: {
+      scrim: 'rgba(23,32,51,0.3)',
+    },
   },
   typography: {
     size: {

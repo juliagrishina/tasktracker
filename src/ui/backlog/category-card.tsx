@@ -1,72 +1,171 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { designTokens } from '../design/tokens';
+import { StatusPill } from '../primitives/status-pill';
+import { SurfaceCard } from '../primitives/surface-card';
+
+export type BacklogCategoryKind = 'reminders' | 'unassigned' | 'projects';
 
 interface CategoryCardProps {
   title: string;
   count: number;
   previews: readonly string[];
+  kind: BacklogCategoryKind;
   onPress?: () => void;
 }
+
+const categoryVisuals: Record<BacklogCategoryKind, {
+  glyph: string;
+  backgroundColor: string;
+  color: string;
+  actionLabel: string;
+}> = {
+  reminders: {
+    glyph: '◷',
+    backgroundColor: designTokens.color.feedback.warning.surface,
+    color: designTokens.color.feedback.warning.foreground,
+    actionLabel: 'Открыть раздел',
+  },
+  unassigned: {
+    glyph: '□',
+    backgroundColor: designTokens.color.primarySoft,
+    color: designTokens.color.primaryStrong,
+    actionLabel: 'Открыть раздел',
+  },
+  projects: {
+    glyph: '▰',
+    backgroundColor: designTokens.color.primarySoft,
+    color: designTokens.color.primaryStrong,
+    actionLabel: 'Перейти к проектам',
+  },
+};
 
 export function CategoryCard({
   title,
   count,
   previews,
+  kind,
   onPress,
 }: CategoryCardProps) {
+  const visual = categoryVisuals[kind];
+
   return (
-    <Pressable
-      accessibilityLabel={title}
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
+    <SurfaceCard accessibilityLabel={title} onPress={onPress} style={styles.card}>
       <View style={styles.headingRow}>
-        <Text style={styles.title}>{title}</Text>
-        <View style={styles.countBadge}>
-          <Text style={styles.count}>{count}</Text>
+        <View style={[styles.icon, { backgroundColor: visual.backgroundColor }]}>
+          <Text style={[styles.iconGlyph, { color: visual.color }]}>{visual.glyph}</Text>
         </View>
+        <View style={styles.titleColumn}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{count === 0 ? 'Пока нет элементов' : `${count} ${count === 1 ? 'элемент' : 'элемента'}`}</Text>
+        </View>
+        <StatusPill label={String(count)} tone="neutral" />
       </View>
       {previews.length === 0 ? (
         <Text style={styles.empty}>Пока здесь пусто</Text>
       ) : (
         <View style={styles.previewList}>
           {previews.slice(0, 2).map((preview) => (
-            <Text key={preview} numberOfLines={1} style={styles.preview}>
-              {preview}
-            </Text>
+            <View key={preview} style={styles.previewRow}>
+              <View style={styles.previewMarker} />
+              <Text numberOfLines={1} style={styles.preview}>{preview}</Text>
+            </View>
           ))}
         </View>
       )}
-      <Text style={styles.open}>Открыть</Text>
-    </Pressable>
+      <View style={styles.openRow}>
+        <Text style={styles.open}>{visual.actionLabel}</Text>
+        <Text style={styles.chevron}>›</Text>
+      </View>
+    </SurfaceCard>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: 142,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    padding: 18,
-    shadowColor: '#101828',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 2,
+    minHeight: 154,
+    padding: designTokens.space[12],
   },
-  cardPressed: { opacity: 0.78 },
-  headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { color: '#172033', fontSize: 19, fontWeight: '700' },
-  countBadge: {
-    minWidth: 28,
-    borderRadius: 14,
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+  headingRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: designTokens.space[8],
   },
-  count: { color: '#4338CA', fontSize: 14, fontWeight: '700' },
-  previewList: { gap: 5, marginTop: 14 },
-  preview: { color: '#475467', fontSize: 15, lineHeight: 20 },
-  empty: { marginTop: 14, color: '#98A2B3', fontSize: 15 },
-  open: { marginTop: 'auto', color: '#4F46E5', fontSize: 14, fontWeight: '700' },
+  icon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: designTokens.radius.control,
+  },
+  iconGlyph: {
+    fontSize: designTokens.typography.size.sectionTitle,
+    lineHeight: designTokens.typography.lineHeight.sectionTitle,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  titleColumn: { flex: 1 },
+  title: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  subtitle: {
+    marginTop: designTokens.space[2],
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta,
+  },
+  previewList: {
+    marginTop: designTokens.space[10],
+    overflow: 'hidden',
+    borderRadius: designTokens.radius.row,
+    backgroundColor: designTokens.color.surface.base,
+  },
+  previewRow: {
+    minHeight: designTokens.size.touchTargetMin,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: designTokens.space[8],
+    borderBottomWidth: 1,
+    borderBottomColor: designTokens.color.border.subtle,
+    paddingHorizontal: designTokens.space[10],
+  },
+  previewMarker: {
+    width: 12,
+    height: 12,
+    borderWidth: 1.5,
+    borderColor: designTokens.color.text.tertiary,
+    borderRadius: designTokens.radius.pill,
+  },
+  preview: {
+    flex: 1,
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+    fontWeight: designTokens.typography.weight.semibold,
+  },
+  empty: {
+    marginTop: designTokens.space[12],
+    color: designTokens.color.text.tertiary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+  },
+  openRow: {
+    marginTop: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: designTokens.space[10],
+  },
+  open: {
+    color: designTokens.color.primary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  chevron: {
+    color: designTokens.color.primary,
+    fontSize: designTokens.typography.size.sectionTitle,
+  },
 });

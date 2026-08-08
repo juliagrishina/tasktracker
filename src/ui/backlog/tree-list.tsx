@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { BacklogItemKind, BacklogTaskTree } from '../../application/backlog-types';
+import { designTokens } from '../design/tokens';
+import { SurfaceCard } from '../primitives/surface-card';
 
 interface TreeListProps {
   trees: readonly BacklogTaskTree[];
@@ -20,7 +22,7 @@ export function TreeList({ trees, emptyText, onOpenItem }: TreeListProps) {
   return (
     <View style={styles.list}>
       {trees.map(({ task, subtasks }) => (
-        <View key={task.id} style={styles.card}>
+        <SurfaceCard key={task.id} style={styles.card}>
           <Pressable onPress={() => onOpenItem(task.id, 'task')} style={styles.taskRow}>
             <View style={styles.checkCircle} />
             <View style={styles.textColumn}>
@@ -46,23 +48,75 @@ export function TreeList({ trees, emptyText, onOpenItem }: TreeListProps) {
               <Text style={styles.chevron}>›</Text>
             </Pressable>
           ))}
-        </View>
+        </SurfaceCard>
       ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { gap: 12 },
-  card: { overflow: 'hidden', borderRadius: 16, backgroundColor: '#FFFFFF', shadowColor: '#101828', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 1 },
-  taskRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
-  subtaskRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', marginLeft: 32, borderTopWidth: 1, borderTopColor: '#F2F4F7', paddingHorizontal: 16 },
-  checkCircle: { width: 22, height: 22, borderWidth: 2, borderColor: '#98A2B3', borderRadius: 11, marginRight: 12 },
-  subtaskCheckCircle: { width: 18, height: 18, borderWidth: 2, borderColor: '#C0C7D4', borderRadius: 9, marginRight: 11 },
+  list: { gap: designTokens.space[10] },
+  card: { overflow: 'hidden', padding: 0 },
+  taskRow: {
+    minHeight: designTokens.size.touchTargetMin,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: designTokens.space[12],
+    paddingVertical: designTokens.space[8],
+  },
+  subtaskRow: {
+    minHeight: designTokens.size.touchTargetMin,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: designTokens.space[24],
+    borderTopWidth: 1,
+    borderTopColor: designTokens.color.border.subtle,
+    paddingHorizontal: designTokens.space[12],
+    paddingVertical: designTokens.space[8],
+  },
+  checkCircle: {
+    width: 20,
+    height: 20,
+    borderWidth: 1.5,
+    borderColor: designTokens.color.text.tertiary,
+    borderRadius: designTokens.radius.pill,
+    marginRight: designTokens.space[10],
+  },
+  subtaskCheckCircle: {
+    width: 16,
+    height: 16,
+    borderWidth: 1.5,
+    borderColor: designTokens.color.text.tertiary,
+    borderRadius: designTokens.radius.pill,
+    marginRight: designTokens.space[10],
+  },
   textColumn: { flex: 1 },
-  taskTitle: { color: '#172033', fontSize: 16, fontWeight: '700' },
-  subtaskTitle: { color: '#344054', fontSize: 15, fontWeight: '600' },
-  detail: { marginTop: 3, color: '#667085', fontSize: 13 },
-  chevron: { marginLeft: 10, color: '#98A2B3', fontSize: 25 },
-  empty: { color: '#667085', fontSize: 16, lineHeight: 23 },
+  taskTitle: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  subtaskTitle: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+    fontWeight: designTokens.typography.weight.semibold,
+  },
+  detail: {
+    marginTop: designTokens.space[2],
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta,
+  },
+  chevron: {
+    marginLeft: designTokens.space[8],
+    color: designTokens.color.text.tertiary,
+    fontSize: designTokens.typography.size.sectionTitle,
+  },
+  empty: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+  },
 });

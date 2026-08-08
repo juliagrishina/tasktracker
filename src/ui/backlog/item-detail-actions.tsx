@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { useAppServices } from '../../application/app-services-provider';
 import type { BacklogItemKind } from '../../application/backlog-types';
+import { designTokens } from '../design/tokens';
+import { ActionButton } from '../primitives/action-button';
 
 import { confirmBacklogDeletion } from './confirmation';
 
@@ -59,40 +61,31 @@ export function ItemDetailActions({
 
   return (
     <View style={styles.container}>
-      <Pressable disabled={isBusy} onPress={onEdit} style={styles.secondaryAction}>
-        <Text style={styles.secondaryText}>Редактировать</Text>
-      </Pressable>
+      <ActionButton disabled={isBusy} label="Редактировать" onPress={onEdit ?? (() => undefined)} tone="secondary" />
       {kind === 'task' && onAddSubtask !== undefined ? (
-        <Pressable disabled={isBusy} onPress={onAddSubtask} style={styles.secondaryAction}>
-          <Text style={styles.secondaryText}>Добавить подзадачу</Text>
-        </Pressable>
+        <ActionButton disabled={isBusy} label="Добавить подзадачу" onPress={onAddSubtask} tone="secondary" />
       ) : null}
       {kind === 'task' || kind === 'subtask' ? (
-        <Pressable
+        <ActionButton
           disabled={isBusy}
+          label="Запланировать"
           onPress={() => setMessage('Выбор даты и времени появится на следующем этапе планирования')}
-          style={styles.secondaryAction}>
-          <Text style={styles.secondaryText}>Запланировать</Text>
-        </Pressable>
+          tone="soft"
+        />
       ) : null}
-      <Pressable disabled={isBusy} onPress={complete} style={styles.completeAction}>
-        <Text style={styles.completeText}>Завершить</Text>
-      </Pressable>
-      <Pressable disabled={isBusy} onPress={remove} style={styles.deleteAction}>
-        <Text style={styles.deleteText}>Удалить</Text>
-      </Pressable>
+      <ActionButton disabled={isBusy} label="Завершить" onPress={complete} tone="primary" />
+      <ActionButton disabled={isBusy} label="Удалить" onPress={remove} tone="danger" />
       {message === null ? null : <Text style={styles.message}>{message}</Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { gap: 10, marginTop: 24 },
-  secondaryAction: { minHeight: 46, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#D0D5DD', borderRadius: 12, backgroundColor: '#FFFFFF' },
-  secondaryText: { color: '#344054', fontSize: 16, fontWeight: '700' },
-  completeAction: { minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#4F46E5' },
-  completeText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  deleteAction: { minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#FEF3F2' },
-  deleteText: { color: '#B42318', fontSize: 16, fontWeight: '700' },
-  message: { color: '#475467', fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  container: { gap: designTokens.space[10], marginTop: designTokens.space[24] },
+  message: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+    textAlign: 'center',
+  },
 });

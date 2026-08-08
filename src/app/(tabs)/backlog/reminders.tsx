@@ -1,7 +1,9 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { useAppServices } from '../../../application/app-services-provider';
+import { designTokens } from '../../../ui/design/tokens';
+import { SurfaceCard } from '../../../ui/primitives/surface-card';
 import { ScreenShell } from '../../../ui/screen-shell';
 
 export default function RemindersRoute() {
@@ -15,7 +17,8 @@ export default function RemindersRoute() {
       ) : (
         <View style={styles.list}>
           {backlog.reminders.map((reminder) => (
-            <Pressable
+            <SurfaceCard
+              accessibilityLabel={reminder.title}
               key={reminder.id}
               onPress={() => router.push({ pathname: '/backlog/item/[id]', params: { id: reminder.id, kind: 'reminder' } })}
               style={styles.row}>
@@ -25,7 +28,7 @@ export default function RemindersRoute() {
                 {reminder.estimatedDurationMinutes === null ? null : <Text style={styles.detail}>≈ {reminder.estimatedDurationMinutes} мин.</Text>}
               </View>
               <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            </SurfaceCard>
           ))}
         </View>
       )}
@@ -34,13 +37,31 @@ export default function RemindersRoute() {
 }
 
 const styles = StyleSheet.create({
-  list: { gap: 12 },
-  row: { minHeight: 64, flexDirection: 'row', alignItems: 'center', borderRadius: 16, backgroundColor: '#FFFFFF', paddingHorizontal: 16, shadowColor: '#101828', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 1 },
-  bell: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14, marginRight: 12, backgroundColor: '#EEF2FF' },
-  bellText: { color: '#4F46E5', fontSize: 21 },
+  list: { gap: designTokens.space[10] },
+  row: { minHeight: 64, flexDirection: 'row', alignItems: 'center', padding: designTokens.space[12] },
+  bell: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: designTokens.radius.control,
+    marginRight: designTokens.space[10],
+    backgroundColor: designTokens.color.feedback.warning.surface,
+  },
+  bellText: { color: designTokens.color.feedback.warning.foreground, fontSize: designTokens.typography.size.sectionTitle },
   textColumn: { flex: 1 },
-  title: { color: '#172033', fontSize: 16, fontWeight: '700' },
-  detail: { marginTop: 3, color: '#667085', fontSize: 13 },
-  chevron: { color: '#98A2B3', fontSize: 25 },
-  empty: { color: '#667085', fontSize: 16 },
+  title: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  detail: {
+    marginTop: designTokens.space[2],
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta,
+  },
+  chevron: { color: designTokens.color.text.tertiary, fontSize: designTokens.typography.size.sectionTitle },
+  empty: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.body },
 });

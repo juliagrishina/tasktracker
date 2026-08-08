@@ -33,6 +33,7 @@
 | Primary | `color.primary` | `#0A84FF` |
 | Strong primary text | `color.primaryStrong` | `#0873D6` |
 | Мягкая primary surface | `color.primarySoft` | `#EAF4FF` |
+| Затемнение modal sheet | `color.overlay.scrim` | `rgba(23,32,51,0.3)` |
 | Успешное действие / выполнение | `color.feedback.success` | `#31A866`, `#D9F7E2`, `#176B3A` |
 | Предупреждение | `color.feedback.warning` | `#FFF3CF`, `#6F5500`, `#F3DC93` |
 | Необратимое действие | `color.feedback.danger.foreground` | `#D83931` |

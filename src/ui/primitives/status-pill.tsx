@@ -1,10 +1,12 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 
 import { designTokens } from '../design/tokens';
 
+type StatusPillTone = 'neutral' | 'info' | 'success' | 'warning';
+
 interface StatusPillProps {
   label: string;
-  tone: 'neutral' | 'info' | 'success' | 'warning';
+  tone: StatusPillTone;
 }
 
 export function StatusPill({ label, tone }: StatusPillProps) {
@@ -29,7 +31,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const toneStyles = StyleSheet.create({
+const toneStyles: Record<StatusPillTone, { container: ViewStyle; label: TextStyle }> = {
   neutral: {
     container: { backgroundColor: designTokens.color.surface.subtle },
     label: { color: designTokens.color.text.secondary },
@@ -46,4 +48,4 @@ const toneStyles = StyleSheet.create({
     container: { backgroundColor: designTokens.color.feedback.warning.surface },
     label: { color: designTokens.color.feedback.warning.foreground },
   },
-});
+};

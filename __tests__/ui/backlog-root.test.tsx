@@ -57,4 +57,19 @@ describe('BacklogRootScreen', () => {
       expect(view.getByText('Проверить ответ')).toBeTruthy();
     });
   });
+
+  test('shows an explicit category transition for every approved root card', async () => {
+    const view = await render(
+      <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
+        <BacklogRootScreen />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.getByLabelText('Напоминания')).toBeOnTheScreen();
+    });
+
+    expect(view.getAllByText('Открыть раздел')).toHaveLength(2);
+    expect(view.getByText('Перейти к проектам')).toBeOnTheScreen();
+  });
 });

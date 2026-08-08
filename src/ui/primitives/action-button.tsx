@@ -1,11 +1,13 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, type TextStyle, type ViewStyle } from 'react-native';
 
 import { designTokens } from '../design/tokens';
+
+type ActionButtonTone = 'primary' | 'soft' | 'secondary' | 'danger';
 
 interface ActionButtonProps {
   label: string;
   onPress: () => void;
-  tone: 'primary' | 'soft' | 'secondary' | 'danger';
+  tone: ActionButtonTone;
   disabled?: boolean;
 }
 
@@ -49,7 +51,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const toneStyles = StyleSheet.create({
+const toneStyles: Record<ActionButtonTone, { container: ViewStyle; label: TextStyle }> = {
   primary: {
     container: { backgroundColor: designTokens.color.primary },
     label: { color: designTokens.color.text.inverse },
@@ -70,4 +72,4 @@ const toneStyles = StyleSheet.create({
     },
     label: { color: designTokens.color.feedback.danger.foreground },
   },
-});
+};

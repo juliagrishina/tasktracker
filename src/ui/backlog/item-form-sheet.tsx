@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppServices } from '../../application/app-services-provider';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
+import { designTokens } from '../design/tokens';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
@@ -237,7 +238,7 @@ export function ItemFormSheet({
               autoFocus
               onChangeText={setTitle}
               placeholder="Например, подготовить документы"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={designTokens.color.text.tertiary}
               style={styles.input}
               value={title}
             />
@@ -247,7 +248,7 @@ export function ItemFormSheet({
               multiline
               onChangeText={setDescription}
               placeholder="Необязательно"
-              placeholderTextColor="#98A2B3"
+              placeholderTextColor={designTokens.color.text.tertiary}
               style={[styles.input, styles.multilineInput]}
               value={description}
             />
@@ -286,7 +287,7 @@ export function ItemFormSheet({
                   keyboardType="number-pad"
                   onChangeText={setDuration}
                   placeholder="Необязательно"
-                  placeholderTextColor="#98A2B3"
+                  placeholderTextColor={designTokens.color.text.tertiary}
                   style={styles.input}
                   value={duration}
                 />
@@ -295,11 +296,11 @@ export function ItemFormSheet({
             {type === 'reminder' ? (
               <View style={styles.reminderFields}>
                 <Text style={styles.label}>Дата</Text>
-                <TextInput accessibilityLabel="Дата" onChangeText={setRemindsOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor="#98A2B3" style={styles.input} value={remindsOn} />
+                <TextInput accessibilityLabel="Дата" onChangeText={setRemindsOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={remindsOn} />
                 <Text style={styles.label}>Начало периода</Text>
-                <TextInput accessibilityLabel="Начало периода" onChangeText={setPeriodStartOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor="#98A2B3" style={styles.input} value={periodStartOn} />
+                <TextInput accessibilityLabel="Начало периода" onChangeText={setPeriodStartOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={periodStartOn} />
                 <Text style={styles.label}>Конец периода</Text>
-                <TextInput accessibilityLabel="Конец периода" onChangeText={setPeriodEndOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor="#98A2B3" style={styles.input} value={periodEndOn} />
+                <TextInput accessibilityLabel="Конец периода" onChangeText={setPeriodEndOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={periodEndOn} />
                 <Text style={styles.label}>Повторение</Text>
                 <View style={styles.repeatOptions}>
                   {([
@@ -317,7 +318,7 @@ export function ItemFormSheet({
                   ))}
                 </View>
                 {repeatFrequency !== '' ? (
-                  <TextInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" onChangeText={setRepeatInterval} placeholder="Интервал" placeholderTextColor="#98A2B3" style={styles.input} value={repeatInterval} />
+                  <TextInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" onChangeText={setRepeatInterval} placeholder="Интервал" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={repeatInterval} />
                 ) : null}
               </View>
             ) : null}
@@ -338,35 +339,145 @@ export function ItemFormSheet({
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(16, 24, 40, 0.3)' },
-  sheet: { maxHeight: '92%', borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: '#F9FAFB' },
-  handle: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, marginTop: 10, backgroundColor: '#D0D5DD' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
-  heading: { color: '#172033', fontSize: 22, fontWeight: '700' },
-  closeButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  closeText: { color: '#667085', fontSize: 21 },
-  content: { paddingHorizontal: 20, paddingBottom: 20 },
-  label: { marginTop: 14, marginBottom: 7, color: '#344054', fontSize: 14, fontWeight: '600' },
-  input: { minHeight: 46, borderWidth: 1, borderColor: '#D0D5DD', borderRadius: 12, backgroundColor: '#FFFFFF', paddingHorizontal: 13, color: '#172033', fontSize: 16 },
-  multilineInput: { minHeight: 82, paddingTop: 12, textAlignVertical: 'top' },
-  selector: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#D0D5DD', borderRadius: 12, backgroundColor: '#FFFFFF', paddingHorizontal: 13 },
-  selectorText: { color: '#172033', fontSize: 16 },
-  selectorChevron: { color: '#667085', fontSize: 18 },
-  projectOptions: { overflow: 'hidden', marginTop: 5, borderRadius: 12, backgroundColor: '#FFFFFF' },
-  option: { paddingHorizontal: 14, paddingVertical: 12 },
-  optionText: { color: '#344054', fontSize: 16 },
-  reminderFields: { marginTop: 2 },
-  repeatOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  repeatOption: { borderWidth: 1, borderColor: '#D0D5DD', borderRadius: 16, paddingHorizontal: 11, paddingVertical: 7, backgroundColor: '#FFFFFF' },
-  repeatOptionSelected: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
-  repeatOptionText: { color: '#475467', fontSize: 13 },
-  repeatOptionTextSelected: { color: '#4338CA', fontWeight: '700' },
-  error: { marginTop: 16, color: '#B42318', fontSize: 14, fontWeight: '600' },
-  footer: { flexDirection: 'row', gap: 10, borderTopWidth: 1, borderTopColor: '#EAECF0', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFFFFF' },
-  action: { minHeight: 46, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
-  primaryAction: { backgroundColor: '#4F46E5' },
-  secondaryAction: { backgroundColor: '#F2F4F7' },
-  primaryActionText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  secondaryActionText: { color: '#344054', fontSize: 16, fontWeight: '700' },
-  disabledAction: { opacity: 0.55 },
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: designTokens.color.overlay.scrim },
+  sheet: {
+    maxHeight: '92%',
+    borderTopLeftRadius: designTokens.radius.sheet,
+    borderTopRightRadius: designTokens.radius.sheet,
+    backgroundColor: designTokens.color.surface.base,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 5,
+    borderRadius: designTokens.radius.pill,
+    marginTop: designTokens.space[10],
+    backgroundColor: designTokens.color.text.tertiary,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: designTokens.space[20],
+    paddingTop: designTokens.space[16],
+    paddingBottom: designTokens.space[12],
+  },
+  heading: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.sectionTitle,
+    lineHeight: designTokens.typography.lineHeight.sectionTitle,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  closeButton: {
+    width: designTokens.size.touchTargetMin,
+    height: designTokens.size.touchTargetMin,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeText: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.sectionTitle },
+  content: { paddingHorizontal: designTokens.space[20], paddingBottom: designTokens.space[20] },
+  label: {
+    marginTop: designTokens.space[16],
+    marginBottom: designTokens.space[6],
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+    fontWeight: designTokens.typography.weight.semibold,
+  },
+  input: {
+    minHeight: designTokens.size.touchTargetMin,
+    borderWidth: 1,
+    borderColor: designTokens.color.border.subtle,
+    borderRadius: designTokens.radius.control,
+    backgroundColor: designTokens.color.surface.raised,
+    paddingHorizontal: designTokens.space[12],
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+  },
+  multilineInput: { minHeight: 88, paddingTop: designTokens.space[12], textAlignVertical: 'top' },
+  selector: {
+    minHeight: designTokens.size.touchTargetMin,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: designTokens.color.border.subtle,
+    borderRadius: designTokens.radius.control,
+    backgroundColor: designTokens.color.surface.raised,
+    paddingHorizontal: designTokens.space[12],
+  },
+  selectorText: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+  },
+  selectorChevron: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.sectionTitle },
+  projectOptions: {
+    overflow: 'hidden',
+    marginTop: designTokens.space[4],
+    borderRadius: designTokens.radius.control,
+    backgroundColor: designTokens.color.surface.raised,
+  },
+  option: { minHeight: designTokens.size.touchTargetMin, justifyContent: 'center', paddingHorizontal: designTokens.space[12] },
+  optionText: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+  },
+  reminderFields: { marginTop: designTokens.space[2] },
+  repeatOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: designTokens.space[8] },
+  repeatOption: {
+    borderWidth: 1,
+    borderColor: designTokens.color.border.subtle,
+    borderRadius: designTokens.radius.pill,
+    paddingHorizontal: designTokens.space[10],
+    paddingVertical: designTokens.space[6],
+    backgroundColor: designTokens.color.surface.raised,
+  },
+  repeatOptionSelected: { borderColor: designTokens.color.primary, backgroundColor: designTokens.color.primarySoft },
+  repeatOptionText: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta,
+  },
+  repeatOptionTextSelected: { color: designTokens.color.primaryStrong, fontWeight: designTokens.typography.weight.bold },
+  error: {
+    marginTop: designTokens.space[16],
+    color: designTokens.color.feedback.danger.foreground,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+    fontWeight: designTokens.typography.weight.semibold,
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: designTokens.space[10],
+    borderTopWidth: 1,
+    borderTopColor: designTokens.color.border.subtle,
+    paddingHorizontal: designTokens.space[20],
+    paddingVertical: designTokens.space[12],
+    backgroundColor: designTokens.color.surface.raised,
+  },
+  action: {
+    minHeight: designTokens.size.touchTargetMin,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: designTokens.radius.control,
+  },
+  primaryAction: { backgroundColor: designTokens.color.primary },
+  secondaryAction: { backgroundColor: designTokens.color.surface.subtle },
+  primaryActionText: {
+    color: designTokens.color.text.inverse,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  secondaryActionText: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  disabledAction: { opacity: designTokens.state.disabledOpacity },
 });

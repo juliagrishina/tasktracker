@@ -1,7 +1,9 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { useAppServices } from '../../../application/app-services-provider';
+import { designTokens } from '../../../ui/design/tokens';
+import { SurfaceCard } from '../../../ui/primitives/surface-card';
 import { ScreenShell } from '../../../ui/screen-shell';
 
 export default function ProjectsRoute() {
@@ -15,7 +17,8 @@ export default function ProjectsRoute() {
       ) : (
         <View style={styles.list}>
           {backlog.projects.map(({ project, tasks }) => (
-            <Pressable
+            <SurfaceCard
+              accessibilityLabel={project.title}
               key={project.id}
               onPress={() => router.push({ pathname: '/backlog/project/[id]', params: { id: project.id } })}
               style={styles.row}>
@@ -24,7 +27,7 @@ export default function ProjectsRoute() {
                 <Text style={styles.detail}>{tasks.length === 0 ? 'Пока без задач' : `${tasks.length} ${tasks.length === 1 ? 'задача' : 'задач(и)'}`}</Text>
               </View>
               <Text style={styles.chevron}>›</Text>
-            </Pressable>
+            </SurfaceCard>
           ))}
         </View>
       )}
@@ -33,11 +36,25 @@ export default function ProjectsRoute() {
 }
 
 const styles = StyleSheet.create({
-  list: { gap: 12 },
-  row: { minHeight: 74, flexDirection: 'row', alignItems: 'center', borderRadius: 16, backgroundColor: '#FFFFFF', paddingHorizontal: 17, shadowColor: '#101828', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 1 },
+  list: { gap: designTokens.space[10] },
+  row: { minHeight: 74, flexDirection: 'row', alignItems: 'center', padding: designTokens.space[12] },
   textColumn: { flex: 1 },
-  title: { color: '#172033', fontSize: 17, fontWeight: '700' },
-  detail: { marginTop: 5, color: '#667085', fontSize: 14 },
-  chevron: { color: '#98A2B3', fontSize: 27 },
-  empty: { color: '#667085', fontSize: 16, lineHeight: 23 },
+  title: {
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+    fontWeight: designTokens.typography.weight.bold,
+  },
+  detail: {
+    marginTop: designTokens.space[4],
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+  },
+  chevron: { color: designTokens.color.text.tertiary, fontSize: designTokens.typography.size.sectionTitle },
+  empty: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+  },
 });
