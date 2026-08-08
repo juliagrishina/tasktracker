@@ -8,6 +8,7 @@ import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
 import { StatusPill } from '../primitives/status-pill';
 import { SurfaceCard } from '../primitives/surface-card';
+import { temporaryWebContentStyle } from '../screen-shell';
 
 import { settingsDemoState } from './settings-demo-state';
 
@@ -26,12 +27,14 @@ export function SettingsStatePanel({ settings }: SettingsStatePanelProps) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Настройки</Text>
-        <Text style={styles.subtitle}>Состояние сервисов и параметры</Text>
+      <View style={styles.headerSurface}>
+        <View style={[styles.header, temporaryWebContentStyle()]}>
+          <Text style={styles.title}>Настройки</Text>
+          <Text style={styles.subtitle}>Состояние сервисов и параметры</Text>
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, temporaryWebContentStyle()]}>
         <SurfaceCard style={styles.microsoftCard} tone="info">
           <View style={styles.microsoftHead}>
             <View style={styles.microsoftIcon}>
@@ -141,10 +144,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: designTokens.color.surface.canvas,
   },
-  header: {
+  headerSurface: {
     backgroundColor: designTokens.color.surface.raised,
     borderBottomColor: designTokens.color.border.subtle,
     borderBottomWidth: 1,
+  },
+  header: {
     paddingHorizontal: designTokens.space[16],
     paddingVertical: designTokens.space[12],
   },

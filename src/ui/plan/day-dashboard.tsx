@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
 import { SurfaceCard } from '../primitives/surface-card';
+import { temporaryWebContentStyle } from '../screen-shell';
 
 import { planDemoModel, type PlanDemoListItem } from './plan-demo-model';
 import { ProgressRing } from './progress-ring';
@@ -15,7 +16,7 @@ export function DayDashboard() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerSurface}>
-        <View style={styles.headerContent}>
+        <View style={[styles.headerContent, temporaryWebContentStyle()]}>
           <View>
             <Text style={styles.screenTitle}>Сегодня</Text>
             <Text style={styles.date}>{planDemoModel.date}</Text>
@@ -40,7 +41,7 @@ export function DayDashboard() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, temporaryWebContentStyle()]}>
         <SurfaceCard style={styles.hero} tone="info">
           <View style={styles.heroRow}>
             <ProgressRing label={`${planDemoModel.completion}%`} value={planDemoModel.completion} />

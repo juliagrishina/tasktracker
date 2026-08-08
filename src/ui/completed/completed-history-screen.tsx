@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
 import { SurfaceCard } from '../primitives/surface-card';
+import { temporaryWebContentStyle } from '../screen-shell';
 
 import { completedDemoGroups, type CompletedDemoItem, type CompletedDemoKind } from './completed-demo-data';
 
@@ -25,36 +26,38 @@ export function CompletedHistoryScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Завершённые</Text>
-        <Text style={styles.subtitle}>Архив проектов, задач и напоминаний</Text>
-        <View style={styles.searchField}>
-          <Ionicons color={designTokens.color.text.tertiary} name="search-outline" size={18} />
-          <TextInput
-            accessibilityLabel="Поиск по названию"
-            onChangeText={setQuery}
-            placeholder="Поиск по названию"
-            placeholderTextColor={designTokens.color.text.tertiary}
-            style={styles.searchInput}
-            value={query}
-          />
-        </View>
-        <View style={styles.periods}>
-          {periods.map((item) => (
-            <Pressable
-              accessibilityLabel={item}
-              accessibilityRole="button"
-              accessibilityState={{ selected: period === item }}
-              key={item}
-              onPress={() => setPeriod(item)}
-              style={({ pressed }) => [styles.periodButton, period === item && styles.periodButtonSelected, pressed && styles.pressed]}>
-              <Text style={[styles.periodLabel, period === item && styles.periodLabelSelected]}>{item}</Text>
-            </Pressable>
-          ))}
+      <View style={styles.headerSurface}>
+        <View style={[styles.header, temporaryWebContentStyle()]}>
+          <Text style={styles.title}>Завершённые</Text>
+          <Text style={styles.subtitle}>Архив проектов, задач и напоминаний</Text>
+          <View style={styles.searchField}>
+            <Ionicons color={designTokens.color.text.tertiary} name="search-outline" size={18} />
+            <TextInput
+              accessibilityLabel="Поиск по названию"
+              onChangeText={setQuery}
+              placeholder="Поиск по названию"
+              placeholderTextColor={designTokens.color.text.tertiary}
+              style={styles.searchInput}
+              value={query}
+            />
+          </View>
+          <View style={styles.periods}>
+            {periods.map((item) => (
+              <Pressable
+                accessibilityLabel={item}
+                accessibilityRole="button"
+                accessibilityState={{ selected: period === item }}
+                key={item}
+                onPress={() => setPeriod(item)}
+                style={({ pressed }) => [styles.periodButton, period === item && styles.periodButtonSelected, pressed && styles.pressed]}>
+                <Text style={[styles.periodLabel, period === item && styles.periodLabelSelected]}>{item}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, temporaryWebContentStyle()]}>
         {filteredGroups.length === 0 ? (
           <Text style={styles.empty}>Ничего не найдено</Text>
         ) : filteredGroups.map((group) => (
@@ -143,10 +146,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: designTokens.color.surface.canvas,
   },
-  header: {
+  headerSurface: {
     backgroundColor: designTokens.color.surface.raised,
     borderBottomColor: designTokens.color.border.subtle,
     borderBottomWidth: 1,
+  },
+  header: {
     paddingHorizontal: designTokens.space[16],
     paddingVertical: designTokens.space[12],
   },

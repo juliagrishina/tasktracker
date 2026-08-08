@@ -107,6 +107,7 @@ export const designTokens = {
     floatingAction: 48,
     progressRing: 58,
     progressRingStroke: 7,
+    temporaryWideWebContentMaxWidth: 640,
   },
   elevation: {
     card: {

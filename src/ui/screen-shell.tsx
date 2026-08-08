@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from './design/tokens';
@@ -12,10 +12,20 @@ interface ScreenShellProps {
   subtitle?: string;
 }
 
+export const temporaryWideWebContentStyle: ViewStyle = {
+  alignSelf: 'center',
+  maxWidth: designTokens.size.temporaryWideWebContentMaxWidth,
+  width: '100%',
+};
+
+export function temporaryWebContentStyle(): ViewStyle | undefined {
+  return Platform.OS === 'web' ? temporaryWideWebContentStyle : undefined;
+}
+
 export function ScreenShell({ title, children, headerAction, onBack, subtitle }: ScreenShellProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, temporaryWebContentStyle()]} testID="screen-shell-content">
         {onBack === undefined ? null : (
           <Pressable accessibilityLabel="Назад" onPress={onBack} style={styles.backButton}>
             <Text style={styles.backText}>‹ Назад</Text>
