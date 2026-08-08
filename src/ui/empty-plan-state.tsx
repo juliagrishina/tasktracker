@@ -1,4 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
+
+import { designTokens } from './design/tokens';
+import { SurfaceCard } from './primitives/surface-card';
 
 interface EmptyPlanStateProps {
   today: Date;
@@ -12,12 +15,12 @@ export function EmptyPlanState({ today }: EmptyPlanStateProps) {
   }).format(today);
 
   return (
-    <View style={styles.card}>
+    <SurfaceCard style={styles.card} tone="info">
       <Text style={styles.eyebrow}>План на сегодня</Text>
       <Text style={styles.date}>{localizedDate}</Text>
       <Text style={styles.message}>На этот день пока ничего не запланировано.</Text>
       <Text style={styles.hint}>Первое дело появится в Backlog</Text>
-    </View>
+    </SurfaceCard>
   );
 }
 
@@ -25,38 +28,34 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     justifyContent: 'center',
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    padding: 24,
-    shadowColor: '#172033',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 20,
-    elevation: 2,
+    padding: designTokens.space[24],
   },
   eyebrow: {
-    color: '#4F46E5',
-    fontSize: 14,
-    fontWeight: '700',
+    color: designTokens.color.primaryStrong,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+    fontWeight: designTokens.typography.weight.bold,
     textTransform: 'uppercase',
   },
   date: {
-    marginTop: 8,
-    color: '#172033',
-    fontSize: 24,
-    fontWeight: '700',
+    marginTop: designTokens.space[8],
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.screenTitle,
+    lineHeight: designTokens.typography.lineHeight.screenTitle,
+    fontWeight: designTokens.typography.weight.bold,
     textTransform: 'capitalize',
   },
   message: {
-    marginTop: 24,
-    color: '#475467',
-    fontSize: 17,
-    lineHeight: 25,
+    marginTop: designTokens.space[24],
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
   },
   hint: {
-    marginTop: 12,
-    color: '#344054',
-    fontSize: 16,
-    fontWeight: '600',
+    marginTop: designTokens.space[12],
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+    fontWeight: designTokens.typography.weight.semibold,
   },
 });

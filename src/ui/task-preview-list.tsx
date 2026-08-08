@@ -1,6 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { DemoTask } from './demo-tasks';
+import { designTokens } from './design/tokens';
+import { SurfaceCard } from './primitives/surface-card';
 
 interface TaskPreviewListProps {
   heading: string;
@@ -21,10 +23,10 @@ export function TaskPreviewList({
       )}
       <View style={styles.list}>
         {tasks.map((task) => (
-          <View key={task.id} style={styles.card}>
+          <SurfaceCard key={task.id} style={styles.card}>
             <Text style={styles.title}>{task.title}</Text>
             <Text style={styles.detail}>{task.detail}</Text>
-          </View>
+          </SurfaceCard>
         ))}
       </View>
     </View>
@@ -33,37 +35,34 @@ export function TaskPreviewList({
 
 const styles = StyleSheet.create({
   heading: {
-    color: '#172033',
-    fontSize: 20,
-    fontWeight: '700',
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.sectionTitle,
+    lineHeight: designTokens.typography.lineHeight.sectionTitle,
+    fontWeight: designTokens.typography.weight.bold,
   },
   supportingText: {
-    marginTop: 6,
-    color: '#667085',
-    fontSize: 15,
+    marginTop: designTokens.space[6],
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
   },
   list: {
-    gap: 12,
-    marginTop: 16,
+    gap: designTokens.space[12],
+    marginTop: designTokens.space[16],
   },
   card: {
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    shadowColor: '#172033',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 1,
+    padding: designTokens.space[16],
   },
   title: {
-    color: '#172033',
-    fontSize: 17,
-    fontWeight: '600',
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.body,
+    lineHeight: designTokens.typography.lineHeight.body,
+    fontWeight: designTokens.typography.weight.semibold,
   },
   detail: {
-    marginTop: 6,
-    color: '#667085',
-    fontSize: 14,
+    marginTop: designTokens.space[6],
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
   },
 });

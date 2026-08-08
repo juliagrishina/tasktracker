@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
 import { tabDefinitions, type TabRoute } from '../../ui/tab-definitions';
+import { designTokens } from '../../ui/design/tokens';
 
 const tabIcons: Record<TabRoute, keyof typeof Ionicons.glyphMap> = {
   index: 'calendar-outline',
@@ -16,9 +17,17 @@ export default function TabsLayout() {
       initialRouteName="index"
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#4F46E5',
-        tabBarInactiveTintColor: '#667085',
-        tabBarStyle: { borderTopColor: '#EAECF0' },
+        tabBarActiveTintColor: designTokens.color.primary,
+        tabBarInactiveTintColor: designTokens.color.navigation.inactive,
+        tabBarLabelStyle: {
+          fontSize: designTokens.typography.size.micro,
+          fontWeight: designTokens.typography.weight.semibold,
+        },
+        tabBarStyle: {
+          minHeight: designTokens.size.tabBar,
+          borderTopColor: designTokens.color.border.subtle,
+          backgroundColor: designTokens.color.navigation.background,
+        },
       }}>
       {tabDefinitions.map((tab) => (
         <Tabs.Screen

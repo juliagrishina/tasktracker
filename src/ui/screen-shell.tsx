@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { designTokens } from './design/tokens';
+
 interface ScreenShellProps {
   title: string;
   children: ReactNode;
@@ -31,34 +33,37 @@ export function ScreenShell({ title, children, headerAction, onBack }: ScreenShe
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F7F8FA',
+    backgroundColor: designTokens.color.surface.canvas,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 24,
+    paddingHorizontal: designTokens.space[16],
+    paddingVertical: designTokens.space[20],
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: designTokens.space[20],
   },
   backButton: {
     alignSelf: 'flex-start',
-    minHeight: 32,
+    minHeight: designTokens.size.touchTargetMin,
     justifyContent: 'center',
-    marginBottom: 6,
+    paddingRight: designTokens.space[8],
+    marginBottom: designTokens.space[4],
   },
   backText: {
-    color: '#4F46E5',
-    fontSize: 16,
-    fontWeight: '600',
+    color: designTokens.color.primaryStrong,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
+    fontWeight: designTokens.typography.weight.semibold,
   },
   title: {
-    color: '#172033',
-    fontSize: 32,
-    fontWeight: '700',
-    letterSpacing: -0.6,
+    color: designTokens.color.text.primary,
+    fontSize: designTokens.typography.size.screenTitle,
+    lineHeight: designTokens.typography.lineHeight.screenTitle,
+    fontWeight: designTokens.typography.weight.bold,
+    letterSpacing: designTokens.typography.tracking.title,
   },
 });
