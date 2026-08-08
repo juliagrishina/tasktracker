@@ -14,4 +14,12 @@ describe('designTokens', () => {
     expect(designTokens.color.feedback.danger.foreground).toBe('#D83931');
     expect(designTokens.color.meeting.surface).toBe('#E9EEF6');
   });
+
+  test('exposes a semantic high-load calendar tone without changing approved base tokens', () => {
+    expect(designTokens.color.calendar.load.high.surface).toBeDefined();
+    expect(designTokens.color.calendar.load.high.border).toBeDefined();
+    expect(designTokens.color.primary).toBe('#0A84FF');
+    expect(designTokens.color.feedback.success.surface).toBe('#D9F7E2');
+    expect(designTokens.color.feedback.warning.surface).toBe('#FFF3CF');
+  });
 });

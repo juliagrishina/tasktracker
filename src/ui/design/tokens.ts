@@ -44,6 +44,12 @@ export const designTokens = {
     },
     calendar: {
       progressTrack: '#DCE8F4',
+      load: {
+        high: {
+          surface: '#FFF0EF',
+          border: '#FAC6C3',
+        },
+      },
     },
     navigation: {
       inactive: '#737B86',
