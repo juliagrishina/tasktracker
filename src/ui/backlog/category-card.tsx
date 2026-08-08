@@ -1,7 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
-import { StatusPill } from '../primitives/status-pill';
 import { SurfaceCard } from '../primitives/surface-card';
 
 export type BacklogCategoryKind = 'reminders' | 'unassigned' | 'projects';
@@ -9,31 +9,37 @@ export type BacklogCategoryKind = 'reminders' | 'unassigned' | 'projects';
 interface CategoryCardProps {
   title: string;
   count: number;
-  previews: readonly string[];
+  previews: readonly CategoryPreview[];
   kind: BacklogCategoryKind;
   onPress?: () => void;
+  subtitle: string;
+}
+
+interface CategoryPreview {
+  detail: string;
+  title: string;
 }
 
 const categoryVisuals: Record<BacklogCategoryKind, {
-  glyph: string;
+  icon: keyof typeof Ionicons.glyphMap;
   backgroundColor: string;
   color: string;
   actionLabel: string;
 }> = {
   reminders: {
-    glyph: '◷',
+    icon: 'time-outline',
     backgroundColor: designTokens.color.feedback.warning.surface,
     color: designTokens.color.feedback.warning.foreground,
     actionLabel: 'Открыть раздел',
   },
   unassigned: {
-    glyph: '□',
+    icon: 'square-outline',
     backgroundColor: designTokens.color.primarySoft,
     color: designTokens.color.primaryStrong,
     actionLabel: 'Открыть раздел',
   },
   projects: {
-    glyph: '▰',
+    icon: 'folder-outline',
     backgroundColor: designTokens.color.primarySoft,
     color: designTokens.color.primaryStrong,
     actionLabel: 'Перейти к проектам',
@@ -46,6 +52,7 @@ export function CategoryCard({
   previews,
   kind,
   onPress,
+  subtitle,
 }: CategoryCardProps) {
   const visual = categoryVisuals[kind];
 
@@ -53,29 +60,30 @@ export function CategoryCard({
     <SurfaceCard accessibilityLabel={title} onPress={onPress} style={styles.card}>
       <View style={styles.headingRow}>
         <View style={[styles.icon, { backgroundColor: visual.backgroundColor }]}>
-          <Text style={[styles.iconGlyph, { color: visual.color }]}>{visual.glyph}</Text>
+          <Ionicons color={visual.color} name={visual.icon} size={20} />
         </View>
         <View style={styles.titleColumn}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{count === 0 ? 'Пока нет элементов' : `${count} ${count === 1 ? 'элемент' : 'элемента'}`}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
-        <StatusPill label={String(count)} tone="neutral" />
+        <Ionicons color={designTokens.color.text.tertiary} name="chevron-forward" size={20} />
       </View>
       {previews.length === 0 ? (
         <Text style={styles.empty}>Пока здесь пусто</Text>
       ) : (
         <View style={styles.previewList}>
           {previews.slice(0, 2).map((preview) => (
-            <View key={preview} style={styles.previewRow}>
+            <View key={preview.title} style={styles.previewRow}>
               <View style={styles.previewMarker} />
-              <Text numberOfLines={1} style={styles.preview}>{preview}</Text>
+              <Text numberOfLines={1} style={styles.preview}>{preview.title}</Text>
+              <Text numberOfLines={1} style={styles.previewDetail}>{preview.detail}</Text>
             </View>
           ))}
         </View>
       )}
       <View style={styles.openRow}>
         <Text style={styles.open}>{visual.actionLabel}</Text>
-        <Text style={styles.chevron}>›</Text>
+        <Text style={styles.countAction}>{count} →</Text>
       </View>
     </SurfaceCard>
   );
@@ -83,7 +91,6 @@ export function CategoryCard({
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: 154,
     padding: designTokens.space[12],
   },
   headingRow: {
@@ -97,11 +104,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: designTokens.radius.control,
-  },
-  iconGlyph: {
-    fontSize: designTokens.typography.size.sectionTitle,
-    lineHeight: designTokens.typography.lineHeight.sectionTitle,
-    fontWeight: designTokens.typography.weight.bold,
   },
   titleColumn: { flex: 1 },
   title: {
@@ -145,6 +147,13 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.label,
     fontWeight: designTokens.typography.weight.semibold,
   },
+  previewDetail: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.micro,
+    lineHeight: designTokens.typography.lineHeight.micro,
+    maxWidth: designTokens.space[32] + designTokens.space[12],
+    textAlign: 'right',
+  },
   empty: {
     marginTop: designTokens.space[12],
     color: designTokens.color.text.tertiary,
@@ -164,8 +173,10 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.label,
     fontWeight: designTokens.typography.weight.bold,
   },
-  chevron: {
+  countAction: {
     color: designTokens.color.primary,
-    fontSize: designTokens.typography.size.sectionTitle,
+    fontSize: designTokens.typography.size.meta,
+    fontWeight: designTokens.typography.weight.semibold,
+    lineHeight: designTokens.typography.lineHeight.meta,
   },
 });

@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAppServices } from '../../application/app-services-provider';
 import { designTokens } from '../design/tokens';
+import { SurfaceCard } from '../primitives/surface-card';
 import { ScreenShell } from '../screen-shell';
 
 import { CategoryCard } from './category-card';
@@ -23,6 +24,9 @@ export function BacklogRootScreen({ onOpenCategory }: BacklogRootScreenProps) {
     setMenuVisible(false);
     setFormType(type);
   };
+  const plannedItemCount = backlog.reminders.length
+    + backlog.unassignedTasks.length
+    + backlog.projects.reduce((total, project) => total + project.tasks.length, 0);
 
   if (!isReady) {
     return <ScreenShell title="Backlog"><Text style={styles.loading}>Загружаем Backlog…</Text></ScreenShell>;
@@ -31,6 +35,7 @@ export function BacklogRootScreen({ onOpenCategory }: BacklogRootScreenProps) {
   return (
     <ScreenShell
       title="Backlog"
+      subtitle={`${plannedItemCount} ${formatDealWord(plannedItemCount)} ждут планирования`}
       headerAction={(
         <Pressable
           accessibilityLabel="Добавить элемент"
@@ -40,26 +45,41 @@ export function BacklogRootScreen({ onOpenCategory }: BacklogRootScreenProps) {
           <Text style={styles.addButtonText}>+</Text>
         </Pressable>
       )}>
+      <SurfaceCard style={styles.demoHint} tone="info">
+        <Text style={styles.demoHintText}>Демо-планирование: задача откроет форму с параметрами дня.</Text>
+      </SurfaceCard>
       <View style={styles.cards}>
         <CategoryCard
           count={backlog.reminders.length}
           onPress={() => onOpenCategory?.('reminders')}
-          previews={backlog.reminders.map((item) => item.title)}
+          previews={backlog.reminders.map((item) => ({
+            detail: item.estimatedDurationMinutes === null ? 'без оценки' : formatDuration(item.estimatedDurationMinutes),
+            title: item.title,
+          }))}
           kind="reminders"
+          subtitle={`${backlog.reminders.length} без даты`}
           title="Напоминания"
         />
         <CategoryCard
           count={backlog.unassignedTasks.length}
           onPress={() => onOpenCategory?.('unassigned')}
-          previews={backlog.unassignedTasks.map((item) => item.task.title)}
+          previews={backlog.unassignedTasks.map((item) => ({
+            detail: item.task.estimatedDurationMinutes === null ? 'без оценки' : formatDuration(item.task.estimatedDurationMinutes),
+            title: item.task.title,
+          }))}
           kind="unassigned"
+          subtitle={`${backlog.unassignedTasks.length} ${formatTaskWord(backlog.unassignedTasks.length)}`}
           title="Без проекта"
         />
         <CategoryCard
           count={backlog.projects.length}
           onPress={() => onOpenCategory?.('projects')}
-          previews={backlog.projects.map((item) => item.project.title)}
+          previews={backlog.projects.map((item) => ({
+            detail: `${item.tasks.length} ${formatTaskWord(item.tasks.length)}`,
+            title: item.project.title,
+          }))}
           kind="projects"
+          subtitle={`${backlog.projects.length} ${formatProjectWord(backlog.projects.length)} · ${backlog.projects.reduce((total, project) => total + project.tasks.length, 0)} ${formatTaskWord(backlog.projects.reduce((total, project) => total + project.tasks.length, 0))}`}
           title="Проекты"
         />
       </View>
@@ -85,6 +105,22 @@ export function BacklogRootScreen({ onOpenCategory }: BacklogRootScreenProps) {
   );
 }
 
+function formatDealWord(count: number) {
+  return count === 1 ? 'дело' : count >= 2 && count <= 4 ? 'дела' : 'дел';
+}
+
+function formatTaskWord(count: number) {
+  return count === 1 ? 'задача' : count >= 2 && count <= 4 ? 'задачи' : 'задач';
+}
+
+function formatProjectWord(count: number) {
+  return count === 1 ? 'проект' : count >= 2 && count <= 4 ? 'проекта' : 'проектов';
+}
+
+function formatDuration(minutes: number) {
+  return `${minutes} мин`;
+}
+
 const styles = StyleSheet.create({
   loading: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.body },
   addButton: {
@@ -103,6 +139,14 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.display,
   },
   cards: { gap: designTokens.space[10] },
+  demoHint: {
+    marginBottom: designTokens.space[10],
+  },
+  demoHintText: {
+    color: designTokens.color.primaryStrong,
+    fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta,
+  },
   menuOverlay: {
     flex: 1,
     justifyContent: 'flex-end',

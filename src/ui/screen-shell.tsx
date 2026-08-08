@@ -9,9 +9,10 @@ interface ScreenShellProps {
   children: ReactNode;
   headerAction?: ReactNode;
   onBack?: () => void;
+  subtitle?: string;
 }
 
-export function ScreenShell({ title, children, headerAction, onBack }: ScreenShellProps) {
+export function ScreenShell({ title, children, headerAction, onBack, subtitle }: ScreenShellProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -21,7 +22,10 @@ export function ScreenShell({ title, children, headerAction, onBack }: ScreenShe
           </Pressable>
         )}
         <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
+          <View style={styles.titleStack}>
+            <Text style={styles.title}>{title}</Text>
+            {subtitle === undefined ? null : <Text style={styles.subtitle}>{subtitle}</Text>}
+          </View>
           {headerAction}
         </View>
         {children}
@@ -46,6 +50,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: designTokens.space[20],
   },
+  titleStack: {
+    flex: 1,
+  },
   backButton: {
     alignSelf: 'flex-start',
     minHeight: designTokens.size.touchTargetMin,
@@ -65,5 +72,11 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.screenTitle,
     fontWeight: designTokens.typography.weight.bold,
     letterSpacing: designTokens.typography.tracking.title,
+  },
+  subtitle: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta,
+    marginTop: designTokens.space[2],
   },
 });
