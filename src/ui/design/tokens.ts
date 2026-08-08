@@ -42,6 +42,9 @@ export const designTokens = {
       foreground: '#33435B',
       accent: '#7A91AF',
     },
+    calendar: {
+      progressTrack: '#DCE8F4',
+    },
     navigation: {
       inactive: '#737B86',
       background: '#FAFAFC',
@@ -102,6 +105,8 @@ export const designTokens = {
     touchTargetMin: 44,
     tabBar: 60,
     floatingAction: 48,
+    progressRing: 58,
+    progressRingStroke: 7,
   },
   elevation: {
     card: {
