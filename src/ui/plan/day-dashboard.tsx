@@ -9,7 +9,7 @@ import { temporaryWebContentStyle } from '../screen-shell';
 
 import { planDemoModel, type PlanDemoListItem } from './plan-demo-model';
 import { ProgressRing } from './progress-ring';
-import { getPlanViewModeLabel } from './plan-view-menu';
+import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
 import type { PlanViewMode } from './plan-period-model';
 
 interface DayDashboardProps {
@@ -31,9 +31,8 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode }: DayDa
             <Text style={styles.date}>{planDemoModel.date}</Text>
           </View>
           <View style={styles.headerActions}>
-            <Pressable
-              accessibilityLabel={`Режим просмотра: ${getPlanViewModeLabel(mode)}`}
-              accessibilityRole="button"
+            <PlanViewControl
+              mode={mode}
               onPress={() => {
                 if (onSelectMode === undefined) {
                   setFeedback(`Режим «${getPlanViewModeLabel(mode)}» выбран`);
@@ -41,10 +40,7 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode }: DayDa
                 }
                 onSelectMode();
               }}
-              style={({ pressed }) => [styles.dayControl, pressed && styles.pressed]}>
-              <Text style={styles.dayControlLabel}>{getPlanViewModeLabel(mode)}</Text>
-              <Ionicons color={designTokens.color.primaryStrong} name="chevron-down" size={16} />
-            </Pressable>
+            />
             <Pressable
               accessibilityLabel="Обновить план"
               accessibilityRole="button"
@@ -164,22 +160,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: designTokens.space[4],
-  },
-  dayControl: {
-    alignItems: 'center',
-    backgroundColor: designTokens.color.primarySoft,
-    borderRadius: designTokens.radius.pill,
-    flexDirection: 'row',
-    gap: designTokens.space[2],
-    justifyContent: 'center',
-    minHeight: designTokens.size.touchTargetMin,
-    paddingHorizontal: designTokens.space[10],
-  },
-  dayControlLabel: {
-    color: designTokens.color.primaryStrong,
-    fontSize: designTokens.typography.size.label,
-    fontWeight: designTokens.typography.weight.bold,
-    lineHeight: designTokens.typography.lineHeight.label,
   },
   refreshControl: {
     alignItems: 'center',

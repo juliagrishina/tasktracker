@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text } from 'react-native';
 
 import { designTokens } from '../design/tokens';
 
@@ -20,8 +20,28 @@ interface PlanViewMenuProps {
   visible: boolean;
 }
 
+interface PlanViewControlProps {
+  mode: PlanViewMode;
+  onPress: () => void;
+}
+
 export function getPlanViewModeLabel(mode: PlanViewMode): string {
   return modeLabels[mode];
+}
+
+export function PlanViewControl({ mode, onPress }: PlanViewControlProps) {
+  const label = getPlanViewModeLabel(mode);
+
+  return (
+    <Pressable
+      accessibilityLabel={`Режим просмотра: ${label}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.control, pressed && styles.pressed]}>
+      <Text style={styles.controlLabel}>{label}</Text>
+      <Ionicons color={designTokens.color.primaryStrong} name="chevron-down" size={16} />
+    </Pressable>
+  );
 }
 
 export function PlanViewMenu({ mode, onRequestClose, onSelectMode, visible }: PlanViewMenuProps) {
@@ -71,6 +91,22 @@ const styles = StyleSheet.create({
     minWidth: 156,
     overflow: 'hidden',
     ...designTokens.elevation.card,
+  },
+  control: {
+    alignItems: 'center',
+    backgroundColor: designTokens.color.primarySoft,
+    borderRadius: designTokens.radius.pill,
+    flexDirection: 'row',
+    gap: designTokens.space[2],
+    justifyContent: 'center',
+    minHeight: designTokens.size.touchTargetMin,
+    paddingHorizontal: designTokens.space[10],
+  },
+  controlLabel: {
+    color: designTokens.color.primaryStrong,
+    fontSize: designTokens.typography.size.label,
+    fontWeight: designTokens.typography.weight.bold,
+    lineHeight: designTokens.typography.lineHeight.label,
   },
   option: {
     alignItems: 'center',

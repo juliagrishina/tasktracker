@@ -9,7 +9,7 @@ export interface PlanLoadDay {
   tone: PlanLoadTone;
 }
 
-export type PlanMonthLoadWeeks = Array<Array<PlanLoadDay | null>>;
+export type PlanMonthLoadWeeks = (PlanLoadDay | null)[][];
 
 const weekdayLabels = [
   'Воскресенье',
@@ -19,6 +19,36 @@ const weekdayLabels = [
   'Четверг',
   'Пятница',
   'Суббота',
+] as const;
+
+const monthLabels = [
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря',
+] as const;
+
+const monthTitleLabels = [
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
 ] as const;
 
 const fallbackLoadPercentages = [35, 63, 104, 48, 72, 16, 52, 44, 68, 30, 82, 57, 25, 90, 41, 66, 53, 18, 75, 38, 61, 29, 87, 46, 70, 34, 95, 55, 22, 79, 43] as const;
@@ -87,6 +117,28 @@ export function getWeekLoadDays(selectedDate: string): PlanLoadDay[] {
   return Array.from({ length: 7 }, (_, index) => toPlanLoadDay(addDays(weekStart, index)));
 }
 
+export function formatPlanDate(isoDate: string): string {
+  const date = parseLocalDate(isoDate);
+  return `${date.getDate()} ${monthLabels[date.getMonth()]}`;
+}
+
+export function formatPlanMonth(isoDate: string): string {
+  const date = parseLocalDate(isoDate);
+  return `${monthTitleLabels[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export function formatPlanWeekRange(selectedDate: string): string {
+  const days = getWeekLoadDays(selectedDate);
+  const first = parseLocalDate(days[0].isoDate);
+  const last = parseLocalDate(days[6].isoDate);
+
+  if (first.getMonth() === last.getMonth()) {
+    return `${first.getDate()}–${last.getDate()} ${monthLabels[last.getMonth()]}`;
+  }
+
+  return `${formatPlanDate(days[0].isoDate)} – ${formatPlanDate(days[6].isoDate)}`;
+}
+
 export function getMonthLoadDays(selectedDate: string): PlanMonthLoadWeeks {
   const selected = parseLocalDate(selectedDate);
   const year = selected.getFullYear();
@@ -94,7 +146,7 @@ export function getMonthLoadDays(selectedDate: string): PlanMonthLoadWeeks {
   const firstDay = new Date(year, month, 1);
   const leadingBlankCells = (firstDay.getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: Array<PlanLoadDay | null> = Array.from({ length: leadingBlankCells }, () => null);
+  const cells: (PlanLoadDay | null)[] = Array.from({ length: leadingBlankCells }, () => null);
 
   for (let day = 1; day <= daysInMonth; day += 1) {
     cells.push(toPlanLoadDay(toIsoDate(new Date(year, month, day))));
