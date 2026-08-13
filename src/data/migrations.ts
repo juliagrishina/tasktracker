@@ -216,6 +216,35 @@ const schemaVersionFive = `
   ALTER TABLE recurrence_occurrences ADD COLUMN task_patch TEXT;
 `;
 
+const schemaVersionSix = `
+  ALTER TABLE schedule_blocks ADD COLUMN time_zone_id TEXT;
+
+  CREATE TABLE recurrence_occurrences_v6 (
+    id TEXT PRIMARY KEY,
+    series_id TEXT NOT NULL REFERENCES recurrence_series(id) ON DELETE CASCADE,
+    occurs_on TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('active', 'cancelled', 'completed')),
+    task_patch TEXT,
+    reminder_patch TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(series_id, occurs_on),
+    CHECK (
+      (status = 'completed' AND completed_at IS NOT NULL)
+      OR (status IN ('active', 'cancelled') AND completed_at IS NULL)
+    )
+  );
+
+  INSERT INTO recurrence_occurrences_v6 (
+    id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, created_at
+  )
+  SELECT id, series_id, occurs_on, status, task_patch, NULL, NULL, created_at
+  FROM recurrence_occurrences;
+
+  DROP TABLE recurrence_occurrences;
+  ALTER TABLE recurrence_occurrences_v6 RENAME TO recurrence_occurrences;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -264,6 +293,12 @@ const migrations: readonly Migration[] = [
       await database.execAsync(schemaVersionFive);
     },
   },
+  {
+    version: 6,
+    async apply(database) {
+      await database.execAsync(schemaVersionSix);
+    },
+  },
 ];
 
 export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
@@ -274,6 +309,12 @@ export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
     'SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1',
   );
   const latestVersion = latestMigration?.version ?? 0;
+
+  const pendingMigrations = migrations.filter((migration) => migration.version > latestVersion);
+  const rebuildsForeignKeyTarget = pendingMigrations.some((migration) => migration.version === 6);
+  if (rebuildsForeignKeyTarget) {
+    await database.execAsync('PRAGMA foreign_keys = OFF;');
+  }
 
   await database.withTransactionAsync(async () => {
     for (const migration of migrations) {
@@ -288,4 +329,8 @@ export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
       );
     }
   });
+
+  if (rebuildsForeignKeyTarget) {
+    await database.execAsync('PRAGMA foreign_keys = ON;');
+  }
 }

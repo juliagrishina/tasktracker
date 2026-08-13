@@ -1,6 +1,7 @@
 import type {
   RecurrenceOccurrence,
   RecurrenceSeries,
+  Reminder,
   ScheduleBlock,
   TaskItem,
 } from '../../src/domain/entities';
@@ -42,11 +43,31 @@ const series: RecurrenceSeries = {
   createdAt,
 };
 
+const reminder: Reminder = {
+  id: 'reminder-planning-1',
+  title: 'Позвонить',
+  remindsOn: '2026-08-05',
+  periodStartOn: null,
+  periodEndOn: null,
+  repeatRule: null,
+  estimatedDurationMinutes: 20,
+  completedAt: null,
+  createdAt,
+};
+
+const reminderSeries: RecurrenceSeries = {
+  ...series,
+  id: 'series-reminder-1',
+  itemKind: 'reminder',
+  itemId: reminder.id,
+};
+
 const occurrence: RecurrenceOccurrence = {
   id: 'occurrence-planning-1',
   seriesId: series.id,
   occursOn: '2026-08-12',
   status: 'cancelled',
+  completedAt: null,
   createdAt,
 };
 
@@ -112,6 +133,60 @@ describe('planning data source', () => {
       ...block,
       id: 'orphan-occurrence-block',
       occurrenceId: 'unknown-occurrence',
+    })).rejects.toThrow();
+  });
+
+  test('round-trips completed reminder exception and a block time zone', async () => {
+    const source = createInMemoryDataSource();
+    const completedOccurrence: RecurrenceOccurrence = {
+      id: 'occurrence-completed',
+      seriesId: reminderSeries.id,
+      occursOn: '2026-08-13',
+      status: 'completed',
+      completedAt: '2026-08-13T08:00:00.000Z',
+      reminderPatch: {
+        title: 'Позвонить',
+        remindsOn: '2026-08-14',
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 20,
+      },
+      createdAt,
+    };
+    const zonedBlock = {
+      ...block,
+      id: 'block-with-zone',
+      timeZoneId: 'Europe/Moscow',
+    };
+
+    await source.saveTaskItem(task);
+    await source.saveReminder(reminder);
+    await source.saveRecurrenceSeries(reminderSeries);
+    await source.saveRecurrenceOccurrence(completedOccurrence);
+    await source.saveScheduleBlock(zonedBlock);
+
+    await expect(source.getRecurrenceOccurrence(completedOccurrence.id)).resolves.toMatchObject({
+      status: 'completed',
+      completedAt: '2026-08-13T08:00:00.000Z',
+      reminderPatch: completedOccurrence.reminderPatch,
+    });
+    await expect(source.getScheduleBlock(zonedBlock.id)).resolves.toMatchObject({
+      timeZoneId: 'Europe/Moscow',
+    });
+  });
+
+  test('rejects a completed occurrence without its completion instant', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder(reminder);
+    await source.saveRecurrenceSeries(reminderSeries);
+
+    await expect(source.saveRecurrenceOccurrence({
+      id: 'occurrence-invalid-completion',
+      seriesId: reminderSeries.id,
+      occursOn: '2026-08-13',
+      status: 'completed',
+      completedAt: null,
+      createdAt,
     })).rejects.toThrow();
   });
 });

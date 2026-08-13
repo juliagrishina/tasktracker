@@ -13,6 +13,7 @@ import type {
 } from '../domain/entities';
 import {
   assertReminderShape,
+  assertRecurrenceOccurrenceShape,
   assertScheduleBlockShape,
   assertTaskItemParent,
 } from '../domain/invariants';
@@ -69,6 +70,7 @@ interface ScheduleBlockRow {
   occurrence_id: string | null;
   starts_at: string;
   ends_at: string;
+  time_zone_id: string | null;
   created_at: string;
 }
 
@@ -88,6 +90,8 @@ interface RecurrenceOccurrenceRow {
   occurs_on: string;
   status: RecurrenceOccurrence['status'];
   task_patch: string | null;
+  reminder_patch: string | null;
+  completed_at: string | null;
   created_at: string;
 }
 
@@ -512,15 +516,16 @@ class NativeDataSource implements AppDataSource {
     assertScheduleBlockShape(block, task);
     const database = await this.getDatabase();
     await database.runAsync(
-      `INSERT INTO schedule_blocks (id, task_item_id, occurrence_id, starts_at, ends_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO schedule_blocks (id, task_item_id, occurrence_id, starts_at, ends_at, time_zone_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         task_item_id = excluded.task_item_id,
         occurrence_id = excluded.occurrence_id,
         starts_at = excluded.starts_at,
         ends_at = excluded.ends_at,
+        time_zone_id = excluded.time_zone_id,
         created_at = excluded.created_at`,
-      [block.id, block.taskItemId, block.occurrenceId, block.startsAt, block.endsAt, block.createdAt],
+      [block.id, block.taskItemId, block.occurrenceId, block.startsAt, block.endsAt, block.timeZoneId ?? null, block.createdAt],
     );
   }
 
@@ -528,7 +533,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, created_at
+      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, time_zone_id, created_at
       FROM schedule_blocks
       WHERE id = ?`,
       [id],
@@ -542,6 +547,7 @@ class NativeDataSource implements AppDataSource {
           occurrenceId: row.occurrence_id,
           startsAt: row.starts_at,
           endsAt: row.ends_at,
+          timeZoneId: row.time_zone_id,
           createdAt: row.created_at,
         };
   }
@@ -550,7 +556,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, created_at
+      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, time_zone_id, created_at
       FROM schedule_blocks
       ORDER BY created_at ASC, id ASC`,
     );
@@ -561,6 +567,7 @@ class NativeDataSource implements AppDataSource {
       occurrenceId: row.occurrence_id,
       startsAt: row.starts_at,
       endsAt: row.ends_at,
+      timeZoneId: row.time_zone_id,
       createdAt: row.created_at,
     }));
   }
@@ -569,7 +576,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, created_at
+      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, time_zone_id, created_at
       FROM schedule_blocks
       WHERE task_item_id = ?
       ORDER BY created_at ASC, id ASC`,
@@ -582,6 +589,7 @@ class NativeDataSource implements AppDataSource {
       occurrenceId: row.occurrence_id,
       startsAt: row.starts_at,
       endsAt: row.ends_at,
+      timeZoneId: row.time_zone_id,
       createdAt: row.created_at,
     }));
   }
@@ -683,6 +691,7 @@ class NativeDataSource implements AppDataSource {
 
   async saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void> {
     await this.initialize();
+    assertRecurrenceOccurrenceShape(occurrence);
     const series = await this.getRecurrenceSeries(occurrence.seriesId);
     if (series === null) {
       throw new Error('Серия повторений для экземпляра не найдена');
@@ -690,13 +699,15 @@ class NativeDataSource implements AppDataSource {
 
     const database = await this.getDatabase();
     await database.runAsync(
-      `INSERT INTO recurrence_occurrences (id, series_id, occurs_on, status, task_patch, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO recurrence_occurrences (id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         series_id = excluded.series_id,
         occurs_on = excluded.occurs_on,
         status = excluded.status,
         task_patch = excluded.task_patch,
+        reminder_patch = excluded.reminder_patch,
+        completed_at = excluded.completed_at,
         created_at = excluded.created_at`,
       [
         occurrence.id,
@@ -704,6 +715,8 @@ class NativeDataSource implements AppDataSource {
         occurrence.occursOn,
         occurrence.status,
         occurrence.taskPatch === undefined ? null : JSON.stringify(occurrence.taskPatch),
+        occurrence.reminderPatch === undefined ? null : JSON.stringify(occurrence.reminderPatch),
+        occurrence.completedAt ?? null,
         occurrence.createdAt,
       ],
     );
@@ -713,7 +726,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<RecurrenceOccurrenceRow>(
-      `SELECT id, series_id, occurs_on, status, task_patch, created_at
+      `SELECT id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, created_at
       FROM recurrence_occurrences
       WHERE id = ?`,
       [id],
@@ -726,7 +739,9 @@ class NativeDataSource implements AppDataSource {
           seriesId: row.series_id,
           occursOn: row.occurs_on,
           status: row.status,
+          completedAt: row.completed_at,
           ...(row.task_patch === null ? {} : { taskPatch: JSON.parse(row.task_patch) }),
+          ...(row.reminder_patch === null ? {} : { reminderPatch: JSON.parse(row.reminder_patch) }),
           createdAt: row.created_at,
         };
   }
@@ -735,7 +750,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<RecurrenceOccurrenceRow>(
-      `SELECT id, series_id, occurs_on, status, task_patch, created_at
+      `SELECT id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, created_at
       FROM recurrence_occurrences
       ORDER BY created_at ASC, id ASC`,
     );
@@ -745,7 +760,9 @@ class NativeDataSource implements AppDataSource {
       seriesId: row.series_id,
       occursOn: row.occurs_on,
       status: row.status,
+      completedAt: row.completed_at,
       ...(row.task_patch === null ? {} : { taskPatch: JSON.parse(row.task_patch) }),
+      ...(row.reminder_patch === null ? {} : { reminderPatch: JSON.parse(row.reminder_patch) }),
       createdAt: row.created_at,
     }));
   }

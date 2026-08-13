@@ -63,6 +63,8 @@ export interface ScheduleBlock {
   occurrenceId: EntityId | null;
   startsAt: string;
   endsAt: string;
+  /** Optional only for pre-v6 in-memory records; persisted rows use null. */
+  timeZoneId?: string | null;
   createdAt: string;
 }
 
@@ -85,12 +87,22 @@ export interface TaskOccurrencePatch {
   estimatedDurationMinutes: number | null;
 }
 
+export interface ReminderOccurrencePatch {
+  title: string;
+  remindsOn: string | null;
+  periodStartOn: string | null;
+  periodEndOn: string | null;
+  estimatedDurationMinutes: number | null;
+}
+
 export interface RecurrenceOccurrence {
   id: EntityId;
   seriesId: EntityId;
   occursOn: string;
-  status: 'active' | 'cancelled';
+  status: 'active' | 'cancelled' | 'completed';
+  completedAt: string | null;
   taskPatch?: TaskOccurrencePatch;
+  reminderPatch?: ReminderOccurrencePatch;
   createdAt: string;
 }
 

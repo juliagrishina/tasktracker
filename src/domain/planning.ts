@@ -87,12 +87,91 @@ function getOffsetSuffix(dateTime: string): string {
   return suffix;
 }
 
-function getScheduleBlockDayBoundaries(block: ScheduleBlock, isoDate: string): {
+interface ZonedDateTimeParts {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+function getZonedDateTimeParts(instant: Date, timeZoneId: string): ZonedDateTimeParts {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timeZoneId,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(instant);
+  const readPart = (type: Intl.DateTimeFormatPartTypes): number => {
+    const value = parts.find((part) => part.type === type)?.value;
+    if (value === undefined) {
+      throw new Error('Unable to read local block time');
+    }
+    return Number(value);
+  };
+
+  return {
+    year: readPart('year'),
+    month: readPart('month'),
+    day: readPart('day'),
+    hour: readPart('hour'),
+    minute: readPart('minute'),
+    second: readPart('second'),
+  };
+}
+
+function toIsoDateFromParts(parts: Pick<ZonedDateTimeParts, 'year' | 'month' | 'day'>): string {
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+}
+
+function getTimeZoneOffsetMilliseconds(instant: Date, timeZoneId: string): number {
+  const parts = getZonedDateTimeParts(instant, timeZoneId);
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
+    - instant.getTime();
+}
+
+function formatTimeZoneOffset(offsetMilliseconds: number): string {
+  const sign = offsetMilliseconds >= 0 ? '+' : '-';
+  const absoluteMinutes = Math.round(Math.abs(offsetMilliseconds) / 60_000);
+  return `${sign}${String(Math.floor(absoluteMinutes / 60)).padStart(2, '0')}:${String(absoluteMinutes % 60).padStart(2, '0')}`;
+}
+
+function toZonedDateTime(
+  isoDate: string,
+  time: Pick<ZonedDateTimeParts, 'hour' | 'minute' | 'second'>,
+  timeZoneId: string,
+): string {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  const asUtc = Date.UTC(year, month - 1, day, time.hour, time.minute, time.second);
+  let instant = new Date(asUtc - getTimeZoneOffsetMilliseconds(new Date(asUtc), timeZoneId));
+  instant = new Date(asUtc - getTimeZoneOffsetMilliseconds(instant, timeZoneId));
+  const offset = getTimeZoneOffsetMilliseconds(instant, timeZoneId);
+
+  return `${isoDate}T${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}:${String(time.second).padStart(2, '0')}${formatTimeZoneOffset(offset)}`;
+}
+
+export function getScheduleBlockDayBounds(block: ScheduleBlock, isoDate: string): {
   dayEnd: number;
   dayEndDateTime: string;
   dayStart: number;
   dayStartDateTime: string;
 } {
+  if (block.timeZoneId !== null && block.timeZoneId !== undefined) {
+    const dayStartDateTime = toZonedDateTime(isoDate, { hour: 0, minute: 0, second: 0 }, block.timeZoneId);
+    const dayEndDateTime = toZonedDateTime(addDays(isoDate, 1), { hour: 0, minute: 0, second: 0 }, block.timeZoneId);
+    return {
+      dayStart: new Date(dayStartDateTime).getTime(),
+      dayEnd: new Date(dayEndDateTime).getTime(),
+      dayStartDateTime,
+      dayEndDateTime,
+    };
+  }
+
   const offset = getOffsetSuffix(block.startsAt);
   const dayStartDateTime = `${isoDate}T00:00:00${offset}`;
   const dayEndDateTime = `${addDays(isoDate, 1)}T00:00:00${offset}`;
@@ -105,21 +184,21 @@ function getScheduleBlockDayBoundaries(block: ScheduleBlock, isoDate: string): {
 }
 
 function getBlockMinutesOnLocalDate(block: ScheduleBlock, isoDate: string): number {
-  const { dayEnd, dayStart } = getScheduleBlockDayBoundaries(block, isoDate);
+  const { dayEnd, dayStart } = getScheduleBlockDayBounds(block, isoDate);
   const startsAt = new Date(block.startsAt).getTime();
   const endsAt = new Date(block.endsAt).getTime();
   return Math.max(0, Math.min(endsAt, dayEnd) - Math.max(startsAt, dayStart)) / 60_000;
 }
 
 export function doesScheduleBlockOverlapDate(block: ScheduleBlock, isoDate: string): boolean {
-  const { dayEnd, dayStart } = getScheduleBlockDayBoundaries(block, isoDate);
+  const { dayEnd, dayStart } = getScheduleBlockDayBounds(block, isoDate);
   const startsAt = new Date(block.startsAt).getTime();
   const endsAt = new Date(block.endsAt).getTime();
   return startsAt < dayEnd && dayStart < endsAt;
 }
 
 export function clipScheduleBlockToDate(block: ScheduleBlock, isoDate: string): ScheduleBlock | null {
-  const { dayEnd, dayEndDateTime, dayStart, dayStartDateTime } = getScheduleBlockDayBoundaries(block, isoDate);
+  const { dayEnd, dayEndDateTime, dayStart, dayStartDateTime } = getScheduleBlockDayBounds(block, isoDate);
   const startsAt = new Date(block.startsAt).getTime();
   const endsAt = new Date(block.endsAt).getTime();
   if (startsAt >= dayEnd || endsAt <= dayStart) {
@@ -155,7 +234,54 @@ export function createDefaultScheduleBlock({
     occurrenceId: null,
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
+    timeZoneId: null,
     createdAt,
+  };
+}
+
+/**
+ * Projects a master block from one recurrence date to another. Zoned blocks
+ * preserve their wall-clock time; legacy records retain their ISO offset.
+ */
+export function shiftScheduleBlockToDate(
+  block: ScheduleBlock,
+  targetOccursOn: string,
+  sourceOccursOn?: string,
+): ScheduleBlock {
+  const source = sourceOccursOn
+    ?? (block.timeZoneId === null || block.timeZoneId === undefined
+      ? block.startsAt.slice(0, 10)
+      : toIsoDateFromParts(getZonedDateTimeParts(new Date(block.startsAt), block.timeZoneId)));
+  const shiftDays = Math.round(
+    (parseIsoDate(targetOccursOn).getTime() - parseIsoDate(source).getTime()) / 86_400_000,
+  );
+  const shiftLegacyDateTime = (dateTime: string): string => {
+    const localDate = dateTime.slice(0, 10);
+    return `${addDays(localDate, shiftDays)}${dateTime.slice(10)}`;
+  };
+
+  if (block.timeZoneId === null || block.timeZoneId === undefined) {
+    return {
+      ...block,
+      startsAt: shiftLegacyDateTime(block.startsAt),
+      endsAt: shiftLegacyDateTime(block.endsAt),
+    };
+  }
+
+  const startsAtParts = getZonedDateTimeParts(new Date(block.startsAt), block.timeZoneId);
+  const endsAtParts = getZonedDateTimeParts(new Date(block.endsAt), block.timeZoneId);
+  return {
+    ...block,
+    startsAt: toZonedDateTime(
+      addDays(toIsoDateFromParts(startsAtParts), shiftDays),
+      startsAtParts,
+      block.timeZoneId,
+    ),
+    endsAt: toZonedDateTime(
+      addDays(toIsoDateFromParts(endsAtParts), shiftDays),
+      endsAtParts,
+      block.timeZoneId,
+    ),
   };
 }
 

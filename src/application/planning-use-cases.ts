@@ -471,6 +471,7 @@ export async function saveOccurrenceException(
     seriesId: input.seriesId,
     occursOn: input.occursOn,
     status: input.status,
+    completedAt: null,
     ...(input.taskPatch === undefined ? {} : { taskPatch: input.taskPatch }),
     createdAt: input.createdAt,
   };

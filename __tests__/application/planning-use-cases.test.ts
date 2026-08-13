@@ -200,6 +200,7 @@ describe('planning use cases', () => {
       seriesId: 'editing-series',
       occursOn: '2026-08-12',
       status: 'active',
+      completedAt: null,
       createdAt,
     });
     await source.saveScheduleBlock(instanceBlock);
@@ -440,6 +441,7 @@ describe('planning use cases', () => {
       seriesId: 'preserved-series',
       occursOn: '2026-08-12',
       status: 'active',
+      completedAt: null,
       createdAt,
     });
     await source.saveScheduleBlock(overrideBlock);
@@ -482,6 +484,7 @@ describe('planning use cases', () => {
       seriesId: 'changed-rule-series',
       occursOn: '2026-08-12',
       status: 'active',
+      completedAt: null,
       createdAt,
     });
     await source.saveScheduleBlock({
@@ -522,6 +525,7 @@ describe('planning use cases', () => {
       seriesId: 'stopped-series',
       occursOn: '2026-08-12',
       status: 'active',
+      completedAt: null,
       createdAt,
     });
     await source.saveScheduleBlock({

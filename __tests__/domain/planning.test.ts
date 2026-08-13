@@ -6,6 +6,7 @@ import {
   getDayLoadPercent,
   getPlanLoadTone,
   getRecurrenceDates,
+  shiftScheduleBlockToDate,
 } from '../../src/domain/planning';
 
 const settings: AppSettings = {
@@ -121,5 +122,22 @@ describe('planning domain rules', () => {
       interval: 1,
       startsOn: '2026-08-05',
     }, '2026-08-06')).toThrow();
+  });
+
+  test('keeps a repeated zoned block at the same local time across DST', () => {
+    const repeated = shiftScheduleBlockToDate({
+      ...block(
+        'new-york-morning',
+        '2026-03-01T09:00:00-05:00',
+        '2026-03-01T10:00:00-05:00',
+      ),
+      timeZoneId: 'America/New_York',
+    }, '2026-03-08');
+
+    expect(repeated).toMatchObject({
+      startsAt: '2026-03-08T09:00:00-04:00',
+      endsAt: '2026-03-08T10:00:00-04:00',
+      timeZoneId: 'America/New_York',
+    });
   });
 });

@@ -11,6 +11,7 @@ import type {
 } from '../domain/entities';
 import {
   assertReminderShape,
+  assertRecurrenceOccurrenceShape,
   assertScheduleBlockShape,
   assertTaskItemParent,
 } from '../domain/invariants';
@@ -207,6 +208,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     if (!this.recurrenceSeries.has(occurrence.seriesId)) {
       throw new Error('Серия повторений для экземпляра не найдена');
     }
+    assertRecurrenceOccurrenceShape(occurrence);
     const duplicate = [...this.recurrenceOccurrences.values()].find(
       (saved) => saved.id !== occurrence.id
         && saved.seriesId === occurrence.seriesId

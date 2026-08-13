@@ -1,5 +1,6 @@
 import type { Reminder, ScheduleBlock, TaskItem } from '../../src/domain/entities';
 import {
+  assertRecurrenceOccurrenceShape,
   assertReminderShape,
   assertScheduleBlockShape,
   assertTaskItemParent,
@@ -125,5 +126,16 @@ describe('domain invariants', () => {
         task,
       ),
     ).toThrow('Время блока должно иметь шаг пять минут');
+  });
+
+  test('rejects a completed recurrence occurrence without a completion instant', () => {
+    expect(() => assertRecurrenceOccurrenceShape({
+      id: 'completed-occurrence',
+      seriesId: 'series-1',
+      occursOn: '2026-08-13',
+      status: 'completed',
+      completedAt: null,
+      createdAt,
+    })).toThrow();
   });
 });

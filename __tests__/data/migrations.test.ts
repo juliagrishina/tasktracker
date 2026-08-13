@@ -38,11 +38,11 @@ describe('migrateDatabase', () => {
     await migrateDatabase(database as never);
 
     expect(database.executedSql.some((sql) => sql.includes('ALTER TABLE reminders ADD COLUMN title'))).toBe(true);
-    expect(database.appliedVersions).toEqual([2, 3, 4, 5]);
+    expect(database.appliedVersions).toEqual([2, 3, 4, 5, 6]);
   });
 
   test('does not reapply migrations after the latest version is installed', async () => {
-    const database = new MigrationDatabase(5);
+    const database = new MigrationDatabase(6);
 
     await migrateDatabase(database as never);
 
@@ -55,7 +55,7 @@ describe('migrateDatabase', () => {
     await migrateDatabase(database as never);
 
     expect(database.executedSql.join('\n')).toContain('reminders_v3');
-    expect(database.appliedVersions).toEqual([3, 4, 5]);
+    expect(database.appliedVersions).toEqual([3, 4, 5, 6]);
   });
 
   test('rebuilds legacy recurrence series and creates occurrence exceptions in migration four', async () => {
@@ -67,7 +67,7 @@ describe('migrateDatabase', () => {
     expect(sql).toContain('recurrence_series_v4');
     expect(sql).toContain("'task', task_item_id");
     expect(sql).toContain('recurrence_occurrences');
-    expect(database.appliedVersions).toEqual([4, 5]);
+    expect(database.appliedVersions).toEqual([4, 5, 6]);
   });
 
   test('stores instance-only task patches in migration five', async () => {
@@ -76,6 +76,20 @@ describe('migrateDatabase', () => {
     await migrateDatabase(database as never);
 
     expect(database.executedSql.join('\n')).toContain('ADD COLUMN task_patch');
-    expect(database.appliedVersions).toEqual([5]);
+    expect(database.appliedVersions).toEqual([5, 6]);
+  });
+
+  test('adds completion and time-zone fields without dropping recurrence patches', async () => {
+    const database = new MigrationDatabase(5);
+
+    await migrateDatabase(database as never);
+
+    const sql = database.executedSql.join('\n');
+    expect(sql).toContain('time_zone_id');
+    expect(sql).toContain('reminder_patch');
+    expect(sql).toContain('completed_at');
+    expect(sql).toContain("'completed'");
+    expect(sql).toContain('task_patch');
+    expect(database.appliedVersions).toEqual([6]);
   });
 });

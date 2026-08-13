@@ -1,4 +1,4 @@
-import type { Reminder, ScheduleBlock, TaskItem } from './entities';
+import type { RecurrenceOccurrence, Reminder, ScheduleBlock, TaskItem } from './entities';
 
 import {
   assertBacklogTitle,
@@ -56,6 +56,14 @@ export function assertScheduleBlockShape(
   const startsAt = new Date(block.startsAt);
   const endsAt = new Date(block.endsAt);
 
+  if (block.timeZoneId !== null && block.timeZoneId !== undefined) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: block.timeZoneId }).format(startsAt);
+    } catch {
+      throw new Error('Invalid schedule block IANA time zone');
+    }
+  }
+
   if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
     throw new Error('Время блока должно быть корректной датой');
   }
@@ -66,5 +74,23 @@ export function assertScheduleBlockShape(
 
   if (startsAt.getUTCMinutes() % 5 !== 0 || endsAt.getUTCMinutes() % 5 !== 0) {
     throw new Error('Время блока должно иметь шаг пять минут');
+  }
+}
+
+export function assertRecurrenceOccurrenceShape(occurrence: RecurrenceOccurrence): void {
+  const completedAt = occurrence.completedAt;
+  if (occurrence.status !== 'completed') {
+    if (completedAt !== null && completedAt !== undefined) {
+      throw new Error('Incomplete recurrence occurrence must not have completedAt');
+    }
+    return;
+  }
+
+  if (
+    typeof completedAt !== 'string'
+    || !/(Z|[+-]\d{2}:\d{2})$/.test(completedAt)
+    || Number.isNaN(new Date(completedAt).getTime())
+  ) {
+    throw new Error('Completed recurrence occurrence requires a valid completion instant');
   }
 }
