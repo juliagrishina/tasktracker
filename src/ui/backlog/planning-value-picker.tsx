@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
 
@@ -30,6 +30,8 @@ export function PlanningValuePicker({
 }: PlanningValuePickerProps) {
   const [visible, setVisible] = useState(false);
   const selectedOption = options.find((option) => option.value === value);
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  const initialScrollIndex = Math.max(0, selectedIndex - 2);
 
   return (
     <View>
@@ -70,8 +72,17 @@ export function PlanningValuePicker({
                   <Ionicons color={designTokens.color.text.primary} name="close" size={22} />
                 </Pressable>
               </View>
-              <ScrollView contentContainerStyle={styles.options} keyboardShouldPersistTaps="handled">
-                {options.map((option) => {
+              <FlatList
+                contentContainerStyle={styles.options}
+                data={options}
+                extraData={value}
+                getItemLayout={(_, index) => ({ index, length: 44, offset: 44 * index })}
+                initialNumToRender={12}
+                initialScrollIndex={initialScrollIndex}
+                keyboardShouldPersistTaps="handled"
+                keyExtractor={(option) => option.value}
+                maxToRenderPerBatch={12}
+                renderItem={({ item: option }) => {
                   const selected = option.value === value;
                   return (
                     <Pressable
@@ -94,8 +105,10 @@ export function PlanningValuePicker({
                       ) : null}
                     </Pressable>
                   );
-                })}
-              </ScrollView>
+                }}
+                testID="planning-value-options"
+                windowSize={5}
+              />
             </View>
           </View>
         </Modal>

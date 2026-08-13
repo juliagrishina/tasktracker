@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     minWidth: designTokens.size.touchTargetMin,
   },
   dayButtonSelected: {
-    backgroundColor: designTokens.color.primary,
+    backgroundColor: designTokens.color.primaryStrong,
   },
   dayText: {
     color: designTokens.color.text.primary,

@@ -49,35 +49,6 @@ const repeatOptions: { label: string; value: TaskRepeatFrequency }[] = [
   { label: 'Каждый месяц', value: 'monthly' },
 ];
 
-function formatRussianCount(value: number, forms: readonly [string, string, string]): string {
-  const tens = value % 100;
-  const units = value % 10;
-  if (tens >= 11 && tens <= 14) {
-    return forms[2];
-  }
-  if (units === 1) {
-    return forms[0];
-  }
-  if (units >= 2 && units <= 4) {
-    return forms[1];
-  }
-  return forms[2];
-}
-
-function formatDuration(minutes: number): string {
-  if (minutes < 60) {
-    return `${minutes} ${formatRussianCount(minutes, ['минута', 'минуты', 'минут'])}`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  const hoursLabel = `${hours} ${formatRussianCount(hours, ['час', 'часа', 'часов'])}`;
-  if (remainingMinutes === 0) {
-    return hoursLabel;
-  }
-  return `${hoursLabel} ${remainingMinutes} ${formatRussianCount(remainingMinutes, ['минута', 'минуты', 'минут'])}`;
-}
-
 const timeOptions: readonly PlanningValueOption[] = Array.from({ length: 24 * 12 }, (_, index) => {
   const hours = Math.floor(index / 12);
   const minutes = (index % 12) * 5;
@@ -85,10 +56,41 @@ const timeOptions: readonly PlanningValueOption[] = Array.from({ length: 24 * 12
   return { label: value, value };
 });
 
-const durationOptions: readonly PlanningValueOption[] = Array.from({ length: 96 }, (_, index) => {
-  const minutes = (index + 1) * 5;
-  return { label: formatDuration(minutes), value: String(minutes) };
-});
+function getTimeMinutes(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (match === null) {
+    return null;
+  }
+  const [, hours, minutes] = match;
+  return Number(hours) * 60 + Number(minutes);
+}
+
+function formatEndTime(totalMinutes: number): string {
+  const normalizedMinutes = totalMinutes % (24 * 60);
+  const hours = Math.floor(normalizedMinutes / 60);
+  const minutes = normalizedMinutes % 60;
+  const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return totalMinutes >= 24 * 60 ? `${time} · следующий день` : time;
+}
+
+function createEndTimeOptions(startsAt: string): readonly PlanningValueOption[] {
+  const startMinutes = getTimeMinutes(startsAt);
+  if (startMinutes === null) {
+    return [];
+  }
+  return Array.from({ length: 96 }, (_, index) => {
+    const endMinutes = startMinutes + (index + 1) * 5;
+    return { label: formatEndTime(endMinutes), value: String(endMinutes) };
+  });
+}
+
+function getEndTimeValue(block: TaskPlanningBlock): string {
+  const startMinutes = getTimeMinutes(block.startsAt);
+  const durationMinutes = Number(block.durationMinutes);
+  return startMinutes !== null && Number.isInteger(durationMinutes) && durationMinutes > 0
+    ? String(startMinutes + durationMinutes)
+    : '';
+}
 
 export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
   return {
@@ -308,12 +310,16 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
           <Field label="Начало периода">
             <PlanningDatePicker
               accessibilityLabel="Начало периода задачи"
-              maximumValue={value.periodEndOn || undefined}
               onChange={(periodStartOn) => {
-                update({ periodStartOn });
+                update({
+                  periodStartOn,
+                  periodEndOn: value.periodEndOn < periodStartOn ? periodStartOn : value.periodEndOn,
+                });
                 setOpenDatePicker('period-end');
               }}
-              onVisibleChange={(visible) => setOpenDatePicker(visible ? 'period-start' : null)}
+              onVisibleChange={(visible) => setOpenDatePicker((current) => (
+                visible ? 'period-start' : current === 'period-start' ? null : current
+              ))}
               value={value.periodStartOn}
               visible={openDatePicker === 'period-start'}
             />
@@ -342,7 +348,15 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
           onPress={() => update({
             blocks: [
               ...value.blocks,
-              { ...defaultBlock, id: `${defaultBlock.id}-${value.blocks.length + 1}` },
+              {
+                ...defaultBlock,
+                date: value.scheduleMode === 'date'
+                  ? value.scheduledOn
+                  : value.scheduleMode === 'period'
+                  ? value.periodStartOn
+                  : defaultBlock.date,
+                id: `${defaultBlock.id}-${value.blocks.length + 1}`,
+              },
             ],
           })}
           style={({ pressed }) => [styles.addIntervalButton, pressed && styles.pressed]}>
@@ -383,13 +397,20 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
               </Field>
             </View>
             <View style={styles.intervalValue}>
-              <Field label="Длительность">
+              <Field label="Конец">
                 <PlanningValuePicker
-                  accessibilityLabel={`Длительность интервала ${index + 1}`}
-                  onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)}
-                  options={durationOptions}
-                  title="Выберите длительность"
-                  value={block.durationMinutes}
+                  accessibilityLabel={`Конец интервала ${index + 1}`}
+                  onChange={(endMinutes) => {
+                    const startMinutes = getTimeMinutes(block.startsAt);
+                    if (startMinutes !== null) {
+                      updateBlock(value, block.id, {
+                        durationMinutes: String(Number(endMinutes) - startMinutes),
+                      }, onChange);
+                    }
+                  }}
+                  options={createEndTimeOptions(block.startsAt)}
+                  title="Выберите время окончания"
+                  value={getEndTimeValue(block)}
                 />
               </Field>
             </View>
