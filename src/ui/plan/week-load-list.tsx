@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { designTokens } from '../design/tokens';
 import { SurfaceCard } from '../primitives/surface-card';
 
-import { formatPlanDate, type PlanLoadDay, type PlanLoadTone } from './plan-period-model';
+import { formatPlanDate, formatPlanLoadPercent, type PlanLoadDay, type PlanLoadTone } from './plan-period-model';
 
 interface WeekLoadListProps {
   days: readonly PlanLoadDay[];
@@ -37,7 +37,8 @@ export function WeekLoadList({ days, onSelectDate, selectedDate }: WeekLoadListP
       {days.map((day) => {
         const loadStyle = loadToneStyles[day.tone];
         const selected = day.isoDate === selectedDate;
-        const label = `${day.weekdayLabel}, ${formatPlanDate(day.isoDate)}: загрузка ${day.loadPercent}%`;
+        const displayedLoad = formatPlanLoadPercent(day.loadPercent);
+        const label = `${day.weekdayLabel}, ${formatPlanDate(day.isoDate)}: загрузка ${displayedLoad}%`;
 
         return (
           <SurfaceCard
@@ -51,7 +52,7 @@ export function WeekLoadList({ days, onSelectDate, selectedDate }: WeekLoadListP
             <View style={styles.copy}>
               <View style={styles.copyHeader}>
                 <Text style={styles.weekday}>{day.weekdayLabel}</Text>
-                <Text style={[styles.loadText, { color: loadStyle.foreground }]}>{day.loadPercent}%</Text>
+                <Text style={[styles.loadText, { color: loadStyle.foreground }]}>{displayedLoad}%</Text>
               </View>
               <Text style={styles.date}>{formatPlanDate(day.isoDate)}</Text>
               <View style={styles.track}>

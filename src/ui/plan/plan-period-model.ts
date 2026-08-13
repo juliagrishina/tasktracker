@@ -60,6 +60,10 @@ export function formatPlanDate(isoDate: string): string {
   return `${date.getDate()} ${monthLabels[date.getMonth()]}`;
 }
 
+export function formatPlanLoadPercent(loadPercent: number): string {
+  return Number.isInteger(loadPercent) ? String(loadPercent) : loadPercent.toFixed(1);
+}
+
 export function formatPlanMonth(isoDate: string): string {
   const date = parseLocalDate(isoDate);
   return `${monthTitleLabels[date.getMonth()]} ${date.getFullYear()}`;

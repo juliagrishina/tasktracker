@@ -1,6 +1,8 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 
 import { DayDashboard } from '../../src/ui/plan/day-dashboard';
+import { designTokens } from '../../src/ui/design/tokens';
+import { MonthLoadGrid } from '../../src/ui/plan/month-load-grid';
 import { ProgressRing } from '../../src/ui/plan/progress-ring';
 
 describe('ProgressRing', () => {
@@ -53,5 +55,50 @@ describe('DayDashboard', () => {
     expect(view.getAllByText('Созвон с командой')).toHaveLength(2);
     expect(view.getByText('Проверить макеты')).toBeOnTheScreen();
     expect(view.queryByText('Планёрка команды')).toBeNull();
+  });
+});
+
+describe('MonthLoadGrid', () => {
+  test('renders a long fractional load compactly inside a mobile day cell', async () => {
+    const view = await render(
+      <MonthLoadGrid
+        onSelectDate={jest.fn()}
+        selectedDate="2026-08-13"
+        weeks={[[{
+          isoDate: '2026-08-13',
+          dayOfMonth: 13,
+          weekdayLabel: 'Четверг',
+          loadPercent: 17.857142857142858,
+          tone: 'low',
+        }]]}
+      />,
+    );
+
+    expect(view.getByText('17.9%')).toBeOnTheScreen();
+  });
+
+  test('shows a token-based focus outline for a keyboard-focused day cell', async () => {
+    const view = await render(
+      <MonthLoadGrid
+        onSelectDate={jest.fn()}
+        selectedDate="2026-08-13"
+        weeks={[[{
+          isoDate: '2026-08-13',
+          dayOfMonth: 13,
+          weekdayLabel: 'Четверг',
+          loadPercent: 0,
+          tone: 'low',
+        }]]}
+      />,
+    );
+    const dayCell = view.getByLabelText('13 августа: загрузка 0%');
+
+    await fireEvent(dayCell, 'focus');
+
+    expect(dayCell).toHaveStyle({
+      outlineColor: designTokens.color.primary,
+      outlineStyle: 'solid',
+      outlineWidth: 3,
+    });
   });
 });

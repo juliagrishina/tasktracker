@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
 
-import { formatPlanDate, type PlanLoadDay, type PlanLoadTone, type PlanMonthLoadWeeks } from './plan-period-model';
+import { formatPlanDate, formatPlanLoadPercent, type PlanLoadDay, type PlanLoadTone, type PlanMonthLoadWeeks } from './plan-period-model';
 
 interface MonthLoadGridProps {
   onSelectDate: (isoDate: string) => void;
@@ -54,21 +55,26 @@ export function MonthLoadGrid({ onSelectDate, selectedDate, weeks }: MonthLoadGr
 }
 
 function MonthLoadCell({ day, onPress, selected }: { day: PlanLoadDay; onPress: (isoDate: string) => void; selected: boolean }) {
+  const [isFocused, setIsFocused] = useState(false);
   const tone = loadToneStyles[day.tone];
-  const label = `${formatPlanDate(day.isoDate)}: загрузка ${day.loadPercent}%`;
+  const displayedLoad = formatPlanLoadPercent(day.loadPercent);
+  const label = `${formatPlanDate(day.isoDate)}: загрузка ${displayedLoad}%`;
 
   return (
     <Pressable
       accessibilityLabel={label}
       accessibilityRole="button"
+      onBlur={() => setIsFocused(false)}
+      onFocus={() => setIsFocused(true)}
       onPress={() => onPress(day.isoDate)}
       style={({ pressed }) => [
         styles.cell,
         { backgroundColor: tone.surface, borderColor: selected ? designTokens.color.primary : tone.border },
+        isFocused && styles.focusedCell,
         pressed && styles.pressed,
       ]}>
       <Text style={styles.dayNumber}>{day.dayOfMonth}</Text>
-      <Text style={[styles.load, { color: tone.foreground }]}>{day.loadPercent}%</Text>
+      <Text style={[styles.load, { color: tone.foreground }]}>{displayedLoad}%</Text>
     </Pressable>
   );
 }
@@ -118,6 +124,12 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.micro,
     fontWeight: designTokens.typography.weight.bold,
     lineHeight: designTokens.typography.lineHeight.micro,
+  },
+  focusedCell: {
+    outlineColor: designTokens.color.primary,
+    outlineOffset: 2,
+    outlineStyle: 'solid',
+    outlineWidth: 3,
   },
   pressed: {
     opacity: designTokens.state.pressedOpacity,

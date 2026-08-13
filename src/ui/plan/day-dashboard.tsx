@@ -9,7 +9,7 @@ import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 
 import { ProgressRing } from './progress-ring';
-import { formatPlanDate, getPlanLoadTone, type PlanViewMode } from './plan-period-model';
+import { formatPlanDate, formatPlanLoadPercent, getPlanLoadTone, type PlanViewMode } from './plan-period-model';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
 
 interface DayDashboardProps {
@@ -26,10 +26,6 @@ interface DayListItem {
   title: string;
   detail: string;
   kind: 'task' | 'reminder' | 'block';
-}
-
-function formatLoadPercent(loadPercent: number): string {
-  return Number.isInteger(loadPercent) ? String(loadPercent) : loadPercent.toFixed(1);
 }
 
 function getPlanStatus(loadPercent: number): string {
@@ -112,10 +108,10 @@ export function DayDashboard({
       <ScrollView contentContainerStyle={[styles.scrollContent, temporaryWebContentStyle()]}>
         <SurfaceCard style={styles.hero} tone="info">
           <View style={styles.heroRow}>
-            <ProgressRing label={`${formatLoadPercent(loadPercent)}%`} value={Math.min(loadPercent, 100)} />
+            <ProgressRing label={`${formatPlanLoadPercent(loadPercent)}%`} value={Math.min(loadPercent, 100)} />
             <View style={styles.heroCopy}>
               <Text style={styles.heroTitle}>{getPlanStatus(loadPercent)}</Text>
-              <Text style={styles.heroDetail}>{dayPlan === null ? 'Загружаем план…' : `${formatLoadPercent(loadPercent)}% загрузки`}</Text>
+              <Text style={styles.heroDetail}>{dayPlan === null ? 'Загружаем план…' : `${formatPlanLoadPercent(loadPercent)}% загрузки`}</Text>
               <View style={styles.loadTrack}>
                 <View style={[styles.loadValue, { width: `${Math.min(loadPercent, 100)}%` }]} />
               </View>

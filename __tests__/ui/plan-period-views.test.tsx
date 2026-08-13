@@ -73,7 +73,7 @@ describe('PlanScreen period views', () => {
     await openModeMenu(view);
     await fireEvent.press(view.getByLabelText('Неделя'));
 
-    const dayLabel = 'Среда, 5 августа: загрузка 107.14285714285714%';
+    const dayLabel = 'Среда, 5 августа: загрузка 107.1%';
     await waitFor(() => {
       expect(view.getAllByText('3–9 августа')).toHaveLength(2);
       expect(view.getAllByLabelText(/загрузка/)).toHaveLength(7);
