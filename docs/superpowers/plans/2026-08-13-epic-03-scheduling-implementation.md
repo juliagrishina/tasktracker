@@ -161,7 +161,7 @@ git push
 **Interfaces:**
 - Adds `listScheduleBlocksForTaskItem`, `deleteScheduleBlock`, `listRecurrenceSeries`, `deleteRecurrenceSeries`, `saveRecurrenceOccurrence`, `getRecurrenceOccurrence`, `listRecurrenceOccurrences` and `deleteRecurrenceOccurrence` to `AppDataSource`.
 - `RecurrenceSeries` targets `{ itemKind: 'task' | 'reminder'; itemId: EntityId }`; `RecurrenceOccurrence` stores `{ id, seriesId, occursOn, status: 'active' | 'cancelled', createdAt }`.
-- SQLite schema version 4 keeps existing blocks and rehomes legacy series with `item_kind = 'task'` and `item_id = task_item_id`.
+- SQLite schema version 4 adds nullable `scheduled_on`, `period_start_on` and `period_end_on` columns to `task_items`; it keeps existing blocks and rehomes legacy series with `item_kind = 'task'` and `item_id = task_item_id`.
 
 - [ ] **Step 1: Write failing persistence and migration tests**
 
@@ -204,7 +204,7 @@ CREATE TABLE recurrence_occurrences (
 );
 ```
 
-Make the in-memory transaction snapshot include occurrences. Rebuild the SQLite `recurrence_series` table in migration 4, copy legacy data, and add `occurrence_id` to `schedule_blocks` with a nullable reference. Ensure list methods are sorted by creation time and all deletes behave identically in both implementations.
+Make the in-memory transaction snapshot include occurrences. Rebuild the SQLite `recurrence_series` table in migration 4, copy legacy data, add `scheduled_on`, `period_start_on` and `period_end_on` to `task_items`, and add `occurrence_id` to `schedule_blocks` with a nullable reference. Ensure list methods are sorted by creation time and all deletes behave identically in both implementations.
 
 - [ ] **Step 4: Run source, migration and old data tests**
 
@@ -313,6 +313,7 @@ git push
 - `TaskPlanningFields` returns a validated `TaskPlanningDraft` containing date/period/repeat and zero or more `ScheduleBlockDraft`s.
 - `ItemFormSheet` calls `planningActions.saveTaskPlanning` after core item creation or update and retains its current form state when a conflict is returned.
 - `Confirmation` receives conflict title strings and invokes the explicit `'save'` or `'cancel'` decision.
+- Editing an occurrence supplied with a `seriesId` presents `'Только этот экземпляр'` and `'Всю серию'`; the former calls `saveOccurrenceException`, while the latter changes the `RecurrenceSeries` rule.
 
 - [ ] **Step 1: Add UI tests for persistence and conflict choice**
 
@@ -328,6 +329,8 @@ test('keeps a conflicting block unsaved until the user confirms it', async () =>
 ```
 
 Add a reminder-form test that selecting a time offers conversion, creates the selected task under the chosen project or without one, and removes the original reminder only after confirmation.
+
+Add a recurring-task test that changes the 29 February 2028 occurrence, chooses `Только этот экземпляр`, and asserts that the 31 March 2028 occurrence still follows the unchanged series rule.
 
 - [ ] **Step 2: Run UI tests and verify current demo-only behaviour fails them**
 
@@ -351,6 +354,7 @@ onClose();
 ```
 
 Generate block IDs at the sheet boundary, pass the actual current time to the default-block helper and present conflict titles via the existing confirmation surface. Keep Backlog creation without planning valid and preserve blank-title validation.
+When a draft is opened for one recurrence occurrence, render the two scope actions before applying the edit; do not infer a scope from the user’s last choice.
 
 - [ ] **Step 4: Run form, action and provider regressions**
 
