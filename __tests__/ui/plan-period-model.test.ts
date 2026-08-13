@@ -47,6 +47,7 @@ describe('plan period load model', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T07:00:00+03:00',
       endsAt: '2026-08-05T22:00:00+03:00',
+      timeZoneId: null,
       createdAt: task.createdAt,
     });
 
@@ -71,6 +72,7 @@ describe('plan period load model', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T23:30:00+03:00',
       endsAt: '2026-08-06T00:30:00+03:00',
+      timeZoneId: null,
       createdAt: task.createdAt,
     });
 
@@ -97,6 +99,7 @@ describe('plan period load model', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T09:00:00+03:00',
       endsAt: '2026-08-05T10:00:00+03:00',
+      timeZoneId: null,
       createdAt: task.createdAt,
     });
     await source.saveRecurrenceSeries({
@@ -132,6 +135,7 @@ describe('plan period load model', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T09:00:00+03:00',
       endsAt: '2026-08-05T10:00:00+03:00',
+      timeZoneId: null,
       createdAt: task.createdAt,
     });
     await source.saveRecurrenceSeries({
@@ -162,6 +166,7 @@ describe('plan period load model', () => {
         occurrenceId: 'override-occurrence',
         startsAt: '2026-08-12T11:00:00+03:00',
         endsAt: '2026-08-12T12:00:00+03:00',
+        timeZoneId: null,
         createdAt: task.createdAt,
       }],
       createdAt: task.createdAt,
@@ -194,6 +199,7 @@ describe('plan period load model', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T09:00:00+03:00',
       endsAt: '2026-08-05T10:00:00+03:00',
+      timeZoneId: null,
       createdAt: task.createdAt,
     });
     await source.saveRecurrenceSeries({
@@ -264,6 +270,7 @@ describe('plan period load model', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T10:00:00+03:00',
       endsAt: '2026-08-05T11:00:00+03:00',
+      timeZoneId: null,
       createdAt: blockedTask.createdAt,
     });
     const untimedTask = await createTask(source, {

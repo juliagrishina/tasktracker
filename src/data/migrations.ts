@@ -316,21 +316,23 @@ export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
     await database.execAsync('PRAGMA foreign_keys = OFF;');
   }
 
-  await database.withTransactionAsync(async () => {
-    for (const migration of migrations) {
-      if (migration.version <= latestVersion) {
-        continue;
+  try {
+    await database.withTransactionAsync(async () => {
+      for (const migration of migrations) {
+        if (migration.version <= latestVersion) {
+          continue;
+        }
+
+        await migration.apply(database);
+        await database.runAsync(
+          'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+          [migration.version, new Date().toISOString()],
+        );
       }
-
-      await migration.apply(database);
-      await database.runAsync(
-        'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-        [migration.version, new Date().toISOString()],
-      );
+    });
+  } finally {
+    if (rebuildsForeignKeyTarget) {
+      await database.execAsync('PRAGMA foreign_keys = ON;');
     }
-  });
-
-  if (rebuildsForeignKeyTarget) {
-    await database.execAsync('PRAGMA foreign_keys = ON;');
   }
 }

@@ -4,10 +4,16 @@ class MigrationDatabase {
   readonly executedSql: string[] = [];
   readonly appliedVersions: number[] = [];
 
-  constructor(private latestVersion: number | null) {}
+  constructor(
+    private latestVersion: number | null,
+    private readonly failOnVersionSix = false,
+  ) {}
 
   async execAsync(sql: string): Promise<void> {
     this.executedSql.push(sql);
+    if (this.failOnVersionSix && sql.includes('recurrence_occurrences_v6')) {
+      throw new Error('simulated v6 migration failure');
+    }
   }
 
   async getFirstAsync<T>(): Promise<T | null> {
@@ -91,5 +97,13 @@ describe('migrateDatabase', () => {
     expect(sql).toContain("'completed'");
     expect(sql).toContain('task_patch');
     expect(database.appliedVersions).toEqual([6]);
+  });
+
+  test('restores foreign-key enforcement when the v6 schema migration fails', async () => {
+    const database = new MigrationDatabase(5, true);
+
+    await expect(migrateDatabase(database as never)).rejects.toThrow('simulated v6 migration failure');
+
+    expect(database.executedSql.slice(-1)).toEqual(['PRAGMA foreign_keys = ON;']);
   });
 });

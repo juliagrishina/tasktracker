@@ -172,6 +172,7 @@ export function createScheduleBlocksFromDraft(
       occurrenceId: null,
       startsAt: toOffsetIsoDateTime(startsAt),
       endsAt: toOffsetIsoDateTime(endsAt),
+      timeZoneId: null,
       createdAt,
     };
   });

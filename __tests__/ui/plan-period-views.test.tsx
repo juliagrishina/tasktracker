@@ -67,6 +67,7 @@ describe('PlanScreen period views', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T07:00:00+03:00',
       endsAt: '2026-08-05T22:00:00+03:00',
+      timeZoneId: null,
       createdAt: task.createdAt,
     });
 

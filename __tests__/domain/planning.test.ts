@@ -23,6 +23,7 @@ function block(id: string, startsAt: string, endsAt: string): ScheduleBlock {
     occurrenceId: null,
     startsAt,
     endsAt,
+    timeZoneId: null,
     createdAt: '2026-08-05T06:00:00.000Z',
   };
 }

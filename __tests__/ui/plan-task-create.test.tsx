@@ -98,6 +98,7 @@ describe('Plan task creation sheet', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T06:00:00.000Z',
       endsAt: '2026-08-05T07:00:00.000Z',
+      timeZoneId: null,
       createdAt: '2026-08-05T08:00:00.000Z',
     });
     const view = await render(
@@ -203,6 +204,7 @@ describe('Plan task creation sheet', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T09:00:00+03:00',
       endsAt: '2026-08-05T10:00:00+03:00',
+      timeZoneId: null,
       createdAt: task.createdAt,
     });
     await source.saveRecurrenceSeries({
@@ -244,6 +246,7 @@ describe('Plan task creation sheet', () => {
       occurrenceId: null,
       startsAt: '2026-08-05T23:30:00+03:00',
       endsAt: '2026-08-06T00:30:00+03:00',
+      timeZoneId: null,
       createdAt: task.createdAt,
     });
     const view = await render(
@@ -291,11 +294,11 @@ describe('Plan task creation sheet', () => {
     const masterBlocks = [
       {
         id: 'series-master-one', taskItemId: task.id, occurrenceId: null,
-        startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt: task.createdAt,
+        startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', timeZoneId: null, createdAt: task.createdAt,
       },
       {
         id: 'series-master-two', taskItemId: task.id, occurrenceId: null,
-        startsAt: '2026-08-05T13:00:00+03:00', endsAt: '2026-08-05T14:00:00+03:00', createdAt: task.createdAt,
+        startsAt: '2026-08-05T13:00:00+03:00', endsAt: '2026-08-05T14:00:00+03:00', timeZoneId: null, createdAt: task.createdAt,
       },
     ];
     await source.saveRecurrenceSeries(series);

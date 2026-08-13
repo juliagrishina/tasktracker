@@ -30,6 +30,7 @@ const block: ScheduleBlock = {
   occurrenceId: null,
   startsAt: '2026-08-05T09:00:00.000Z',
   endsAt: '2026-08-05T09:30:00.000Z',
+  timeZoneId: null,
   createdAt,
 };
 
@@ -188,5 +189,29 @@ describe('planning data source', () => {
       completedAt: null,
       createdAt,
     })).rejects.toThrow();
+  });
+
+  test('normalizes absent legacy nullable fields before returning browser records', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    await source.saveRecurrenceSeries(series);
+
+    await source.saveScheduleBlock({
+      ...block,
+      id: 'legacy-zone-block',
+    } as unknown as ScheduleBlock);
+    await source.saveRecurrenceOccurrence({
+      ...occurrence,
+      id: 'legacy-null-occurrence',
+      occursOn: '2026-08-19',
+      completedAt: undefined,
+    } as unknown as RecurrenceOccurrence);
+
+    await expect(source.getScheduleBlock('legacy-zone-block')).resolves.toMatchObject({
+      timeZoneId: null,
+    });
+    await expect(source.getRecurrenceOccurrence('legacy-null-occurrence')).resolves.toMatchObject({
+      completedAt: null,
+    });
   });
 });

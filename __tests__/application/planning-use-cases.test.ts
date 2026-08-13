@@ -47,6 +47,7 @@ function block(id: string, taskItemId = task.id, startsAt = '2026-08-05T09:00:00
     occurrenceId: null,
     startsAt,
     endsAt,
+    timeZoneId: null,
     createdAt,
   };
 }

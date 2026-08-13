@@ -63,8 +63,7 @@ export interface ScheduleBlock {
   occurrenceId: EntityId | null;
   startsAt: string;
   endsAt: string;
-  /** Optional only for pre-v6 in-memory records; persisted rows use null. */
-  timeZoneId?: string | null;
+  timeZoneId: string | null;
   createdAt: string;
 }
 

@@ -142,6 +142,7 @@ const scheduleBlocks: readonly ScheduleBlock[] = [
     occurrenceId: null,
     startsAt: '2026-08-02T09:00:00.000Z',
     endsAt: '2026-08-02T09:30:00.000Z',
+    timeZoneId: null,
     createdAt,
   },
   {
@@ -150,6 +151,7 @@ const scheduleBlocks: readonly ScheduleBlock[] = [
     occurrenceId: null,
     startsAt: '2026-08-02T11:00:00.000Z',
     endsAt: '2026-08-02T11:45:00.000Z',
+    timeZoneId: null,
     createdAt,
   },
 ];

@@ -156,24 +156,32 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       throw new Error('Р­РєР·РµРјРїР»СЏСЂ РїРѕРІС‚РѕСЂРµРЅРёСЏ РґР»СЏ Р±Р»РѕРєР° РЅРµ РЅР°Р№РґРµРЅ');
     }
 
-    assertScheduleBlockShape(block, task);
-    this.scheduleBlocks.set(block.id, block);
+    const normalizedBlock: ScheduleBlock = {
+      ...block,
+      timeZoneId: block.timeZoneId ?? null,
+    };
+    assertScheduleBlockShape(normalizedBlock, task);
+    this.scheduleBlocks.set(normalizedBlock.id, normalizedBlock);
   }
 
   async getScheduleBlock(id: EntityId): Promise<ScheduleBlock | null> {
     await this.initialize();
-    return this.scheduleBlocks.get(id) ?? null;
+    const block = this.scheduleBlocks.get(id);
+    return block === undefined ? null : { ...block, timeZoneId: block.timeZoneId ?? null };
   }
 
   async listScheduleBlocks(): Promise<readonly ScheduleBlock[]> {
     await this.initialize();
-    return [...this.scheduleBlocks.values()].sort(compareByCreatedAt);
+    return [...this.scheduleBlocks.values()]
+      .map((block) => ({ ...block, timeZoneId: block.timeZoneId ?? null }))
+      .sort(compareByCreatedAt);
   }
 
   async listScheduleBlocksForTaskItem(taskItemId: EntityId): Promise<readonly ScheduleBlock[]> {
     await this.initialize();
     return [...this.scheduleBlocks.values()]
       .filter((block) => block.taskItemId === taskItemId)
+      .map((block) => ({ ...block, timeZoneId: block.timeZoneId ?? null }))
       .sort(compareByCreatedAt);
   }
 
@@ -217,17 +225,23 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     if (duplicate !== undefined) {
       throw new Error('Экземпляр для этой даты уже существует');
     }
-    this.recurrenceOccurrences.set(occurrence.id, occurrence);
+    this.recurrenceOccurrences.set(occurrence.id, {
+      ...occurrence,
+      completedAt: occurrence.completedAt ?? null,
+    });
   }
 
   async getRecurrenceOccurrence(id: EntityId): Promise<RecurrenceOccurrence | null> {
     await this.initialize();
-    return this.recurrenceOccurrences.get(id) ?? null;
+    const occurrence = this.recurrenceOccurrences.get(id);
+    return occurrence === undefined ? null : { ...occurrence, completedAt: occurrence.completedAt ?? null };
   }
 
   async listRecurrenceOccurrences(): Promise<readonly RecurrenceOccurrence[]> {
     await this.initialize();
-    return [...this.recurrenceOccurrences.values()].sort(compareByCreatedAt);
+    return [...this.recurrenceOccurrences.values()]
+      .map((occurrence) => ({ ...occurrence, completedAt: occurrence.completedAt ?? null }))
+      .sort(compareByCreatedAt);
   }
 
   async deleteRecurrenceOccurrence(id: EntityId): Promise<void> {
