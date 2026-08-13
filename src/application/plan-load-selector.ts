@@ -1,8 +1,5 @@
 import type { AppDataSource } from '../data/contracts';
 import type {
-  RecurrenceOccurrence,
-  RecurrenceSeries,
-  Reminder,
   ScheduleBlock,
   TaskItem,
 } from '../domain/entities';
@@ -10,11 +7,16 @@ import {
   clipScheduleBlockToDate,
   doesScheduleBlockOverlapDate,
   getPlanLoadTone,
-  getRecurrenceDates,
   type PlanLoadTone,
 } from '../domain/planning';
 
 import { getPlanLoad, getPlanScheduleBlocks } from './planning-use-cases';
+import { getUntimedPlanEntries } from './planning-use-cases';
+import type {
+  PlanOccurrenceContext,
+  UntimedReminderPlanEntry,
+  UntimedTaskPlanEntry,
+} from './planning-types';
 
 export type PlanLoadMode = 'week' | 'month';
 
@@ -38,18 +40,11 @@ export interface DayPlanBlock {
   occurrence?: DayPlanOccurrence;
 }
 
-export interface DayPlanOccurrence {
-  id: string;
-  seriesId: string;
-  occursOn: string;
-  frequency: 'daily' | 'weekly' | 'monthly';
-  interval: number;
-  startsOn: string;
-}
+export type DayPlanOccurrence = PlanOccurrenceContext;
 
 export interface DayPlan {
-  untimedTasks: readonly TaskItem[];
-  untimedReminders: readonly Reminder[];
+  untimedTasks: readonly UntimedTaskPlanEntry[];
+  untimedReminders: readonly UntimedReminderPlanEntry[];
   blocks: readonly DayPlanBlock[];
   loadPercent: number;
   tone: PlanLoadTone;
@@ -128,55 +123,15 @@ export async function getPlanLoadDays(
   return isoDates.map((isoDate, index) => toPlanLoadDay(isoDate, loadPercentages[index]));
 }
 
-function matchesPlanDate(
-  item: Pick<TaskItem, 'scheduledOn' | 'periodStartOn' | 'periodEndOn'>
-    | Pick<Reminder, 'remindsOn' | 'periodStartOn' | 'periodEndOn'>,
-  isoDate: string,
-): boolean {
-  const singleDate = 'scheduledOn' in item ? item.scheduledOn : item.remindsOn;
-  if (singleDate === isoDate) {
-    return true;
-  }
-
-  return item.periodStartOn !== null
-    && item.periodEndOn !== null
-    && item.periodStartOn <= isoDate
-    && isoDate <= item.periodEndOn;
-}
-
-function matchesRecurringPlanDate(
-  itemKind: 'task' | 'reminder',
-  itemId: string,
-  isoDate: string,
-  recurrenceSeries: readonly RecurrenceSeries[],
-  occurrencesBySeriesAndDate: ReadonlyMap<string, RecurrenceOccurrence>,
-): boolean | undefined {
-  const itemSeries = recurrenceSeries.filter((series) => (
-    series.itemKind === itemKind && series.itemId === itemId
-  ));
-  if (itemSeries.length === 0) {
-    return undefined;
-  }
-
-  return itemSeries.some((series) => {
-    const [occursOn] = getRecurrenceDates(series, isoDate, isoDate);
-    if (occursOn === undefined) {
-      return false;
-    }
-
-    return occurrencesBySeriesAndDate.get(`${series.id}:${occursOn}`)?.status !== 'cancelled';
-  });
-}
-
 export async function getDayPlan(source: AppDataSource, isoDate: string): Promise<DayPlan> {
-  const [taskItems, reminders, scheduleBlocks, loadPercent, occurrences, recurrenceSeries] = await Promise.all([
+  const [taskItems, scheduleBlocks, loadPercent, occurrences, recurrenceSeries] = await Promise.all([
     source.listTaskItems(),
-    source.listReminders(),
     getPlanScheduleBlocks(source, isoDate),
     getPlanLoad(source, isoDate),
     source.listRecurrenceOccurrences(),
     source.listRecurrenceSeries(),
   ]);
+  const untimedEntries = await getUntimedPlanEntries(source, isoDate, scheduleBlocks);
   const activeTasks = taskItems.filter((task) => task.completedAt === null);
   const tasksById = new Map(activeTasks.map((task) => [task.id, task]));
   const occurrencesById = new Map(occurrences.map((occurrence) => [occurrence.id, occurrence]));
@@ -195,14 +150,24 @@ export async function getDayPlan(source: AppDataSource, isoDate: string): Promis
       const occurrence = sourceBlock.occurrenceId === null
         ? undefined
         : occurrencesById.get(sourceBlock.occurrenceId);
-      const blockStartsOn = sourceBlock.startsAt.slice(0, 10);
-      const series = occurrence === undefined
+      const projectedSeries = occurrence === undefined
         ? taskSeries.find((candidate) => (
             candidate.itemId === sourceBlock.taskItemId
-            && getRecurrenceDates(candidate, blockStartsOn, blockStartsOn).length === 1
+            && sourceBlock.id.startsWith(`recurrence-${candidate.id}-`)
           ))
+        : undefined;
+      const projectedDatePrefix = projectedSeries === undefined
+        ? undefined
+        : `recurrence-${projectedSeries.id}-`;
+      const projectedOccursOn = projectedDatePrefix === undefined
+        ? undefined
+        : sourceBlock.id.slice(projectedDatePrefix.length, projectedDatePrefix.length + 10);
+      const series = occurrence === undefined
+        ? projectedSeries ?? taskSeries.find((candidate) => candidate.itemId === sourceBlock.taskItemId)
         : taskSeries.find((candidate) => candidate.id === occurrence.seriesId);
-      const occursOn = occurrence?.occursOn ?? (series === undefined ? undefined : blockStartsOn);
+      const occursOn = occurrence?.occursOn
+        ?? projectedOccursOn
+        ?? series?.startsOn;
       const savedOccurrence = occurrence
         ?? (series === undefined || occursOn === undefined
           ? undefined
@@ -230,33 +195,9 @@ export async function getDayPlan(source: AppDataSource, isoDate: string): Promis
       occurrence: DayPlanOccurrence | undefined;
     } => entry !== null && entry.task !== undefined)
     .sort((left, right) => left.block.startsAt.localeCompare(right.block.startsAt));
-  const taskIdsWithDayBlock = new Set(dayBlocks.map(({ task }) => task.id));
-
   return {
-    untimedTasks: activeTasks
-      .filter((task) => (
-        !taskIdsWithDayBlock.has(task.id)
-        && (matchesRecurringPlanDate(
-          'task',
-          task.id,
-          isoDate,
-          recurrenceSeries,
-          occurrencesBySeriesAndDate,
-        ) ?? matchesPlanDate(task, isoDate))
-      ))
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
-    untimedReminders: reminders
-      .filter((reminder) => (
-        reminder.completedAt === null
-        && (matchesRecurringPlanDate(
-          'reminder',
-          reminder.id,
-          isoDate,
-          recurrenceSeries,
-          occurrencesBySeriesAndDate,
-        ) ?? matchesPlanDate(reminder, isoDate))
-      ))
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+    untimedTasks: untimedEntries.tasks,
+    untimedReminders: untimedEntries.reminders,
     blocks: dayBlocks.map(({ block, task, occurrence }) => ({
       id: block.id,
       taskItemId: task.id,

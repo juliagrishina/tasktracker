@@ -131,6 +131,29 @@ describe('planning use cases', () => {
     expect(result.conflict).toHaveLength(1);
   });
 
+  test('does not duplicate a candidate conflict already present in persisted blocks', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    const firstCandidate = block('persisted-first-candidate');
+    const secondCandidate = block(
+      'new-second-candidate',
+      task.id,
+      '2026-08-05T09:30:00.000Z',
+      '2026-08-05T10:30:00.000Z',
+    );
+    await source.saveScheduleBlock(firstCandidate);
+
+    const result = await saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [firstCandidate, secondCandidate],
+    });
+
+    expect(result.conflict).toEqual([{
+      candidate: firstCandidate,
+      block: secondCandidate,
+    }]);
+  });
+
   test('stores task date, period and a recurrence series when blocks do not conflict', async () => {
     const source = createInMemoryDataSource();
     await source.saveTaskItem(task);
@@ -141,6 +164,7 @@ describe('planning use cases', () => {
         scheduledOn: '2026-08-05',
         periodStartOn: '2026-08-05',
         periodEndOn: '2026-08-08',
+        estimatedDurationMinutes: 75,
         blocks: [block('block-task')],
         recurrence: {
           id: 'series-task',
@@ -156,6 +180,7 @@ describe('planning use cases', () => {
       scheduledOn: '2026-08-05',
       periodStartOn: '2026-08-05',
       periodEndOn: '2026-08-08',
+      estimatedDurationMinutes: 75,
     });
     await expect(source.getRecurrenceSeries('series-task')).resolves.toMatchObject({
       itemKind: 'task',
@@ -176,6 +201,27 @@ describe('planning use cases', () => {
     })).resolves.toEqual({ conflict: null });
 
     await expect(source.getScheduleBlock(existingBlock.id)).resolves.toBeNull();
+  });
+
+  test('replaces an edited block without reporting the deleted version as a conflict', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    const existingBlock = block('old-block-version');
+    const replacement = block(
+      'new-block-version',
+      task.id,
+      '2026-08-05T09:30:00.000Z',
+      '2026-08-05T10:30:00.000Z',
+    );
+    await source.saveScheduleBlock(existingBlock);
+
+    await expect(saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [replacement],
+      deletedBlockIds: [existingBlock.id],
+    })).resolves.toEqual({ conflict: null });
+    await expect(source.getScheduleBlock(existingBlock.id)).resolves.toBeNull();
+    await expect(source.getScheduleBlock(replacement.id)).resolves.toEqual(replacement);
   });
 
   test('loads only a task master schedule into its editing snapshot', async () => {
@@ -234,6 +280,7 @@ describe('planning use cases', () => {
       remindsOn: null,
       periodStartOn: '2026-08-10',
       periodEndOn: '2026-08-12',
+      estimatedDurationMinutes: 40,
       recurrence: {
         id: 'series-reminder',
         frequency: 'daily',
@@ -247,12 +294,152 @@ describe('planning use cases', () => {
       remindsOn: null,
       periodStartOn: '2026-08-10',
       periodEndOn: '2026-08-12',
+      estimatedDurationMinutes: 40,
       repeatRule: { frequency: 'daily', interval: 1 },
     });
     await expect(source.getRecurrenceSeries('series-reminder')).resolves.toMatchObject({
       itemKind: 'reminder',
       itemId: reminder.id,
     });
+  });
+
+  test('rejects an invalid reminder date before it reaches storage', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder(reminder);
+
+    await expect(saveReminderPlanning(source, {
+      reminderId: reminder.id,
+      remindsOn: '2026-02-30',
+    })).rejects.toThrow('формат ГГГГ-ММ-ДД');
+
+    await expect(source.getReminder(reminder.id)).resolves.toEqual(reminder);
+  });
+
+  test('stores a reminder instance patch only for a reminder series', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder(reminder);
+    await source.saveRecurrenceSeries({
+      id: 'reminder-patch-series',
+      itemKind: 'reminder',
+      itemId: reminder.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt,
+    });
+
+    const occurrence = await saveOccurrenceException(source, {
+      id: 'reminder-patch-occurrence',
+      seriesId: 'reminder-patch-series',
+      occursOn: '2026-08-12',
+      status: 'active',
+      reminderPatch: {
+        title: 'Позвонить позже',
+        remindsOn: '2026-08-14',
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 25,
+      },
+      createdAt,
+    });
+
+    expect(occurrence).toMatchObject({
+      completedAt: null,
+      reminderPatch: expect.objectContaining({ remindsOn: '2026-08-14' }),
+    });
+  });
+
+  test('rejects a reminder patch for a task series before persistence', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    await source.saveRecurrenceSeries({
+      id: 'task-kind-series',
+      itemKind: 'task',
+      itemId: task.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt,
+    });
+
+    await expect(saveOccurrenceException(source, {
+      id: 'wrong-kind-occurrence',
+      seriesId: 'task-kind-series',
+      occursOn: '2026-08-12',
+      status: 'active',
+      reminderPatch: {
+        title: 'Неверный тип',
+        remindsOn: '2026-08-12',
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 15,
+      },
+      createdAt,
+    })).rejects.toThrow('задачи');
+    await expect(source.getRecurrenceOccurrence('wrong-kind-occurrence')).resolves.toBeNull();
+  });
+
+  test('rejects an invalid reminder occurrence patch date before persistence', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder(reminder);
+    await source.saveRecurrenceSeries({
+      id: 'invalid-reminder-date-series',
+      itemKind: 'reminder',
+      itemId: reminder.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt,
+    });
+
+    await expect(saveOccurrenceException(source, {
+      id: 'invalid-reminder-date-occurrence',
+      seriesId: 'invalid-reminder-date-series',
+      occursOn: '2026-08-12',
+      status: 'active',
+      reminderPatch: {
+        title: 'Некорректная дата',
+        remindsOn: '2026-02-30',
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 15,
+      },
+      createdAt,
+    })).rejects.toThrow('формат ГГГГ-ММ-ДД');
+    await expect(source.getRecurrenceOccurrence('invalid-reminder-date-occurrence')).resolves.toBeNull();
+  });
+
+  test('stores a validated completion instant only for a completed instance', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    await source.saveRecurrenceSeries({
+      id: 'completed-instance-series',
+      itemKind: 'task',
+      itemId: task.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt,
+    });
+
+    await expect(saveOccurrenceException(source, {
+      id: 'completed-instance',
+      seriesId: 'completed-instance-series',
+      occursOn: '2026-08-12',
+      status: 'completed',
+      completedAt: 'not-an-instant',
+      createdAt,
+    })).rejects.toThrow('completion instant');
+    const completed = await saveOccurrenceException(source, {
+      id: 'completed-instance',
+      seriesId: 'completed-instance-series',
+      occursOn: '2026-08-12',
+      status: 'completed',
+      completedAt: '2026-08-12T12:00:00.000Z',
+      createdAt,
+    });
+
+    expect(completed.completedAt).toBe('2026-08-12T12:00:00.000Z');
   });
 
   test('cancelling one recurrence occurrence leaves the following occurrence active', async () => {
@@ -417,6 +604,159 @@ describe('planning use cases', () => {
     await expect(getPlanLoad(source, '2026-08-06')).resolves.toBeCloseTo(
       (30 / (14 * 60)) * 100,
     );
+  });
+
+  test('adds a date-only task estimate without an exact block to day load', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '10:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 10,
+    });
+    await source.saveTaskItem({
+      ...task,
+      scheduledOn: '2026-08-12',
+      estimatedDurationMinutes: 60,
+    });
+
+    await expect(getPlanLoad(source, '2026-08-12')).resolves.toBeCloseTo(50);
+  });
+
+  test('splits a period estimate without losing remainder minutes', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '09:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 10,
+    });
+    await source.saveTaskItem({
+      ...task,
+      periodStartOn: '2026-08-10',
+      periodEndOn: '2026-08-12',
+      estimatedDurationMinutes: 61,
+    });
+
+    await expect(getPlanLoad(source, '2026-08-10')).resolves.toBeCloseTo(35);
+    await expect(getPlanLoad(source, '2026-08-11')).resolves.toBeCloseTo(33.3333333333);
+    await expect(getPlanLoad(source, '2026-08-12')).resolves.toBeCloseTo(33.3333333333);
+  });
+
+  test('counts a recurring untimed task estimate on every active instance', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '09:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 10,
+    });
+    await source.saveTaskItem({
+      ...task,
+      scheduledOn: '2026-08-05',
+      estimatedDurationMinutes: 30,
+    });
+    await source.saveRecurrenceSeries({
+      id: 'untimed-load-series',
+      itemKind: 'task',
+      itemId: task.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt,
+    });
+
+    await expect(getPlanLoad(source, '2026-08-12')).resolves.toBeCloseTo(50);
+  });
+
+  test('does not add an estimate when the same task has an exact block', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '09:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 10,
+    });
+    await source.saveTaskItem({
+      ...task,
+      scheduledOn: '2026-08-05',
+      estimatedDurationMinutes: 120,
+    });
+    await source.saveScheduleBlock(block('exact-not-estimate'));
+
+    await expect(getPlanLoad(source, '2026-08-05')).resolves.toBeCloseTo(100);
+  });
+
+  test('does not count an exact block of a completed task', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem({
+      ...task,
+      completedAt: '2026-08-05T11:00:00.000Z',
+    });
+    await source.saveScheduleBlock(block('completed-task-block'));
+
+    await expect(getPlanLoad(source, '2026-08-05')).resolves.toBe(0);
+  });
+
+  test('keeps a moved untimed instance estimate when another instance has an exact block that day', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '09:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 10,
+    });
+    await source.saveTaskItem({
+      ...task,
+      scheduledOn: '2026-08-05',
+      estimatedDurationMinutes: 30,
+    });
+    await source.saveScheduleBlock(block('same-task-master-block'));
+    await source.saveRecurrenceSeries({
+      id: 'same-task-load-series',
+      itemKind: 'task',
+      itemId: task.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt,
+    });
+    await saveOccurrenceException(source, {
+      id: 'moved-untimed-load-occurrence',
+      seriesId: 'same-task-load-series',
+      occursOn: '2026-08-12',
+      status: 'active',
+      taskPatch: {
+        title: task.title,
+        description: task.description,
+        scheduledOn: '2026-08-19',
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 30,
+      },
+      blocks: [],
+      createdAt,
+    });
+
+    await expect(getPlanLoad(source, '2026-08-19')).resolves.toBeCloseTo(150);
+  });
+
+  test('adds a date-only reminder estimate to day load', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '09:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 10,
+    });
+    await source.saveReminder({
+      ...reminder,
+      remindsOn: '2026-08-12',
+      repeatRule: null,
+      estimatedDurationMinutes: 15,
+    });
+
+    await expect(getPlanLoad(source, '2026-08-12')).resolves.toBeCloseTo(25);
   });
 
   test('updates an existing series in place and preserves its instance exception', async () => {

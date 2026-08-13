@@ -365,6 +365,7 @@ export function getDayLoadPercent(
   settings: AppSettings,
   blocks: readonly ScheduleBlock[],
   isoDate: string,
+  estimatedMinutes = 0,
 ): number {
   parseIsoDate(isoDate);
   const workdayMinutes =
@@ -375,9 +376,49 @@ export function getDayLoadPercent(
   }
 
   const plannedMinutes = blocks
-    .reduce((total, block) => total + getBlockMinutesOnLocalDate(block, isoDate), 0);
+    .reduce((total, block) => total + getBlockMinutesOnLocalDate(block, isoDate), estimatedMinutes);
 
   return (plannedMinutes / workdayMinutes) * 100;
+}
+
+function getIsoDayNumber(isoDate: string): number {
+  const date = parseIsoDate(isoDate);
+  return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000);
+}
+
+/**
+ * Returns the share of an untimed estimate assigned to one local plan date.
+ * Period remainders are allocated from the first date so the original total
+ * is preserved exactly.
+ */
+export function getEstimatedDurationMinutesOnDate(
+  estimatedDurationMinutes: number | null,
+  range: PlanningDateRange,
+  isoDate: string,
+): number {
+  getIsoDayNumber(isoDate);
+  assertPlanningDateRange(range);
+  if (estimatedDurationMinutes === null) {
+    return 0;
+  }
+  if (range.singleDate === isoDate) {
+    return estimatedDurationMinutes;
+  }
+  if (range.periodStartOn === null || range.periodEndOn === null) {
+    return 0;
+  }
+
+  const startDay = getIsoDayNumber(range.periodStartOn);
+  const endDay = getIsoDayNumber(range.periodEndOn);
+  const selectedDay = getIsoDayNumber(isoDate);
+  if (selectedDay < startDay || selectedDay > endDay) {
+    return 0;
+  }
+
+  const dayCount = endDay - startDay + 1;
+  const quotient = Math.floor(estimatedDurationMinutes / dayCount);
+  const remainder = estimatedDurationMinutes % dayCount;
+  return quotient + (selectedDay - startDay < remainder ? 1 : 0);
 }
 
 export function getRecurrenceDates(

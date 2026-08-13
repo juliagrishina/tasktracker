@@ -122,6 +122,74 @@ describe('plan period load model', () => {
     });
   });
 
+  test('projects a zoned recurring task block at the same wall time across DST', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, {
+      id: 'dst-weekly-task',
+      title: 'New York weekly review',
+      createdAt: '2026-03-01T08:00:00.000Z',
+    });
+    await source.saveScheduleBlock({
+      id: 'dst-weekly-source-block',
+      taskItemId: task.id,
+      occurrenceId: null,
+      startsAt: '2026-03-01T09:00:00-05:00',
+      endsAt: '2026-03-01T10:00:00-05:00',
+      timeZoneId: 'America/New_York',
+      createdAt: task.createdAt,
+    });
+    await source.saveRecurrenceSeries({
+      id: 'dst-weekly-series',
+      itemKind: 'task',
+      itemId: task.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-03-01',
+      createdAt: task.createdAt,
+    });
+
+    await expect(getDayPlan(source, '2026-03-08')).resolves.toMatchObject({
+      blocks: [expect.objectContaining({
+        startsAt: '2026-03-08T09:00:00-04:00',
+        endsAt: '2026-03-08T10:00:00-04:00',
+      })],
+    });
+  });
+
+  test('keeps the source occurrence context when a recurring block falls on its following day', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, {
+      id: 'following-day-recurring-task',
+      title: 'Ночной еженедельный блок',
+      createdAt: '2026-08-05T08:00:00.000Z',
+    });
+    await source.saveScheduleBlock({
+      id: 'following-day-source-block',
+      taskItemId: task.id,
+      occurrenceId: null,
+      startsAt: '2026-08-06T00:30:00+03:00',
+      endsAt: '2026-08-06T01:00:00+03:00',
+      timeZoneId: null,
+      createdAt: task.createdAt,
+    });
+    await source.saveRecurrenceSeries({
+      id: 'following-day-series',
+      itemKind: 'task',
+      itemId: task.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt: task.createdAt,
+    });
+
+    await expect(getDayPlan(source, '2026-08-13')).resolves.toMatchObject({
+      blocks: [expect.objectContaining({
+        startsAt: '2026-08-13T00:30:00+03:00',
+        occurrence: expect.objectContaining({ occursOn: '2026-08-12' }),
+      })],
+    });
+  });
+
   test('shows an instance override once and keeps the following series occurrence unchanged', async () => {
     const source = createInMemoryDataSource();
     const task = await createTask(source, {
@@ -183,6 +251,60 @@ describe('plan period load model', () => {
         title: 'Еженедельная сверка',
         startsAt: '2026-08-19T09:00:00+03:00',
       })],
+    });
+  });
+
+  test('shows an active occurrence without replacement blocks as untimed', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, {
+      id: 'remove-instance-block-task',
+      title: 'Сверка со временем',
+      estimatedDurationMinutes: 30,
+      createdAt: '2026-08-05T08:00:00.000Z',
+    });
+    await source.saveTaskItem({ ...task, scheduledOn: '2026-08-05' });
+    await source.saveScheduleBlock({
+      id: 'remove-instance-master-block',
+      taskItemId: task.id,
+      occurrenceId: null,
+      startsAt: '2026-08-05T09:00:00+03:00',
+      endsAt: '2026-08-05T10:00:00+03:00',
+      timeZoneId: null,
+      createdAt: task.createdAt,
+    });
+    await source.saveRecurrenceSeries({
+      id: 'remove-instance-block-series',
+      itemKind: 'task',
+      itemId: task.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt: task.createdAt,
+    });
+    await saveOccurrenceException(source, {
+      id: 'remove-instance-block-occurrence',
+      seriesId: 'remove-instance-block-series',
+      occursOn: '2026-08-12',
+      status: 'active',
+      taskPatch: {
+        title: 'Сверка без времени',
+        description: null,
+        scheduledOn: '2026-08-12',
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 30,
+      },
+      blocks: [],
+      createdAt: task.createdAt,
+    });
+
+    await expect(getDayPlan(source, '2026-08-12')).resolves.toMatchObject({
+      blocks: [],
+      untimedTasks: [expect.objectContaining({
+        title: 'Сверка без времени',
+        occurrence: expect.objectContaining({ occursOn: '2026-08-12' }),
+      })],
+      loadPercent: expect.closeTo((30 / (14 * 60)) * 100),
     });
   });
 
@@ -249,7 +371,92 @@ describe('plan period load model', () => {
     });
 
     await expect(getDayPlan(source, '2026-08-12')).resolves.toMatchObject({
-      untimedReminders: [expect.objectContaining({ title: 'Отправить недельный статус' })],
+      untimedReminders: [expect.objectContaining({
+        title: 'Отправить недельный статус',
+        occurrence: expect.objectContaining({ occursOn: '2026-08-12' }),
+      })],
+    });
+  });
+
+  test('shows a moved recurring reminder only on its patched day', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder({
+      id: 'moved-recurring-reminder',
+      title: 'Отправить статус',
+      remindsOn: '2026-08-05',
+      periodStartOn: null,
+      periodEndOn: null,
+      repeatRule: { frequency: 'weekly', interval: 1 },
+      estimatedDurationMinutes: 20,
+      completedAt: null,
+      createdAt: '2026-08-05T08:00:00.000Z',
+    });
+    await source.saveRecurrenceSeries({
+      id: 'moved-reminder-series',
+      itemKind: 'reminder',
+      itemId: 'moved-recurring-reminder',
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt: '2026-08-05T08:00:00.000Z',
+    });
+    await saveOccurrenceException(source, {
+      id: 'moved-reminder-occurrence',
+      seriesId: 'moved-reminder-series',
+      occursOn: '2026-08-12',
+      status: 'active',
+      reminderPatch: {
+        title: 'Отправить статус позже',
+        remindsOn: '2026-08-14',
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 25,
+      },
+      createdAt: '2026-08-05T08:00:00.000Z',
+    });
+
+    await expect(getDayPlan(source, '2026-08-12')).resolves.toMatchObject({
+      untimedReminders: [],
+    });
+    await expect(getDayPlan(source, '2026-08-14')).resolves.toMatchObject({
+      untimedReminders: [expect.objectContaining({
+        title: 'Отправить статус позже',
+        occurrence: expect.objectContaining({ occursOn: '2026-08-12' }),
+      })],
+    });
+  });
+
+  test('excludes a completed recurring task instance from plan and load', async () => {
+    const source = createInMemoryDataSource();
+    const recurringTask = await createTask(source, {
+      id: 'completed-recurring-task',
+      title: 'Еженедельная сверка',
+      estimatedDurationMinutes: 60,
+      createdAt: '2026-08-05T08:00:00.000Z',
+    });
+    await source.saveTaskItem({ ...recurringTask, scheduledOn: '2026-08-05' });
+    await source.saveRecurrenceSeries({
+      id: 'completed-task-series',
+      itemKind: 'task',
+      itemId: recurringTask.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt: recurringTask.createdAt,
+    });
+    await saveOccurrenceException(source, {
+      id: 'completed-task-occurrence',
+      seriesId: 'completed-task-series',
+      occursOn: '2026-08-12',
+      status: 'completed',
+      completedAt: '2026-08-12T12:00:00.000Z',
+      createdAt: recurringTask.createdAt,
+    });
+
+    await expect(getDayPlan(source, '2026-08-12')).resolves.toMatchObject({
+      untimedTasks: [],
+      blocks: [],
+      loadPercent: 0,
     });
   });
 

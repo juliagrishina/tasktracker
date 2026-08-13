@@ -4,6 +4,7 @@ import {
   createDefaultScheduleBlock,
   findScheduleConflicts,
   getDayLoadPercent,
+  getEstimatedDurationMinutesOnDate,
   getPlanLoadTone,
   getRecurrenceDates,
   shiftScheduleBlockToDate,
@@ -91,6 +92,19 @@ describe('planning domain rules', () => {
     expect(getDayLoadPercent(settings, [overnight], '2026-08-06')).toBeCloseTo(
       (30 / (14 * 60)) * 100,
     );
+  });
+
+  test('distributes a 61-minute estimate across three inclusive period days', () => {
+    const range = {
+      singleDate: null,
+      periodStartOn: '2026-08-10',
+      periodEndOn: '2026-08-12',
+    };
+
+    expect(getEstimatedDurationMinutesOnDate(61, range, '2026-08-10')).toBe(21);
+    expect(getEstimatedDurationMinutesOnDate(61, range, '2026-08-11')).toBe(20);
+    expect(getEstimatedDurationMinutesOnDate(61, range, '2026-08-12')).toBe(20);
+    expect(getEstimatedDurationMinutesOnDate(61, range, '2026-08-13')).toBe(0);
   });
 
   test.each([
