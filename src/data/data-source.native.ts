@@ -92,6 +92,7 @@ interface RecurrenceOccurrenceRow {
   task_patch: string | null;
   reminder_patch: string | null;
   completed_at: string | null;
+  blocks_overridden: number;
   created_at: string;
 }
 
@@ -691,7 +692,12 @@ class NativeDataSource implements AppDataSource {
 
   async saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void> {
     await this.initialize();
-    assertRecurrenceOccurrenceShape(occurrence);
+    const normalizedOccurrence: RecurrenceOccurrence = {
+      ...occurrence,
+      completedAt: occurrence.completedAt ?? null,
+      blocksOverridden: occurrence.blocksOverridden ?? false,
+    };
+    assertRecurrenceOccurrenceShape(normalizedOccurrence);
     const series = await this.getRecurrenceSeries(occurrence.seriesId);
     if (series === null) {
       throw new Error('Серия повторений для экземпляра не найдена');
@@ -699,8 +705,8 @@ class NativeDataSource implements AppDataSource {
 
     const database = await this.getDatabase();
     await database.runAsync(
-      `INSERT INTO recurrence_occurrences (id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO recurrence_occurrences (id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, blocks_overridden, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         series_id = excluded.series_id,
         occurs_on = excluded.occurs_on,
@@ -708,16 +714,18 @@ class NativeDataSource implements AppDataSource {
         task_patch = excluded.task_patch,
         reminder_patch = excluded.reminder_patch,
         completed_at = excluded.completed_at,
+        blocks_overridden = excluded.blocks_overridden,
         created_at = excluded.created_at`,
       [
-        occurrence.id,
-        occurrence.seriesId,
-        occurrence.occursOn,
-        occurrence.status,
-        occurrence.taskPatch === undefined ? null : JSON.stringify(occurrence.taskPatch),
-        occurrence.reminderPatch === undefined ? null : JSON.stringify(occurrence.reminderPatch),
-        occurrence.completedAt ?? null,
-        occurrence.createdAt,
+        normalizedOccurrence.id,
+        normalizedOccurrence.seriesId,
+        normalizedOccurrence.occursOn,
+        normalizedOccurrence.status,
+        normalizedOccurrence.taskPatch === undefined ? null : JSON.stringify(normalizedOccurrence.taskPatch),
+        normalizedOccurrence.reminderPatch === undefined ? null : JSON.stringify(normalizedOccurrence.reminderPatch),
+        normalizedOccurrence.completedAt,
+        normalizedOccurrence.blocksOverridden ? 1 : 0,
+        normalizedOccurrence.createdAt,
       ],
     );
   }
@@ -726,7 +734,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<RecurrenceOccurrenceRow>(
-      `SELECT id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, created_at
+      `SELECT id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, blocks_overridden, created_at
       FROM recurrence_occurrences
       WHERE id = ?`,
       [id],
@@ -740,6 +748,7 @@ class NativeDataSource implements AppDataSource {
           occursOn: row.occurs_on,
           status: row.status,
           completedAt: row.completed_at,
+          blocksOverridden: row.blocks_overridden === 1,
           ...(row.task_patch === null ? {} : { taskPatch: JSON.parse(row.task_patch) }),
           ...(row.reminder_patch === null ? {} : { reminderPatch: JSON.parse(row.reminder_patch) }),
           createdAt: row.created_at,
@@ -750,7 +759,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<RecurrenceOccurrenceRow>(
-      `SELECT id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, created_at
+      `SELECT id, series_id, occurs_on, status, task_patch, reminder_patch, completed_at, blocks_overridden, created_at
       FROM recurrence_occurrences
       ORDER BY created_at ASC, id ASC`,
     );
@@ -761,6 +770,7 @@ class NativeDataSource implements AppDataSource {
       occursOn: row.occurs_on,
       status: row.status,
       completedAt: row.completed_at,
+      blocksOverridden: row.blocks_overridden === 1,
       ...(row.task_patch === null ? {} : { taskPatch: JSON.parse(row.task_patch) }),
       ...(row.reminder_patch === null ? {} : { reminderPatch: JSON.parse(row.reminder_patch) }),
       createdAt: row.created_at,

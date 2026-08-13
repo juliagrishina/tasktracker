@@ -306,6 +306,82 @@ describe('plan period load model', () => {
       })],
       loadPercent: expect.closeTo((30 / (14 * 60)) * 100),
     });
+    await expect(source.getRecurrenceOccurrence('remove-instance-block-occurrence'))
+      .resolves.toMatchObject({ blocksOverridden: true });
+
+    await saveOccurrenceException(source, {
+      id: 'remove-instance-block-occurrence',
+      seriesId: 'remove-instance-block-series',
+      occursOn: '2026-08-12',
+      status: 'active',
+      taskPatch: {
+        title: 'Сверка без времени — уточнено',
+        description: null,
+        scheduledOn: '2026-08-12',
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 30,
+      },
+      createdAt: task.createdAt,
+    });
+
+    await expect(getDayPlan(source, '2026-08-12')).resolves.toMatchObject({
+      blocks: [],
+      untimedTasks: [expect.objectContaining({ title: 'Сверка без времени — уточнено' })],
+    });
+    await expect(source.getRecurrenceOccurrence('remove-instance-block-occurrence'))
+      .resolves.toMatchObject({ blocksOverridden: true });
+  });
+
+  test('keeps inherited exact blocks for a title-only occurrence patch', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, {
+      id: 'title-only-timed-task',
+      title: 'Сверка со временем',
+      estimatedDurationMinutes: 30,
+      createdAt: '2026-08-05T08:00:00.000Z',
+    });
+    await source.saveScheduleBlock({
+      id: 'title-only-master-block',
+      taskItemId: task.id,
+      occurrenceId: null,
+      startsAt: '2026-08-05T09:00:00+03:00',
+      endsAt: '2026-08-05T10:00:00+03:00',
+      timeZoneId: null,
+      createdAt: task.createdAt,
+    });
+    await source.saveRecurrenceSeries({
+      id: 'title-only-series',
+      itemKind: 'task',
+      itemId: task.id,
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: '2026-08-05',
+      createdAt: task.createdAt,
+    });
+    await saveOccurrenceException(source, {
+      id: 'title-only-occurrence',
+      seriesId: 'title-only-series',
+      occursOn: '2026-08-12',
+      status: 'active',
+      taskPatch: {
+        title: 'Сверка с новым названием',
+        description: null,
+        scheduledOn: null,
+        periodStartOn: null,
+        periodEndOn: null,
+        estimatedDurationMinutes: 30,
+      },
+      createdAt: task.createdAt,
+    });
+
+    await expect(getDayPlan(source, '2026-08-12')).resolves.toMatchObject({
+      blocks: [expect.objectContaining({ title: 'Сверка с новым названием' })],
+      untimedTasks: [],
+      loadPercent: expect.closeTo((60 / (14 * 60)) * 100),
+    });
+    await expect(source.getRecurrenceOccurrence('title-only-occurrence'))
+      .resolves.toMatchObject({ blocksOverridden: false });
   });
 
   test('removes the first recurrence block when that specific instance is cancelled', async () => {

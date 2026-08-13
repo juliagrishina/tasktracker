@@ -131,7 +131,7 @@ export async function getDayPlan(source: AppDataSource, isoDate: string): Promis
     source.listRecurrenceOccurrences(),
     source.listRecurrenceSeries(),
   ]);
-  const untimedEntries = await getUntimedPlanEntries(source, isoDate, scheduleBlocks);
+  const untimedEntries = await getUntimedPlanEntries(source, isoDate);
   const activeTasks = taskItems.filter((task) => task.completedAt === null);
   const tasksById = new Map(activeTasks.map((task) => [task.id, task]));
   const occurrencesById = new Map(occurrences.map((occurrence) => [occurrence.id, occurrence]));

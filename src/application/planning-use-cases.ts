@@ -1,7 +1,7 @@
 import type { AppDataSource } from '../data/contracts';
 import { createTaskFromReminder } from '../domain/reminder-conversion';
 import { assertEstimatedDuration } from '../domain/backlog-invariants';
-import { assertRecurrenceOccurrenceShape } from '../domain/invariants';
+import { assertRecurrenceOccurrenceShape, assertScheduleBlockShape } from '../domain/invariants';
 import {
   assertPlanningDateRange,
   assertRecurrenceOccurrence,
@@ -281,7 +281,7 @@ export async function getPlanScheduleBlocks(
     return baseException === undefined
       || (
         baseException.status === 'active'
-        && baseException.taskPatch === undefined
+        && !baseException.blocksOverridden
         && (blocksByOccurrenceId.get(baseException.id)?.length ?? 0) === 0
       );
   });
@@ -304,7 +304,7 @@ export async function getPlanScheduleBlocks(
         continue;
       }
       if (
-        exception?.taskPatch !== undefined
+        exception?.blocksOverridden === true
         || (exception !== undefined && (blocksByOccurrenceId.get(exception.id)?.length ?? 0) > 0)
       ) {
         continue;
@@ -343,6 +343,27 @@ export async function saveTaskPlanning(
     assertRecurrenceRule(input.recurrence);
   }
   const existingBlocks = await source.listScheduleBlocks();
+  for (const block of input.blocks) {
+    if (block.taskItemId !== task.id) {
+      throw new Error('Блок планирования принадлежит другой задаче');
+    }
+    if (block.occurrenceId !== null) {
+      throw new Error('Блок экземпляра нельзя сохранять как план серии задачи');
+    }
+    assertScheduleBlockShape(block, task);
+  }
+  for (const blockId of input.deletedBlockIds ?? []) {
+    const deletedBlock = existingBlocks.find((block) => block.id === blockId);
+    if (deletedBlock === undefined) {
+      throw new Error('Удаляемый блок задачи не найден');
+    }
+    if (deletedBlock.taskItemId !== task.id) {
+      throw new Error('Удаляемый блок принадлежит другой задаче');
+    }
+    if (deletedBlock.occurrenceId !== null) {
+      throw new Error('Блок экземпляра нельзя удалить через план серии задачи');
+    }
+  }
   const conflicts = getConflicts(input.blocks, existingBlocks, input.deletedBlockIds);
 
   await source.transaction(async () => {
@@ -493,6 +514,7 @@ export async function saveOccurrenceException(
   if (series === null) {
     throw new Error('Серия повторений для экземпляра не найдена');
   }
+  const existingOccurrence = await source.getRecurrenceOccurrence(input.id);
   assertRecurrenceOccurrence(series, input.occursOn);
   if (input.taskPatch !== undefined && input.reminderPatch !== undefined) {
     throw new Error('Экземпляр не может одновременно содержать патч задачи и напоминания');
@@ -535,6 +557,12 @@ export async function saveOccurrenceException(
     occursOn: input.occursOn,
     status: input.status,
     completedAt: input.status === 'completed' ? input.completedAt ?? null : null,
+    blocksOverridden: input.blocks === undefined
+      ? existingOccurrence?.seriesId === input.seriesId
+        && existingOccurrence.occursOn === input.occursOn
+        ? existingOccurrence.blocksOverridden
+        : false
+      : true,
     ...(input.taskPatch === undefined ? {} : { taskPatch: input.taskPatch }),
     ...(input.reminderPatch === undefined ? {} : { reminderPatch: input.reminderPatch }),
     createdAt: input.createdAt,
@@ -574,6 +602,7 @@ type ReminderPlanningDates = Pick<Reminder, 'remindsOn' | 'periodStartOn' | 'per
 interface UntimedTaskProjection {
   entry: UntimedTaskPlanEntry;
   estimatedMinutes: number;
+  blocksOverridden: boolean;
 }
 
 interface UntimedReminderProjection {
@@ -661,6 +690,7 @@ function selectUntimedPlanProjection(
             getPlanningDateRange(task),
             isoDate,
           ),
+          blocksOverridden: false,
         });
       }
       continue;
@@ -693,6 +723,7 @@ function selectUntimedPlanProjection(
             range,
             isoDate,
           ),
+          blocksOverridden: savedOccurrence?.blocksOverridden ?? false,
         });
       };
 
@@ -802,32 +833,24 @@ function taskProjectionHasExactBlock(
     return blocks.some((block) => block.taskItemId === projection.entry.id);
   }
 
-  const projectedIdPrefix = `recurrence-${occurrence.seriesId}-${occurrence.occursOn}-`;
   return blocks.some((block) => (
     block.taskItemId === projection.entry.id
-    && (
-      block.occurrenceId === occurrence.id
-      || block.id.startsWith(projectedIdPrefix)
-      || (
-        occurrence.occursOn === occurrence.startsOn
-        && block.occurrenceId === null
-        && !block.id.startsWith('recurrence-')
-      )
-    )
+    && (projection.blocksOverridden
+      ? block.occurrenceId === occurrence.id
+      : block.occurrenceId === null)
   ));
 }
 
 export async function getUntimedPlanEntries(
   source: AppDataSource,
   isoDate: string,
-  selectedDayBlocks?: readonly ScheduleBlock[],
 ): Promise<UntimedPlanEntries> {
   const [taskItems, reminders, recurrenceSeries, occurrences, blocks] = await Promise.all([
     source.listTaskItems(),
     source.listReminders(),
     source.listRecurrenceSeries(),
     source.listRecurrenceOccurrences(),
-    selectedDayBlocks === undefined ? getPlanScheduleBlocks(source, isoDate) : selectedDayBlocks,
+    source.listScheduleBlocks(),
   ]);
   const projection = selectUntimedPlanProjection(
     taskItems,
@@ -848,9 +871,10 @@ export async function getPlanLoad(
   source: AppDataSource,
   isoDate: string,
 ): Promise<number> {
-  const [settings, blocks, taskItems, reminders, recurrenceSeries, occurrences] = await Promise.all([
+  const [settings, blocks, allBlocks, taskItems, reminders, recurrenceSeries, occurrences] = await Promise.all([
     source.getSettings(),
     getPlanScheduleBlocks(source, isoDate),
+    source.listScheduleBlocks(),
     source.listTaskItems(),
     source.listReminders(),
     source.listRecurrenceSeries(),
@@ -864,7 +888,7 @@ export async function getPlanLoad(
     isoDate,
   );
   const estimatedMinutes = projection.tasks
-    .filter((entry) => !taskProjectionHasExactBlock(entry, blocks))
+    .filter((entry) => !taskProjectionHasExactBlock(entry, allBlocks))
     .reduce((total, entry) => total + entry.estimatedMinutes, 0)
     + projection.reminders.reduce((total, entry) => total + entry.estimatedMinutes, 0);
   return getDayLoadPercent(settings, blocks, isoDate, estimatedMinutes);

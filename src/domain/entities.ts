@@ -100,6 +100,7 @@ export interface RecurrenceOccurrence {
   occursOn: string;
   status: 'active' | 'cancelled' | 'completed';
   completedAt: string | null;
+  blocksOverridden: boolean;
   taskPatch?: TaskOccurrencePatch;
   reminderPatch?: ReminderOccurrencePatch;
   createdAt: string;

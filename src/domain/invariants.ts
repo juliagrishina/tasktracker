@@ -78,6 +78,9 @@ export function assertScheduleBlockShape(
 }
 
 export function assertRecurrenceOccurrenceShape(occurrence: RecurrenceOccurrence): void {
+  if (typeof occurrence.blocksOverridden !== 'boolean') {
+    throw new Error('Recurrence block override flag must be boolean');
+  }
   const completedAt = occurrence.completedAt;
   if (occurrence.status !== 'completed') {
     if (completedAt !== null && completedAt !== undefined) {

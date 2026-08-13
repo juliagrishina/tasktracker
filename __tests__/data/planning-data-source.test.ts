@@ -69,6 +69,7 @@ const occurrence: RecurrenceOccurrence = {
   occursOn: '2026-08-12',
   status: 'cancelled',
   completedAt: null,
+  blocksOverridden: false,
   createdAt,
 };
 
@@ -145,6 +146,7 @@ describe('planning data source', () => {
       occursOn: '2026-08-13',
       status: 'completed',
       completedAt: '2026-08-13T08:00:00.000Z',
+      blocksOverridden: true,
       reminderPatch: {
         title: 'Позвонить',
         remindsOn: '2026-08-14',
@@ -170,6 +172,7 @@ describe('planning data source', () => {
       status: 'completed',
       completedAt: '2026-08-13T08:00:00.000Z',
       reminderPatch: completedOccurrence.reminderPatch,
+      blocksOverridden: true,
     });
     await expect(source.getScheduleBlock(zonedBlock.id)).resolves.toMatchObject({
       timeZoneId: 'Europe/Moscow',
@@ -187,6 +190,7 @@ describe('planning data source', () => {
       occursOn: '2026-08-13',
       status: 'completed',
       completedAt: null,
+      blocksOverridden: false,
       createdAt,
     })).rejects.toThrow();
   });
@@ -212,6 +216,7 @@ describe('planning data source', () => {
     });
     await expect(source.getRecurrenceOccurrence('legacy-null-occurrence')).resolves.toMatchObject({
       completedAt: null,
+      blocksOverridden: false,
     });
   });
 });

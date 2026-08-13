@@ -136,6 +136,7 @@ describe('domain invariants', () => {
       occursOn: '2026-08-13',
       status: 'completed',
       completedAt: null,
+      blocksOverridden: false,
       createdAt,
     })).toThrow();
   });

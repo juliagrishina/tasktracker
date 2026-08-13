@@ -224,6 +224,36 @@ describe('planning use cases', () => {
     await expect(source.getScheduleBlock(replacement.id)).resolves.toEqual(replacement);
   });
 
+  test('rejects a submitted block owned by another task before persistence', async () => {
+    const source = createInMemoryDataSource();
+    const otherTask: TaskItem = { ...task, id: 'foreign-block-task' };
+    const foreignBlock = block('foreign-submitted-block', otherTask.id);
+    await source.saveTaskItem(task);
+    await source.saveTaskItem(otherTask);
+
+    await expect(saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [foreignBlock],
+    })).rejects.toThrow('задаче');
+    await expect(source.getScheduleBlock(foreignBlock.id)).resolves.toBeNull();
+  });
+
+  test('rejects deletion of a block owned by another task', async () => {
+    const source = createInMemoryDataSource();
+    const otherTask: TaskItem = { ...task, id: 'foreign-deleted-block-task' };
+    const foreignBlock = block('foreign-deleted-block', otherTask.id);
+    await source.saveTaskItem(task);
+    await source.saveTaskItem(otherTask);
+    await source.saveScheduleBlock(foreignBlock);
+
+    await expect(saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [],
+      deletedBlockIds: [foreignBlock.id],
+    })).rejects.toThrow('задаче');
+    await expect(source.getScheduleBlock(foreignBlock.id)).resolves.toEqual(foreignBlock);
+  });
+
   test('loads only a task master schedule into its editing snapshot', async () => {
     const source = createInMemoryDataSource();
     await source.saveTaskItem(task);
@@ -248,6 +278,7 @@ describe('planning use cases', () => {
       occursOn: '2026-08-12',
       status: 'active',
       completedAt: null,
+      blocksOverridden: false,
       createdAt,
     });
     await source.saveScheduleBlock(instanceBlock);
@@ -643,6 +674,32 @@ describe('planning use cases', () => {
     await expect(getPlanLoad(source, '2026-08-12')).resolves.toBeCloseTo(33.3333333333);
   });
 
+  test('does not distribute a period estimate when the item has an exact block on another day', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '09:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 10,
+    });
+    await source.saveTaskItem({
+      ...task,
+      periodStartOn: '2026-08-10',
+      periodEndOn: '2026-08-12',
+      estimatedDurationMinutes: 60,
+    });
+    await source.saveScheduleBlock(block(
+      'period-exact-block',
+      task.id,
+      '2026-08-10T08:00:00+03:00',
+      '2026-08-10T08:30:00+03:00',
+    ));
+
+    await expect(getPlanLoad(source, '2026-08-10')).resolves.toBeCloseTo(50);
+    await expect(getPlanLoad(source, '2026-08-11')).resolves.toBe(0);
+    await expect(getPlanLoad(source, '2026-08-12')).resolves.toBe(0);
+  });
+
   test('counts a recurring untimed task estimate on every active instance', async () => {
     const source = createInMemoryDataSource();
     await source.saveSettings({
@@ -783,6 +840,7 @@ describe('planning use cases', () => {
       occursOn: '2026-08-12',
       status: 'active',
       completedAt: null,
+      blocksOverridden: true,
       createdAt,
     });
     await source.saveScheduleBlock(overrideBlock);
@@ -826,6 +884,7 @@ describe('planning use cases', () => {
       occursOn: '2026-08-12',
       status: 'active',
       completedAt: null,
+      blocksOverridden: true,
       createdAt,
     });
     await source.saveScheduleBlock({
@@ -867,6 +926,7 @@ describe('planning use cases', () => {
       occursOn: '2026-08-12',
       status: 'active',
       completedAt: null,
+      blocksOverridden: true,
       createdAt,
     });
     await source.saveScheduleBlock({

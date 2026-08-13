@@ -245,6 +245,12 @@ const schemaVersionSix = `
   ALTER TABLE recurrence_occurrences_v6 RENAME TO recurrence_occurrences;
 `;
 
+const schemaVersionSeven = `
+  ALTER TABLE recurrence_occurrences
+    ADD COLUMN blocks_overridden INTEGER NOT NULL DEFAULT 0
+    CHECK (blocks_overridden IN (0, 1));
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -297,6 +303,12 @@ const migrations: readonly Migration[] = [
     version: 6,
     async apply(database) {
       await database.execAsync(schemaVersionSix);
+    },
+  },
+  {
+    version: 7,
+    async apply(database) {
+      await database.execAsync(schemaVersionSeven);
     },
   },
 ];

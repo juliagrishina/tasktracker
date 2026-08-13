@@ -216,7 +216,12 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     if (!this.recurrenceSeries.has(occurrence.seriesId)) {
       throw new Error('Серия повторений для экземпляра не найдена');
     }
-    assertRecurrenceOccurrenceShape(occurrence);
+    const normalizedOccurrence: RecurrenceOccurrence = {
+      ...occurrence,
+      completedAt: occurrence.completedAt ?? null,
+      blocksOverridden: occurrence.blocksOverridden ?? false,
+    };
+    assertRecurrenceOccurrenceShape(normalizedOccurrence);
     const duplicate = [...this.recurrenceOccurrences.values()].find(
       (saved) => saved.id !== occurrence.id
         && saved.seriesId === occurrence.seriesId
@@ -225,22 +230,27 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     if (duplicate !== undefined) {
       throw new Error('Экземпляр для этой даты уже существует');
     }
-    this.recurrenceOccurrences.set(occurrence.id, {
-      ...occurrence,
-      completedAt: occurrence.completedAt ?? null,
-    });
+    this.recurrenceOccurrences.set(occurrence.id, normalizedOccurrence);
   }
 
   async getRecurrenceOccurrence(id: EntityId): Promise<RecurrenceOccurrence | null> {
     await this.initialize();
     const occurrence = this.recurrenceOccurrences.get(id);
-    return occurrence === undefined ? null : { ...occurrence, completedAt: occurrence.completedAt ?? null };
+    return occurrence === undefined ? null : {
+      ...occurrence,
+      completedAt: occurrence.completedAt ?? null,
+      blocksOverridden: occurrence.blocksOverridden ?? false,
+    };
   }
 
   async listRecurrenceOccurrences(): Promise<readonly RecurrenceOccurrence[]> {
     await this.initialize();
     return [...this.recurrenceOccurrences.values()]
-      .map((occurrence) => ({ ...occurrence, completedAt: occurrence.completedAt ?? null }))
+      .map((occurrence) => ({
+        ...occurrence,
+        completedAt: occurrence.completedAt ?? null,
+        blocksOverridden: occurrence.blocksOverridden ?? false,
+      }))
       .sort(compareByCreatedAt);
   }
 
