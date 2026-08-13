@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import type { EntityId, ScheduleBlock } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 
 export type TaskScheduleMode = 'none' | 'date' | 'period';
@@ -90,9 +91,78 @@ export function validateTaskPlanningDraft(value: TaskPlanningDraft): string | nu
     || block.startsAt.trim() === ''
     || !Number.isInteger(Number(block.durationMinutes))
     || Number(block.durationMinutes) <= 0
+    || !isValidLocalDate(block.date)
+    || !isValidBlockStart(block.startsAt)
   ));
 
   return invalidBlockIndex === -1 ? null : `Заполните корректно блок времени ${invalidBlockIndex + 1}`;
+}
+
+function isValidLocalDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match === null) {
+    return false;
+  }
+
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return (
+    date.getFullYear() === Number(year)
+    && date.getMonth() === Number(month) - 1
+    && date.getDate() === Number(day)
+  );
+}
+
+function isValidBlockStart(value: string): boolean {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (match === null) {
+    return false;
+  }
+
+  const [, hours, minutes] = match;
+  return (
+    Number(hours) >= 0
+    && Number(hours) <= 23
+    && Number(minutes) >= 0
+    && Number(minutes) <= 59
+    && Number(minutes) % 5 === 0
+  );
+}
+
+function toOffsetIsoDateTime(date: Date): string {
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const offsetHours = String(Math.floor(Math.abs(offsetMinutes) / 60)).padStart(2, '0');
+  const offsetRemainder = String(Math.abs(offsetMinutes) % 60).padStart(2, '0');
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:00${sign}${offsetHours}:${offsetRemainder}`;
+}
+
+export function createScheduleBlocksFromDraft(
+  draft: TaskPlanningDraft,
+  taskItemId: EntityId,
+  createdAt: string,
+): ScheduleBlock[] {
+  return draft.blocks.map((block) => {
+    const [year, month, day] = block.date.split('-').map(Number);
+    const [hours, minutes] = block.startsAt.split(':').map(Number);
+    const startsAt = new Date(year, month - 1, day, hours, minutes);
+    const endsAt = new Date(startsAt.getTime() + Number(block.durationMinutes) * 60_000);
+
+    return {
+      id: block.id,
+      taskItemId,
+      occurrenceId: null,
+      startsAt: toOffsetIsoDateTime(startsAt),
+      endsAt: toOffsetIsoDateTime(endsAt),
+      createdAt,
+    };
+  });
 }
 
 export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanningFieldsProps) {
@@ -117,7 +187,9 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
         })}
       </View>
       {value.scheduleMode === 'date' ? (
-        <PlanningInput accessibilityLabel="Дата задачи" label="Дата задачи" onChangeText={(scheduledOn) => update({ scheduledOn })} value={value.scheduledOn} />
+        <PlanningInput accessibilityLabel="Дата задачи" label="Дата задачи" onChangeText={(scheduledOn) => {
+          update({ scheduledOn });
+        }} value={value.scheduledOn} />
       ) : null}
       {value.scheduleMode === 'period' ? (
         <View>

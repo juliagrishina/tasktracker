@@ -118,7 +118,7 @@ export async function saveTaskPlanning(
   input: SaveTaskPlanningInput,
 ): Promise<SaveTaskPlanningResult> {
   const task = await getExistingTask(source, input.taskId);
-  const existingBlocks = await source.listScheduleBlocksForTaskItem(task.id);
+  const existingBlocks = await source.listScheduleBlocks();
   const conflicts = getConflicts(input.blocks, existingBlocks);
 
   await source.transaction(async () => {

@@ -114,11 +114,20 @@ export function findScheduleConflicts(
   candidate: ScheduleBlock,
   existingBlocks: readonly ScheduleBlock[],
 ): ScheduleBlock[] {
+  const candidateStartsAt = new Date(candidate.startsAt).getTime();
+  const candidateEndsAt = new Date(candidate.endsAt).getTime();
+
   return existingBlocks.filter(
-    (existing) =>
-      existing.id !== candidate.id &&
-      candidate.startsAt < existing.endsAt &&
-      existing.startsAt < candidate.endsAt,
+    (existing) => {
+      const existingStartsAt = new Date(existing.startsAt).getTime();
+      const existingEndsAt = new Date(existing.endsAt).getTime();
+
+      return (
+        existing.id !== candidate.id
+        && candidateStartsAt < existingEndsAt
+        && existingStartsAt < candidateEndsAt
+      );
+    },
   );
 }
 

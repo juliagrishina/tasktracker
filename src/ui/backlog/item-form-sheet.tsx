@@ -11,15 +11,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppServices } from '../../application/app-services-provider';
-import type { Project, Reminder, TaskItem } from '../../domain/entities';
+import type { Project, Reminder, ScheduleBlock, TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 import {
+  createScheduleBlocksFromDraft,
   createDefaultBlock,
   createInitialTaskPlanningDraft,
   TaskPlanningFields,
   type TaskPlanningDraft,
   validateTaskPlanningDraft,
 } from './task-planning-fields';
+import {
+  ReminderTimeConfirmation,
+  ScheduleConflictConfirmation,
+} from './confirmation';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
@@ -37,6 +42,11 @@ interface ItemFormSheetProps {
   planningContext?: {
     defaultDate: string;
     onPlanningDraftChange?: (draft: TaskPlanningDraft) => void;
+    occurrence?: {
+      id: string;
+      occursOn: string;
+      seriesId: string;
+    };
   };
 }
 
@@ -45,8 +55,8 @@ function emptyToNull(value: string): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
-function createItemId(type: ItemFormType): string {
-  return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function createItemId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function getInitialProjectId(item: FormItem | undefined, projectId: string | null | undefined): string | null {
@@ -89,6 +99,54 @@ function getInitialRepeatInterval(item: FormItem | undefined): string {
     : '1';
 }
 
+interface PendingScheduleConflict {
+  blocks: readonly ScheduleBlock[];
+  titles: readonly string[];
+}
+
+interface PendingReminderConversion {
+  block: ScheduleBlock;
+  createdAt: string;
+  projectId: string | null;
+  reminderId: string;
+  taskId: string;
+}
+
+function getRecurrenceStartOn(
+  draft: TaskPlanningDraft,
+  fallbackDate: string,
+): string {
+  if (draft.scheduleMode === 'date') {
+    return draft.scheduledOn;
+  }
+
+  if (draft.scheduleMode === 'period') {
+    return draft.periodStartOn;
+  }
+
+  return draft.blocks[0]?.date ?? fallbackDate;
+}
+
+function getScheduleConflictTitles(blocks: readonly ScheduleBlock[]): readonly string[] {
+  return blocks.map((block) => `Блок ${block.startsAt.slice(11, 16)}–${block.endsAt.slice(11, 16)}`);
+}
+
+function getReminderTimeDraft(
+  date: string,
+  startsAt: string,
+  durationMinutes: string,
+): TaskPlanningDraft {
+  return {
+    ...createInitialTaskPlanningDraft(),
+    blocks: [{
+      date,
+      durationMinutes,
+      id: 'reminder-time-block',
+      startsAt,
+    }],
+  };
+}
+
 export function ItemFormSheet({
   visible,
   mode,
@@ -100,7 +158,7 @@ export function ItemFormSheet({
   onSaved,
   planningContext,
 }: ItemFormSheetProps) {
-  const { backlog, backlogActions } = useAppServices();
+  const { backlog, backlogActions, planningActions } = useAppServices();
   const [title, setTitle] = useState(() => item?.title ?? '');
   const [description, setDescription] = useState(() => getInitialDescription(item));
   const [duration, setDuration] = useState(() => getInitialDuration(item));
@@ -114,11 +172,20 @@ export function ItemFormSheet({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
+  const [planningTaskId, setPlanningTaskId] = useState<string | null>(null);
+  const [pendingScheduleConflict, setPendingScheduleConflict] = useState<PendingScheduleConflict | null>(null);
+  const [occurrenceScope, setOccurrenceScope] = useState<'instance' | 'series' | null>(null);
+  const [isReminderTimeEnabled, setIsReminderTimeEnabled] = useState(false);
+  const [reminderBlockDate, setReminderBlockDate] = useState('');
+  const [reminderBlockStartsAt, setReminderBlockStartsAt] = useState('');
+  const [pendingReminderConversion, setPendingReminderConversion] = useState<PendingReminderConversion | null>(null);
   const defaultBlock = useMemo(
     () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
     [planningContext?.defaultDate],
   );
   const isPlanTaskForm = type === 'task' && planningContext !== undefined;
+  const occurrence = planningContext?.occurrence;
+  const canSelectProject = type === 'task' || (type === 'reminder' && isReminderTimeEnabled);
 
   const formTitle = useMemo(() => {
     const createTitle: Record<ItemFormType, string> = {
@@ -142,6 +209,18 @@ export function ItemFormSheet({
           throw new Error(planningError);
         }
       }
+      if (type === 'reminder' && isReminderTimeEnabled) {
+        const planningError = validateTaskPlanningDraft(
+          getReminderTimeDraft(
+            reminderBlockDate,
+            reminderBlockStartsAt,
+            duration,
+          ),
+        );
+        if (planningError !== null) {
+          throw new Error(planningError);
+        }
+      }
       const estimatedDurationMinutes = duration.trim() === '' ? null : Number(duration);
       const now = new Date().toISOString();
 
@@ -159,8 +238,10 @@ export function ItemFormSheet({
       }
 
       if (type === 'task') {
-        if (mode === 'create') {
-          await backlogActions.createTask({
+        let taskId: string | null = null;
+
+        if (mode === 'create' && planningTaskId === null) {
+          const createdTask = await backlogActions.createTask({
             id: createItemId(type),
             title,
             description,
@@ -168,7 +249,24 @@ export function ItemFormSheet({
             estimatedDurationMinutes,
             createdAt: now,
           });
+          taskId = createdTask.id;
+          if (isPlanTaskForm) {
+            setPlanningTaskId(createdTask.id);
+          }
+        } else if (mode === 'create' && planningTaskId !== null) {
+          taskId = planningTaskId;
+          await backlogActions.updateTaskItem({
+            id: taskId,
+            title,
+            description,
+            estimatedDurationMinutes,
+          });
+          await backlogActions.moveTaskToProject({
+            taskId,
+            projectId: selectedProjectId,
+          });
         } else if (item !== undefined && 'kind' in item && item.kind === 'task') {
+          taskId = item.id;
           await backlogActions.updateTaskItem({
             id: item.id,
             title,
@@ -180,6 +278,65 @@ export function ItemFormSheet({
               taskId: item.id,
               projectId: selectedProjectId,
             });
+          }
+        }
+
+        if (isPlanTaskForm && taskId !== null) {
+          if (occurrence !== undefined && occurrenceScope === null) {
+            throw new Error('Выберите область изменения повторения');
+          }
+
+          if (occurrence !== undefined && occurrenceScope === 'instance') {
+            await planningActions.saveOccurrenceException({
+              id: occurrence.id,
+              seriesId: occurrence.seriesId,
+              occursOn: occurrence.occursOn,
+              status: 'active',
+              createdAt: now,
+            });
+            onSaved?.();
+            onClose();
+            return;
+          }
+
+          const recurrence = occurrenceScope === 'series' && planningDraft.repeatFrequency === 'none'
+            ? undefined
+            : planningDraft.repeatFrequency === 'none'
+              ? null
+              : {
+                  id: occurrence?.seriesId ?? createItemId('recurrence'),
+                  frequency: planningDraft.repeatFrequency,
+                  interval: Number(planningDraft.repeatInterval),
+                  startsOn: getRecurrenceStartOn(
+                    planningDraft,
+                    planningContext.defaultDate,
+                  ),
+                  createdAt: now,
+                };
+          const result = await planningActions.saveTaskPlanning({
+            taskId,
+            scheduledOn:
+              planningDraft.scheduleMode === 'date'
+                ? planningDraft.scheduledOn
+                : null,
+            periodStartOn:
+              planningDraft.scheduleMode === 'period'
+                ? planningDraft.periodStartOn
+                : null,
+            periodEndOn:
+              planningDraft.scheduleMode === 'period'
+                ? planningDraft.periodEndOn
+                : null,
+            blocks: createScheduleBlocksFromDraft(planningDraft, taskId, now),
+            recurrence,
+          });
+
+          if (result.conflict !== null) {
+            setPendingScheduleConflict({
+              blocks: createScheduleBlocksFromDraft(planningDraft, taskId, now),
+              titles: getScheduleConflictTitles(result.conflict.map(({ block }) => block)),
+            });
+            return;
           }
         }
       }
@@ -220,17 +377,114 @@ export function ItemFormSheet({
           estimatedDurationMinutes,
         };
 
+        let reminderId: string | null = null;
         if (mode === 'create') {
-          await backlogActions.createReminder({
+          const createdReminder = await backlogActions.createReminder({
             id: createItemId(type),
             ...reminderInput,
             createdAt: now,
           });
+          reminderId = createdReminder.id;
         } else if (item !== undefined) {
-          await backlogActions.updateReminder({ id: item.id, ...reminderInput });
+          const updatedReminder = await backlogActions.updateReminder({
+            id: item.id,
+            ...reminderInput,
+          });
+          reminderId = updatedReminder.id;
+        }
+
+        if (reminderId !== null) {
+          await planningActions.saveReminderPlanning({
+            reminderId,
+            remindsOn: reminderInput.remindsOn,
+            periodStartOn: reminderInput.periodStartOn,
+            periodEndOn: reminderInput.periodEndOn,
+            recurrence: repeatFrequency === ''
+              ? null
+              : {
+                  id: createItemId('recurrence'),
+                  frequency: repeatFrequency,
+                  interval: Number(repeatInterval),
+                  startsOn:
+                    reminderInput.remindsOn
+                    ?? reminderInput.periodStartOn
+                    ?? reminderInput.periodEndOn
+                    ?? now.slice(0, 10),
+                  createdAt: now,
+            },
+          });
+
+          if (isReminderTimeEnabled) {
+            const taskId = createItemId('task');
+            const [block] = createScheduleBlocksFromDraft(
+              getReminderTimeDraft(
+                reminderBlockDate,
+                reminderBlockStartsAt,
+                duration,
+              ),
+              taskId,
+              now,
+            );
+            if (block === undefined) {
+              throw new Error('Не удалось создать блок времени');
+            }
+            setPendingReminderConversion({
+              block,
+              createdAt: now,
+              projectId: selectedProjectId,
+              reminderId,
+              taskId,
+            });
+            return;
+          }
         }
       }
 
+      onSaved?.();
+      onClose();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const resolvePendingScheduleConflict = async (decision: 'cancel' | 'save') => {
+    if (pendingScheduleConflict === null) {
+      return;
+    }
+
+    setError(null);
+    setIsSaving(true);
+    try {
+      await planningActions.resolveScheduleConflict({
+        decision,
+        blocks: pendingScheduleConflict.blocks,
+      });
+      setPendingScheduleConflict(null);
+      if (decision === 'save') {
+        onSaved?.();
+        onClose();
+      }
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const resolveReminderTimeConversion = async (decision: 'cancel' | 'save') => {
+    if (pendingReminderConversion === null) {
+      return;
+    }
+
+    setError(null);
+    setIsSaving(true);
+    try {
+      if (decision === 'save') {
+        await planningActions.convertReminderAndSchedule(pendingReminderConversion);
+      }
+      setPendingReminderConversion(null);
       onSaved?.();
       onClose();
     } catch (caughtError) {
@@ -276,7 +530,7 @@ export function ItemFormSheet({
               style={[styles.input, styles.multilineInput]}
               value={description}
             />
-            {type === 'task' ? (
+            {canSelectProject ? (
               <View>
                 <Text style={styles.label}>Проект</Text>
                 <Pressable
@@ -327,6 +581,31 @@ export function ItemFormSheet({
                 value={planningDraft}
               />
             ) : null}
+            {occurrence === undefined ? null : (
+              <View>
+                <Text style={styles.label}>Применить изменения</Text>
+                <View style={styles.repeatOptions}>
+                  {([
+                    ['Только этот экземпляр', 'instance'],
+                    ['Всю серию', 'series'],
+                  ] as const).map(([label, value]) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={value}
+                      onPress={() => setOccurrenceScope(value)}
+                      style={[
+                        styles.repeatOption,
+                        occurrenceScope === value && styles.repeatOptionSelected,
+                      ]}>
+                      <Text style={[
+                        styles.repeatOptionText,
+                        occurrenceScope === value && styles.repeatOptionTextSelected,
+                      ]}>{label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
             {type === 'reminder' ? (
               <View style={styles.reminderFields}>
                 <Text style={styles.label}>Дата</Text>
@@ -354,15 +633,59 @@ export function ItemFormSheet({
                 {repeatFrequency !== '' ? (
                   <TextInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" onChangeText={setRepeatInterval} placeholder="Интервал" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={repeatInterval} />
                 ) : null}
+                {isReminderTimeEnabled ? (
+                  <View>
+                    <Text style={styles.label}>Дата блока</Text>
+                    <TextInput accessibilityLabel="Дата блока напоминания" onChangeText={setReminderBlockDate} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={reminderBlockDate} />
+                    <Text style={styles.label}>Время блока</Text>
+                    <TextInput accessibilityLabel="Время блока напоминания" onChangeText={setReminderBlockStartsAt} placeholder="ЧЧ:ММ" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={reminderBlockStartsAt} />
+                  </View>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setReminderBlockDate(
+                        remindsOn || periodStartOn || new Date().toISOString().slice(0, 10),
+                      );
+                      setIsReminderTimeEnabled(true);
+                    }}
+                    style={styles.addReminderTimeAction}>
+                    <Text style={styles.addReminderTimeText}>Добавить время</Text>
+                  </Pressable>
+                )}
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
           </ScrollView>
+          {pendingScheduleConflict === null ? null : (
+            <ScheduleConflictConfirmation
+              conflictTitles={pendingScheduleConflict.titles}
+              onCancel={() => void resolvePendingScheduleConflict('cancel')}
+              onSave={() => void resolvePendingScheduleConflict('save')}
+            />
+          )}
+          {pendingReminderConversion === null ? null : (
+            <ReminderTimeConfirmation
+              onCancel={() => void resolveReminderTimeConversion('cancel')}
+              onConfirm={() => void resolveReminderTimeConversion('save')}
+            />
+          )}
           <View style={styles.footer}>
             <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>
               <Text style={styles.secondaryActionText}>Отмена</Text>
             </Pressable>
-            <Pressable accessibilityState={{ disabled: isSaving }} onPress={() => void submit()} style={[styles.action, styles.primaryAction, isSaving && styles.disabledAction]}>
+            <Pressable
+              accessibilityState={{
+                disabled: isSaving || pendingScheduleConflict !== null || pendingReminderConversion !== null,
+              }}
+              disabled={isSaving || pendingScheduleConflict !== null || pendingReminderConversion !== null}
+              onPress={() => void submit()}
+              style={[
+                styles.action,
+                styles.primaryAction,
+                (isSaving || pendingScheduleConflict !== null || pendingReminderConversion !== null)
+                  && styles.disabledAction,
+              ]}>
               <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? 'Создать' : 'Сохранить'}</Text>
             </Pressable>
           </View>
@@ -460,6 +783,18 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.body,
   },
   reminderFields: { marginTop: designTokens.space[2] },
+  addReminderTimeAction: {
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    marginTop: designTokens.space[16],
+    minHeight: designTokens.size.touchTargetMin,
+  },
+  addReminderTimeText: {
+    color: designTokens.color.primaryStrong,
+    fontSize: designTokens.typography.size.label,
+    fontWeight: designTokens.typography.weight.semibold,
+    lineHeight: designTokens.typography.lineHeight.label,
+  },
   repeatOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: designTokens.space[8] },
   repeatOption: {
     borderWidth: 1,

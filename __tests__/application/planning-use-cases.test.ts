@@ -80,6 +80,28 @@ describe('planning use cases', () => {
     );
   });
 
+  test('reports a conflict with a block that belongs to another local task', async () => {
+    const source = createInMemoryDataSource();
+    const otherTask: TaskItem = { ...task, id: 'task-planning-other' };
+    await source.saveTaskItem(task);
+    await source.saveTaskItem(otherTask);
+    const existingBlock = block('block-other-task', otherTask.id);
+    const conflictingBlock = block(
+      'block-current-task',
+      task.id,
+      '2026-08-05T09:30:00.000Z',
+      '2026-08-05T10:30:00.000Z',
+    );
+    await source.saveScheduleBlock(existingBlock);
+
+    await expect(
+      saveTaskPlanning(source, { taskId: task.id, blocks: [conflictingBlock] }),
+    ).resolves.toEqual({
+      conflict: [expect.objectContaining({ block: existingBlock })],
+    });
+    await expect(source.getScheduleBlock(conflictingBlock.id)).resolves.toBeNull();
+  });
+
   test('stores task date, period and a recurrence series when blocks do not conflict', async () => {
     const source = createInMemoryDataSource();
     await source.saveTaskItem(task);

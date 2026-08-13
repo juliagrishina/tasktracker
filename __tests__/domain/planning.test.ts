@@ -51,6 +51,20 @@ describe('planning domain rules', () => {
     expect(conflicts.map(({ id }) => id)).toEqual(['inside', 'after']);
   });
 
+  test('compares real moments when blocks use different ISO offsets', () => {
+    const candidate = block(
+      'candidate',
+      '2026-08-05T09:30:00+03:00',
+      '2026-08-05T10:00:00+03:00',
+    );
+
+    expect(
+      findScheduleConflicts(candidate, [
+        block('same-moment', '2026-08-05T06:00:00.000Z', '2026-08-05T07:00:00.000Z'),
+      ]).map(({ id }) => id),
+    ).toEqual(['same-moment']);
+  });
+
   test('counts overlapping and outside-workday blocks in full', () => {
     const percentage = getDayLoadPercent(settings, [
       block('one', '2026-08-05T09:00:00.000+03:00', '2026-08-05T10:00:00.000+03:00'),
