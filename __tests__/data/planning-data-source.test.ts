@@ -91,4 +91,27 @@ describe('planning data source', () => {
     await expect(source.listRecurrenceSeries()).resolves.toEqual([]);
     await expect(source.listRecurrenceOccurrences()).resolves.toEqual([]);
   });
+
+  test('rejects a second exception for the same recurrence date', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    await source.saveRecurrenceSeries(series);
+    await source.saveRecurrenceOccurrence(occurrence);
+
+    await expect(source.saveRecurrenceOccurrence({
+      ...occurrence,
+      id: 'occurrence-duplicate-date',
+    })).rejects.toThrow('уже существует');
+  });
+
+  test('rejects a block that refers to an unknown recurrence occurrence', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+
+    await expect(source.saveScheduleBlock({
+      ...block,
+      id: 'orphan-occurrence-block',
+      occurrenceId: 'unknown-occurrence',
+    })).rejects.toThrow();
+  });
 });

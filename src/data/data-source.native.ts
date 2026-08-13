@@ -87,6 +87,7 @@ interface RecurrenceOccurrenceRow {
   series_id: string;
   occurs_on: string;
   status: RecurrenceOccurrence['status'];
+  task_patch: string | null;
   created_at: string;
 }
 
@@ -689,18 +690,20 @@ class NativeDataSource implements AppDataSource {
 
     const database = await this.getDatabase();
     await database.runAsync(
-      `INSERT INTO recurrence_occurrences (id, series_id, occurs_on, status, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO recurrence_occurrences (id, series_id, occurs_on, status, task_patch, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         series_id = excluded.series_id,
         occurs_on = excluded.occurs_on,
         status = excluded.status,
+        task_patch = excluded.task_patch,
         created_at = excluded.created_at`,
       [
         occurrence.id,
         occurrence.seriesId,
         occurrence.occursOn,
         occurrence.status,
+        occurrence.taskPatch === undefined ? null : JSON.stringify(occurrence.taskPatch),
         occurrence.createdAt,
       ],
     );
@@ -710,7 +713,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<RecurrenceOccurrenceRow>(
-      `SELECT id, series_id, occurs_on, status, created_at
+      `SELECT id, series_id, occurs_on, status, task_patch, created_at
       FROM recurrence_occurrences
       WHERE id = ?`,
       [id],
@@ -723,6 +726,7 @@ class NativeDataSource implements AppDataSource {
           seriesId: row.series_id,
           occursOn: row.occurs_on,
           status: row.status,
+          ...(row.task_patch === null ? {} : { taskPatch: JSON.parse(row.task_patch) }),
           createdAt: row.created_at,
         };
   }
@@ -731,7 +735,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<RecurrenceOccurrenceRow>(
-      `SELECT id, series_id, occurs_on, status, created_at
+      `SELECT id, series_id, occurs_on, status, task_patch, created_at
       FROM recurrence_occurrences
       ORDER BY created_at ASC, id ASC`,
     );
@@ -741,6 +745,7 @@ class NativeDataSource implements AppDataSource {
       seriesId: row.series_id,
       occursOn: row.occurs_on,
       status: row.status,
+      ...(row.task_patch === null ? {} : { taskPatch: JSON.parse(row.task_patch) }),
       createdAt: row.created_at,
     }));
   }

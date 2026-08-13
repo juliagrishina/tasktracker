@@ -41,6 +41,10 @@ interface ItemFormSheetProps {
   onSaved?: () => void;
   planningContext?: {
     defaultDate: string;
+    initialBlockIds?: readonly string[];
+    initialDraft?: TaskPlanningDraft;
+    seriesInitialBlockIds?: readonly string[];
+    seriesDraft?: TaskPlanningDraft;
     onPlanningDraftChange?: (draft: TaskPlanningDraft) => void;
     occurrence?: {
       id: string;
@@ -101,6 +105,7 @@ function getInitialRepeatInterval(item: FormItem | undefined): string {
 
 interface PendingScheduleConflict {
   blocks: readonly ScheduleBlock[];
+  deletedBlockIds: readonly string[];
   titles: readonly string[];
 }
 
@@ -171,7 +176,9 @@ export function ItemFormSheet({
   const [repeatInterval, setRepeatInterval] = useState(() => getInitialRepeatInterval(item));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
+  const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(
+    () => planningContext?.initialDraft ?? createInitialTaskPlanningDraft(),
+  );
   const [planningTaskId, setPlanningTaskId] = useState<string | null>(null);
   const [pendingScheduleConflict, setPendingScheduleConflict] = useState<PendingScheduleConflict | null>(null);
   const [occurrenceScope, setOccurrenceScope] = useState<'instance' | 'series' | null>(null);
@@ -183,7 +190,7 @@ export function ItemFormSheet({
     () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
     [planningContext?.defaultDate],
   );
-  const isPlanTaskForm = type === 'task' && planningContext !== undefined;
+  const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
   const occurrence = planningContext?.occurrence;
   const canSelectProject = type === 'task' || (type === 'reminder' && isReminderTimeEnabled);
 
@@ -240,6 +247,42 @@ export function ItemFormSheet({
       if (type === 'task') {
         let taskId: string | null = null;
 
+        if (isPlanTaskForm && occurrence !== undefined && occurrenceScope === null) {
+          throw new Error('Выберите область изменения повторения');
+        }
+
+        if (
+          isPlanTaskForm
+          && occurrence !== undefined
+          && occurrenceScope === 'instance'
+          && mode === 'edit'
+          && item !== undefined
+          && 'kind' in item
+          && item.kind === 'task'
+        ) {
+          const occurrenceBlocks = createScheduleBlocksFromDraft(planningDraft, item.id, now)
+            .map((block) => ({ ...block, occurrenceId: occurrence.id }));
+          await planningActions.saveOccurrenceException({
+            id: occurrence.id,
+            seriesId: occurrence.seriesId,
+            occursOn: occurrence.occursOn,
+            status: 'active',
+            taskPatch: {
+              title,
+              description: emptyToNull(description),
+              scheduledOn: planningDraft.scheduleMode === 'date' ? planningDraft.scheduledOn : null,
+              periodStartOn: planningDraft.scheduleMode === 'period' ? planningDraft.periodStartOn : null,
+              periodEndOn: planningDraft.scheduleMode === 'period' ? planningDraft.periodEndOn : null,
+              estimatedDurationMinutes,
+            },
+            blocks: occurrenceBlocks,
+            createdAt: now,
+          });
+          onSaved?.();
+          onClose();
+          return;
+        }
+
         if (mode === 'create' && planningTaskId === null) {
           const createdTask = await backlogActions.createTask({
             id: createItemId(type),
@@ -282,24 +325,16 @@ export function ItemFormSheet({
         }
 
         if (isPlanTaskForm && taskId !== null) {
-          if (occurrence !== undefined && occurrenceScope === null) {
-            throw new Error('Выберите область изменения повторения');
-          }
-
-          if (occurrence !== undefined && occurrenceScope === 'instance') {
-            await planningActions.saveOccurrenceException({
-              id: occurrence.id,
-              seriesId: occurrence.seriesId,
-              occursOn: occurrence.occursOn,
-              status: 'active',
-              createdAt: now,
-            });
-            onSaved?.();
-            onClose();
-            return;
-          }
-
-          const recurrence = occurrenceScope === 'series' && planningDraft.repeatFrequency === 'none'
+          const scheduleBlocks = createScheduleBlocksFromDraft(planningDraft, taskId, now);
+          const initialBlockIds = occurrenceScope === 'series'
+            ? planningContext.seriesInitialBlockIds ?? planningContext.initialBlockIds
+            : planningContext.initialBlockIds;
+          const deletedBlockIds = initialBlockIds?.filter(
+            (blockId) => !scheduleBlocks.some((block) => block.id === blockId),
+          ) ?? [];
+          const recurrence = occurrenceScope === 'series'
+            && planningDraft.repeatFrequency === 'none'
+            && planningContext.seriesDraft === undefined
             ? undefined
             : planningDraft.repeatFrequency === 'none'
               ? null
@@ -327,13 +362,15 @@ export function ItemFormSheet({
               planningDraft.scheduleMode === 'period'
                 ? planningDraft.periodEndOn
                 : null,
-            blocks: createScheduleBlocksFromDraft(planningDraft, taskId, now),
+            blocks: scheduleBlocks,
+            deletedBlockIds,
             recurrence,
           });
 
           if (result.conflict !== null) {
             setPendingScheduleConflict({
-              blocks: createScheduleBlocksFromDraft(planningDraft, taskId, now),
+              blocks: scheduleBlocks,
+              deletedBlockIds,
               titles: getScheduleConflictTitles(result.conflict.map(({ block }) => block)),
             });
             return;
@@ -342,11 +379,15 @@ export function ItemFormSheet({
       }
 
       if (type === 'subtask') {
+        let subtaskId: string | null = null;
+        if (isPlanTaskForm && occurrence !== undefined && occurrenceScope === null) {
+          throw new Error('Выберите область изменения повторения');
+        }
         if (mode === 'create') {
           if (parentTaskId === undefined) {
             throw new Error('Не выбрана задача-родитель');
           }
-          await backlogActions.createSubtask({
+          const createdSubtask = await backlogActions.createSubtask({
             id: createItemId(type),
             title,
             description,
@@ -354,13 +395,76 @@ export function ItemFormSheet({
             estimatedDurationMinutes,
             createdAt: now,
           });
+          subtaskId = createdSubtask.id;
         } else if (item !== undefined && 'kind' in item && item.kind === 'subtask') {
+          subtaskId = item.id;
           await backlogActions.updateTaskItem({
             id: item.id,
             title,
             description,
             estimatedDurationMinutes,
           });
+        }
+
+        if (isPlanTaskForm && subtaskId !== null) {
+          const scheduleBlocks = createScheduleBlocksFromDraft(planningDraft, subtaskId, now);
+          const initialBlockIds = occurrenceScope === 'series'
+            ? planningContext.seriesInitialBlockIds ?? planningContext.initialBlockIds
+            : planningContext.initialBlockIds;
+          const deletedBlockIds = initialBlockIds?.filter(
+            (blockId) => !scheduleBlocks.some((block) => block.id === blockId),
+          ) ?? [];
+          if (occurrence !== undefined && occurrenceScope === 'instance') {
+            await planningActions.saveOccurrenceException({
+              id: occurrence.id,
+              seriesId: occurrence.seriesId,
+              occursOn: occurrence.occursOn,
+              status: 'active',
+              taskPatch: {
+                title,
+                description: emptyToNull(description),
+                scheduledOn: planningDraft.scheduleMode === 'date' ? planningDraft.scheduledOn : null,
+                periodStartOn: planningDraft.scheduleMode === 'period' ? planningDraft.periodStartOn : null,
+                periodEndOn: planningDraft.scheduleMode === 'period' ? planningDraft.periodEndOn : null,
+                estimatedDurationMinutes,
+              },
+              blocks: scheduleBlocks.map((block) => ({ ...block, occurrenceId: occurrence.id })),
+              createdAt: now,
+            });
+            onSaved?.();
+            onClose();
+            return;
+          }
+          const recurrence = occurrenceScope === 'series'
+            && planningDraft.repeatFrequency === 'none'
+            && planningContext.seriesDraft === undefined
+            ? undefined
+            : planningDraft.repeatFrequency === 'none'
+            ? null
+            : {
+                id: occurrence?.seriesId ?? createItemId('recurrence'),
+                frequency: planningDraft.repeatFrequency,
+                interval: Number(planningDraft.repeatInterval),
+                startsOn: getRecurrenceStartOn(planningDraft, planningContext.defaultDate),
+                createdAt: now,
+              };
+          const result = await planningActions.saveTaskPlanning({
+            taskId: subtaskId,
+            scheduledOn: planningDraft.scheduleMode === 'date' ? planningDraft.scheduledOn : null,
+            periodStartOn: planningDraft.scheduleMode === 'period' ? planningDraft.periodStartOn : null,
+            periodEndOn: planningDraft.scheduleMode === 'period' ? planningDraft.periodEndOn : null,
+            blocks: scheduleBlocks,
+            deletedBlockIds,
+            recurrence,
+          });
+          if (result.conflict !== null) {
+            setPendingScheduleConflict({
+              blocks: scheduleBlocks,
+              deletedBlockIds,
+              titles: getScheduleConflictTitles(result.conflict.map(({ block }) => block)),
+            });
+            return;
+          }
         }
       }
 
@@ -460,6 +564,7 @@ export function ItemFormSheet({
       await planningActions.resolveScheduleConflict({
         decision,
         blocks: pendingScheduleConflict.blocks,
+        deletedBlockIds: pendingScheduleConflict.deletedBlockIds,
       });
       setPendingScheduleConflict(null);
       if (decision === 'save') {
@@ -468,6 +573,30 @@ export function ItemFormSheet({
       }
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const cancelOccurrence = async () => {
+    if (occurrence === undefined) {
+      return;
+    }
+
+    setError(null);
+    setIsSaving(true);
+    try {
+      await planningActions.saveOccurrenceException({
+        id: occurrence.id,
+        seriesId: occurrence.seriesId,
+        occursOn: occurrence.occursOn,
+        status: 'cancelled',
+        createdAt: new Date().toISOString(),
+      });
+      onSaved?.();
+      onClose();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440');
     } finally {
       setIsSaving(false);
     }
@@ -592,7 +721,15 @@ export function ItemFormSheet({
                     <Pressable
                       accessibilityRole="button"
                       key={value}
-                      onPress={() => setOccurrenceScope(value)}
+                      onPress={() => {
+                        setOccurrenceScope(value);
+                        if (value === 'series' && planningContext?.seriesDraft !== undefined) {
+                          setPlanningDraft(planningContext.seriesDraft);
+                        }
+                        if (value === 'instance' && planningContext?.initialDraft !== undefined) {
+                          setPlanningDraft(planningContext.initialDraft);
+                        }
+                      }}
                       style={[
                         styles.repeatOption,
                         occurrenceScope === value && styles.repeatOptionSelected,
@@ -604,6 +741,14 @@ export function ItemFormSheet({
                     </Pressable>
                   ))}
                 </View>
+                <Pressable
+                  accessibilityLabel={'\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u044d\u0442\u043e\u0442 \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440'}
+                  accessibilityRole="button"
+                  disabled={isSaving}
+                  onPress={() => void cancelOccurrence()}
+                  style={[styles.cancelOccurrenceAction, isSaving && styles.disabledAction]}>
+                  <Text style={styles.cancelOccurrenceText}>{'\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u044d\u0442\u043e\u0442 \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440'}</Text>
+                </Pressable>
               </View>
             )}
             {type === 'reminder' ? (
@@ -811,6 +956,18 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.meta,
   },
   repeatOptionTextSelected: { color: designTokens.color.primaryStrong, fontWeight: designTokens.typography.weight.bold },
+  cancelOccurrenceAction: {
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    minHeight: designTokens.size.touchTargetMin,
+    marginTop: designTokens.space[8],
+  },
+  cancelOccurrenceText: {
+    color: designTokens.color.feedback.danger.foreground,
+    fontSize: designTokens.typography.size.label,
+    fontWeight: designTokens.typography.weight.semibold,
+    lineHeight: designTokens.typography.lineHeight.label,
+  },
   error: {
     marginTop: designTokens.space[16],
     color: designTokens.color.feedback.danger.foreground,

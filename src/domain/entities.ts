@@ -76,11 +76,21 @@ export interface RecurrenceSeries {
   createdAt: string;
 }
 
+export interface TaskOccurrencePatch {
+  title: string;
+  description: string | null;
+  scheduledOn: string | null;
+  periodStartOn: string | null;
+  periodEndOn: string | null;
+  estimatedDurationMinutes: number | null;
+}
+
 export interface RecurrenceOccurrence {
   id: EntityId;
   seriesId: EntityId;
   occursOn: string;
   status: 'active' | 'cancelled';
+  taskPatch?: TaskOccurrencePatch;
   createdAt: string;
 }
 

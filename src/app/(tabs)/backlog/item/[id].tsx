@@ -4,9 +4,14 @@ import { StyleSheet, Text } from 'react-native';
 
 import { useAppServices } from '../../../../application/app-services-provider';
 import type { BacklogItemKind } from '../../../../application/backlog-types';
+import type { TaskPlanningSnapshot } from '../../../../application/planning-use-cases';
 import type { Project, Reminder, TaskItem } from '../../../../domain/entities';
 import { ItemDetailActions } from '../../../../ui/backlog/item-detail-actions';
 import { ItemFormSheet, type ItemFormType } from '../../../../ui/backlog/item-form-sheet';
+import {
+  createInitialTaskPlanningDraft,
+  type TaskPlanningDraft,
+} from '../../../../ui/backlog/task-planning-fields';
 import { designTokens } from '../../../../ui/design/tokens';
 import { SurfaceCard } from '../../../../ui/primitives/surface-card';
 import { ScreenShell } from '../../../../ui/screen-shell';
@@ -15,6 +20,37 @@ type BacklogDetailItem = Project | Reminder | TaskItem;
 
 function firstValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function getLocalIsoDate(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function createPlanningDraft(task: TaskItem, snapshot: TaskPlanningSnapshot): TaskPlanningDraft {
+  return {
+    ...createInitialTaskPlanningDraft(),
+    blocks: snapshot.blocks.map((block) => ({
+      id: block.id,
+      date: block.startsAt.slice(0, 10),
+      startsAt: block.startsAt.slice(11, 16),
+      durationMinutes: String(Math.max(5, Math.round(
+        (new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000,
+      ))),
+    })),
+    scheduleMode: task.scheduledOn !== null
+      ? 'date'
+      : task.periodStartOn !== null && task.periodEndOn !== null
+        ? 'period'
+        : 'none',
+    scheduledOn: task.scheduledOn ?? '',
+    periodStartOn: task.periodStartOn ?? '',
+    periodEndOn: task.periodEndOn ?? '',
+    repeatFrequency: snapshot.recurrence?.frequency ?? 'none',
+    repeatInterval: String(snapshot.recurrence?.interval ?? 1),
+  };
 }
 
 function findActiveItem(
@@ -55,9 +91,10 @@ function detailLines(item: BacklogDetailItem): readonly string[] {
 export default function ItemRoute() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string | string[]; kind?: string | string[] }>();
-  const { backlog } = useAppServices();
+  const { backlog, planningActions } = useAppServices();
   const [editing, setEditing] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [planningSnapshot, setPlanningSnapshot] = useState<TaskPlanningSnapshot | null>(null);
   const kind = firstValue(params.kind) as BacklogItemKind | undefined;
   const taskItems = [
     ...backlog.unassignedTasks.flatMap(({ task, subtasks }) => [task, ...subtasks]),
@@ -74,6 +111,16 @@ export default function ItemRoute() {
   }
 
   const formType = kind as ItemFormType;
+  const openEditor = async () => {
+    if (kind === 'task' || kind === 'subtask') {
+      setPlanningSnapshot(await planningActions.getTaskPlanningSnapshot(item.id));
+    }
+    setEditing(true);
+  };
+  const closeEditor = () => {
+    setEditing(false);
+    setPlanningSnapshot(null);
+  };
 
   return (
     <ScreenShell onBack={() => router.back()} title={item.title}>
@@ -87,13 +134,22 @@ export default function ItemRoute() {
         onAddSubtask={kind === 'task' ? () => setAddingSubtask(true) : undefined}
         onCompleted={() => router.back()}
         onDeleted={() => router.back()}
-        onEdit={() => setEditing(true)}
+        onEdit={() => void openEditor()}
       />
       {editing ? (
         <ItemFormSheet
           item={item}
           mode="edit"
-          onClose={() => setEditing(false)}
+          onClose={closeEditor}
+          planningContext={kind === 'task' || kind === 'subtask'
+            ? {
+                defaultDate: getLocalIsoDate(),
+                initialBlockIds: planningSnapshot?.blocks.map((block) => block.id) ?? [],
+                initialDraft: planningSnapshot === null
+                  ? createInitialTaskPlanningDraft()
+                  : createPlanningDraft(item as TaskItem, planningSnapshot),
+              }
+            : undefined}
           type={formType}
           visible
         />
@@ -104,6 +160,7 @@ export default function ItemRoute() {
             mode="create"
             onClose={() => setAddingSubtask(false)}
             parentTaskId={item.id}
+            planningContext={{ defaultDate: getLocalIsoDate() }}
             type="subtask"
             visible
           />

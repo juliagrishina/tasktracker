@@ -4,6 +4,7 @@ import type {
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
+  TaskOccurrencePatch,
 } from '../domain/entities';
 
 export interface PlanningRecurrenceInput {
@@ -25,6 +26,7 @@ export interface SaveTaskPlanningInput {
   periodStartOn?: string | null;
   periodEndOn?: string | null;
   blocks: readonly ScheduleBlock[];
+  deletedBlockIds?: readonly EntityId[];
   recurrence?: PlanningRecurrenceInput | null;
 }
 
@@ -39,6 +41,7 @@ export interface SaveReminderPlanningInput {
 export interface ResolveScheduleConflictInput {
   decision: 'cancel' | 'save';
   blocks: readonly ScheduleBlock[];
+  deletedBlockIds?: readonly EntityId[];
 }
 
 export interface ConvertReminderAndScheduleInput {
@@ -55,6 +58,8 @@ export interface SaveOccurrenceExceptionInput {
   seriesId: EntityId;
   occursOn: string;
   status: RecurrenceOccurrence['status'];
+  taskPatch?: TaskOccurrencePatch;
+  blocks?: readonly ScheduleBlock[];
   createdAt: string;
 }
 

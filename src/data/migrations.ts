@@ -212,6 +212,10 @@ const schemaVersionFour = `
     REFERENCES recurrence_occurrences(id) ON DELETE SET NULL;
 `;
 
+const schemaVersionFive = `
+  ALTER TABLE recurrence_occurrences ADD COLUMN task_patch TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -252,6 +256,12 @@ const migrations: readonly Migration[] = [
     version: 4,
     async apply(database) {
       await database.execAsync(schemaVersionFour);
+    },
+  },
+  {
+    version: 5,
+    async apply(database) {
+      await database.execAsync(schemaVersionFive);
     },
   },
 ];

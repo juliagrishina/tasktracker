@@ -151,6 +151,10 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       throw new Error('Задача для блока расписания не найдена');
     }
 
+    if (block.occurrenceId !== null && !this.recurrenceOccurrences.has(block.occurrenceId)) {
+      throw new Error('Р­РєР·РµРјРїР»СЏСЂ РїРѕРІС‚РѕСЂРµРЅРёСЏ РґР»СЏ Р±Р»РѕРєР° РЅРµ РЅР°Р№РґРµРЅ');
+    }
+
     assertScheduleBlockShape(block, task);
     this.scheduleBlocks.set(block.id, block);
   }
@@ -202,6 +206,14 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     await this.initialize();
     if (!this.recurrenceSeries.has(occurrence.seriesId)) {
       throw new Error('Серия повторений для экземпляра не найдена');
+    }
+    const duplicate = [...this.recurrenceOccurrences.values()].find(
+      (saved) => saved.id !== occurrence.id
+        && saved.seriesId === occurrence.seriesId
+        && saved.occursOn === occurrence.occursOn,
+    );
+    if (duplicate !== undefined) {
+      throw new Error('Экземпляр для этой даты уже существует');
     }
     this.recurrenceOccurrences.set(occurrence.id, occurrence);
   }

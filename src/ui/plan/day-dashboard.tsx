@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { DayPlan } from '../../application/plan-load-selector';
+import type { DayPlan, DayPlanBlock, DayPlanOccurrence } from '../../application/plan-load-selector';
+import type { TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
@@ -16,6 +17,7 @@ interface DayDashboardProps {
   dayPlan: DayPlan | null;
   mode?: PlanViewMode;
   onCreateTask?: () => void;
+  onEditTask?: (task: TaskItem, occurrence?: DayPlanOccurrence, block?: DayPlanBlock) => void;
   onRefresh?: () => void;
   onSelectMode?: () => void;
   selectedDate: string;
@@ -26,6 +28,9 @@ interface DayListItem {
   title: string;
   detail: string;
   kind: 'task' | 'reminder' | 'block';
+  task?: TaskItem;
+  occurrence?: DayPlanOccurrence;
+  block?: DayPlanBlock;
 }
 
 function getPlanStatus(loadPercent: number): string {
@@ -43,6 +48,7 @@ export function DayDashboard({
   dayPlan,
   mode = 'day',
   onCreateTask,
+  onEditTask,
   onRefresh,
   onSelectMode,
   selectedDate,
@@ -54,6 +60,9 @@ export function DayDashboard({
     title: block.title,
     detail: `${formatBlockTime(block.startsAt)}–${formatBlockTime(block.endsAt)}${block.description === null ? '' : ` · ${block.description}`}`,
     kind: 'block',
+    task: block.task,
+    occurrence: block.occurrence,
+    block,
   })) ?? [];
   const untimedItems: readonly DayListItem[] = dayPlan === null
     ? []
@@ -63,6 +72,7 @@ export function DayDashboard({
           title: task.title,
           detail: task.description ?? 'Задача',
           kind: 'task' as const,
+          task,
         })),
         ...dayPlan.untimedReminders.map((reminder) => ({
           id: reminder.id,
@@ -126,14 +136,14 @@ export function DayDashboard({
         <SectionHeader action={`${untimedItems.length} дел`} title="Без времени" />
         <View style={styles.list}>
           {untimedItems.length === 0 ? <EmptyPlanRow message="Нет задач и напоминаний без времени" /> : untimedItems.map((item) => (
-            <PlanListRow item={item} key={item.id} />
+            <PlanListRow item={item} key={item.id} onEditTask={onEditTask} />
           ))}
         </View>
 
         <SectionHeader action={`${scheduledItems.length} блоков`} title="Расписание" />
         <View style={styles.list}>
           {scheduledItems.length === 0 ? <EmptyPlanRow message="Нет временных блоков" /> : scheduledItems.map((item) => (
-            <PlanListRow item={item} key={item.id} />
+            <PlanListRow item={item} key={item.id} onEditTask={onEditTask} />
           ))}
         </View>
 
@@ -174,9 +184,20 @@ function EmptyPlanRow({ message }: { message: string }) {
   );
 }
 
-function PlanListRow({ item }: { item: DayListItem }) {
+function PlanListRow({
+  item,
+  onEditTask,
+}: {
+  item: DayListItem;
+  onEditTask?: (task: TaskItem, occurrence?: DayPlanOccurrence, block?: DayPlanBlock) => void;
+}) {
   return (
-    <SurfaceCard style={styles.listRow}>
+    <SurfaceCard
+      accessibilityLabel={item.task === undefined ? undefined : `Редактировать ${item.title}`}
+      onPress={item.task === undefined || onEditTask === undefined
+        ? undefined
+        : () => onEditTask(item.task as TaskItem, item.occurrence, item.block)}
+      style={styles.listRow}>
       <View style={[styles.dot, item.kind === 'reminder' && styles.reminderDot]} />
       <View style={styles.listCopy}>
         <Text numberOfLines={1} style={styles.listTitle}>{item.title}</Text>

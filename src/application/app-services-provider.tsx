@@ -66,10 +66,12 @@ import type {
 import {
   convertReminderAndSchedule,
   getPlanLoad,
+  getTaskPlanningSnapshot,
   resolveScheduleConflict,
   saveOccurrenceException,
   saveReminderPlanning,
   saveTaskPlanning,
+  type TaskPlanningSnapshot,
 } from './planning-use-cases';
 
 interface BacklogActions {
@@ -92,6 +94,7 @@ interface PlanningActions {
   convertReminderAndSchedule(input: ConvertReminderAndScheduleInput): Promise<TaskItem>;
   saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
   getPlanLoad(isoDate: string): Promise<number>;
+  getTaskPlanningSnapshot(taskId: string): Promise<TaskPlanningSnapshot>;
   getDayPlan(isoDate: string): Promise<DayPlan>;
   getPlanLoadDays(selectedDate: string, mode: PlanLoadMode): Promise<readonly PlanLoadDay[]>;
 }
@@ -210,6 +213,7 @@ export function AppServicesProvider({
         await runPlanningAction(() => saveOccurrenceException(appSource, input));
       },
       getPlanLoad: (isoDate) => getPlanLoad(appSource, isoDate),
+      getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),
       getDayPlan: (isoDate) => selectDayPlan(appSource, isoDate),
       getPlanLoadDays: (selectedDate, mode) => selectPlanLoadDays(appSource, selectedDate, mode),
     }),

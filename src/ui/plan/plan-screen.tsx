@@ -3,8 +3,14 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { DayPlan, PlanLoadDay } from '../../application/plan-load-selector';
+import type { DayPlan, DayPlanBlock, DayPlanOccurrence, PlanLoadDay } from '../../application/plan-load-selector';
 import { useAppServices } from '../../application/app-services-provider';
+import type { TaskPlanningSnapshot } from '../../application/planning-use-cases';
+import type { TaskItem } from '../../domain/entities';
+import {
+  createInitialTaskPlanningDraft,
+  type TaskPlanningDraft,
+} from '../backlog/task-planning-fields';
 import { ItemFormSheet } from '../backlog/item-form-sheet';
 import { designTokens } from '../design/tokens';
 import { temporaryWebContentStyle } from '../screen-shell';
@@ -33,12 +39,64 @@ function getLocalIsoDate(now = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+function createBlockDraft(block: DayPlanBlock): TaskPlanningDraft {
+  const sourceBlock = block.sourceBlock ?? block;
+  const startsAt = new Date(sourceBlock.startsAt);
+  const endsAt = new Date(sourceBlock.endsAt);
+  const durationMinutes = Math.max(5, Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000));
+  const recurrence = block.occurrence;
+  return {
+    ...createInitialTaskPlanningDraft(),
+    blocks: [{
+      id: sourceBlock.id,
+      date: sourceBlock.startsAt.slice(0, 10),
+      startsAt: sourceBlock.startsAt.slice(11, 16),
+      durationMinutes: String(durationMinutes),
+    }],
+    scheduleMode: 'date',
+    scheduledOn: block.startsAt.slice(0, 10),
+    repeatFrequency: recurrence?.frequency ?? 'none',
+    repeatInterval: String(recurrence?.interval ?? 1),
+  };
+}
+
+function createSeriesDraft(task: TaskItem, snapshot: TaskPlanningSnapshot): TaskPlanningDraft {
+  return {
+    ...createInitialTaskPlanningDraft(),
+    blocks: snapshot.blocks.map((block) => ({
+      id: block.id,
+      date: block.startsAt.slice(0, 10),
+      startsAt: block.startsAt.slice(11, 16),
+      durationMinutes: String(Math.max(5, Math.round(
+        (new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000,
+      ))),
+    })),
+    scheduleMode: task.scheduledOn !== null
+      ? 'date'
+      : task.periodStartOn !== null && task.periodEndOn !== null
+        ? 'period'
+        : 'none',
+    scheduledOn: task.scheduledOn ?? '',
+    periodStartOn: task.periodStartOn ?? '',
+    periodEndOn: task.periodEndOn ?? '',
+    repeatFrequency: snapshot.recurrence?.frequency ?? 'none',
+    repeatInterval: String(snapshot.recurrence?.interval ?? 1),
+  };
+}
+
 export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps) {
   const { plan, planningActions, refreshPlan } = useAppServices();
   const [mode, setMode] = useState<PlanViewMode>('day');
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
+  const [editingPlanTask, setEditingPlanTask] = useState<{
+    task: TaskItem;
+    occurrence?: DayPlanOccurrence;
+    block?: DayPlanBlock;
+    seriesInitialBlockIds?: readonly string[];
+    seriesDraft?: TaskPlanningDraft;
+  } | null>(null);
   const [dayPlan, setDayPlan] = useState<DayPlan | null>(null);
   const [periodDays, setPeriodDays] = useState<readonly PlanLoadDay[]>([]);
 
@@ -71,6 +129,25 @@ export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps)
     setSelectedDate(isoDate);
     setMode('day');
   };
+  const openTaskEditor = async (
+    task: TaskItem,
+    occurrence?: DayPlanOccurrence,
+    block?: DayPlanBlock,
+  ) => {
+    if (occurrence === undefined) {
+      setEditingPlanTask({ task, occurrence, block });
+      return;
+    }
+
+    const snapshot = await planningActions.getTaskPlanningSnapshot(task.id);
+    setEditingPlanTask({
+      task,
+      occurrence,
+      block,
+      seriesInitialBlockIds: snapshot.blocks.map((entry) => entry.id),
+      seriesDraft: createSeriesDraft(task, snapshot),
+    });
+  };
 
   return (
     <>
@@ -79,6 +156,7 @@ export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps)
           dayPlan={dayPlan}
           mode={mode}
           onCreateTask={() => setIsTaskSheetVisible(true)}
+          onEditTask={(task, occurrence, block) => void openTaskEditor(task, occurrence, block)}
           onRefresh={() => void refreshPlan()}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
@@ -106,6 +184,26 @@ export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps)
           onClose={() => setIsTaskSheetVisible(false)}
           planningContext={{ defaultDate: selectedDate }}
           type="task"
+          visible
+        />
+      ) : editingPlanTask !== null ? (
+        <ItemFormSheet
+          item={editingPlanTask.task}
+          mode="edit"
+          onClose={() => setEditingPlanTask(null)}
+          planningContext={{
+            defaultDate: selectedDate,
+            initialBlockIds: editingPlanTask.block === undefined
+              ? []
+              : [editingPlanTask.block.sourceBlock?.id ?? editingPlanTask.block.id],
+            initialDraft: editingPlanTask.block === undefined
+              ? createInitialTaskPlanningDraft()
+              : createBlockDraft(editingPlanTask.block),
+            seriesInitialBlockIds: editingPlanTask.seriesInitialBlockIds,
+            seriesDraft: editingPlanTask.seriesDraft,
+            occurrence: editingPlanTask.occurrence,
+          }}
+          type={editingPlanTask.task.kind}
           visible
         />
       ) : null}

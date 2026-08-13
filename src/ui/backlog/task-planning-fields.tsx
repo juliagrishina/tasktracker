@@ -55,16 +55,27 @@ export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
 }
 
 export function createDefaultBlock(defaultDate: string, now = new Date()): TaskPlanningBlock {
-  const totalMinutes = now.getHours() * 60 + now.getMinutes();
-  const roundedMinutes = Math.ceil(totalMinutes / 5) * 5;
-  const hour = Math.floor((roundedMinutes % (24 * 60)) / 60);
-  const minute = roundedMinutes % 60;
+  const [year, month, day] = defaultDate.split('-').map(Number);
+  const startsAt = new Date(
+    year,
+    month - 1,
+    day,
+    now.getHours(),
+    Math.ceil(now.getMinutes() / 5) * 5,
+    0,
+    0,
+  );
+  if (startsAt.getTime() <= now.getTime()) {
+    startsAt.setMinutes(startsAt.getMinutes() + 5);
+  }
+
+  const blockDate = `${startsAt.getFullYear()}-${String(startsAt.getMonth() + 1).padStart(2, '0')}-${String(startsAt.getDate()).padStart(2, '0')}`;
 
   return {
-    date: defaultDate,
+    date: blockDate,
     durationMinutes: '60',
     id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    startsAt: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+    startsAt: `${String(startsAt.getHours()).padStart(2, '0')}:${String(startsAt.getMinutes()).padStart(2, '0')}`,
   };
 }
 
@@ -91,6 +102,7 @@ export function validateTaskPlanningDraft(value: TaskPlanningDraft): string | nu
     || block.startsAt.trim() === ''
     || !Number.isInteger(Number(block.durationMinutes))
     || Number(block.durationMinutes) <= 0
+    || Number(block.durationMinutes) % 5 !== 0
     || !isValidLocalDate(block.date)
     || !isValidBlockStart(block.startsAt)
   ));
