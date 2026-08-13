@@ -6,7 +6,7 @@ import { SurfaceCard } from '../primitives/surface-card';
 import { formatPlanDate, type PlanLoadDay, type PlanLoadTone } from './plan-period-model';
 
 interface WeekLoadListProps {
-  days: PlanLoadDay[];
+  days: readonly PlanLoadDay[];
   onSelectDate: (isoDate: string) => void;
   selectedDate: string;
 }

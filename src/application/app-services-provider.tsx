@@ -48,6 +48,13 @@ import {
 } from './backlog-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
+import {
+  getDayPlan as selectDayPlan,
+  getPlanLoadDays as selectPlanLoadDays,
+  type DayPlan,
+  type PlanLoadDay,
+  type PlanLoadMode,
+} from './plan-load-selector';
 import type {
   ConvertReminderAndScheduleInput,
   ResolveScheduleConflictInput,
@@ -85,6 +92,12 @@ interface PlanningActions {
   convertReminderAndSchedule(input: ConvertReminderAndScheduleInput): Promise<TaskItem>;
   saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
   getPlanLoad(isoDate: string): Promise<number>;
+  getDayPlan(isoDate: string): Promise<DayPlan>;
+  getPlanLoadDays(selectedDate: string, mode: PlanLoadMode): Promise<readonly PlanLoadDay[]>;
+}
+
+interface PlanState {
+  revision: number;
 }
 
 interface AppServicesContextValue {
@@ -95,7 +108,9 @@ interface AppServicesContextValue {
   backlog: BacklogView;
   backlogActions: BacklogActions;
   planningActions: PlanningActions;
+  plan: PlanState;
   refreshBacklog(): Promise<void>;
+  refreshPlan(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
 }
@@ -126,6 +141,7 @@ export function AppServicesProvider({
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);
   const [demoTasks, setDemoTasks] = useState<DemoTaskGroups>(emptyDemoTaskGroups);
   const [backlog, setBacklog] = useState<BacklogView>(emptyBacklogView);
+  const [plan, setPlan] = useState<PlanState>({ revision: 0 });
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const runStorageDiagnostic = useCallback(
     () => runPersistenceDiagnostic(appSource),
@@ -135,21 +151,26 @@ export function AppServicesProvider({
     const loadedBacklog = await getBacklogView(appSource);
     setBacklog(loadedBacklog);
   }, [appSource]);
+  const refreshPlan = useCallback(async () => {
+    setPlan((current) => ({ revision: current.revision + 1 }));
+  }, []);
   const runBacklogAction = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T> => {
       const result = await action();
       await refreshBacklog();
+      await refreshPlan();
       return result;
     },
-    [refreshBacklog],
+    [refreshBacklog, refreshPlan],
   );
   const runPlanningAction = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T> => {
       const result = await action();
       await refreshBacklog();
+      await refreshPlan();
       return result;
     },
-    [refreshBacklog],
+    [refreshBacklog, refreshPlan],
   );
   const backlogActions = useMemo<BacklogActions>(
     () => ({
@@ -189,6 +210,8 @@ export function AppServicesProvider({
         await runPlanningAction(() => saveOccurrenceException(appSource, input));
       },
       getPlanLoad: (isoDate) => getPlanLoad(appSource, isoDate),
+      getDayPlan: (isoDate) => selectDayPlan(appSource, isoDate),
+      getPlanLoadDays: (selectedDate, mode) => selectPlanLoadDays(appSource, selectedDate, mode),
     }),
     [appSource, runPlanningAction],
   );
@@ -244,7 +267,9 @@ export function AppServicesProvider({
         backlog,
         backlogActions,
         planningActions,
+        plan,
         refreshBacklog,
+        refreshPlan,
         runBacklogAction,
         runStorageDiagnostic,
       }}>

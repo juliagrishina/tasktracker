@@ -1,18 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { DayPlan, PlanLoadDay } from '../../application/plan-load-selector';
+import { useAppServices } from '../../application/app-services-provider';
+import { ItemFormSheet } from '../backlog/item-form-sheet';
 import { designTokens } from '../design/tokens';
 import { temporaryWebContentStyle } from '../screen-shell';
-import { ItemFormSheet } from '../backlog/item-form-sheet';
+
 import { DayDashboard } from './day-dashboard';
 import {
   formatPlanMonth,
   formatPlanWeekRange,
-  getMonthLoadDays,
-  getWeekLoadDays,
   shiftPlanAnchor,
+  toMonthLoadWeeks,
   type PlanViewMode,
 } from './plan-period-model';
 import { PlanPeriodNavigator } from './plan-period-navigator';
@@ -20,13 +22,50 @@ import { PlanViewControl, PlanViewMenu } from './plan-view-menu';
 import { MonthLoadGrid } from './month-load-grid';
 import { WeekLoadList } from './week-load-list';
 
-const demoSelectedDate = '2026-08-05';
+interface PlanScreenProps {
+  initialDate?: string;
+}
 
-export function PlanScreen() {
+function getLocalIsoDate(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps) {
+  const { plan, planningActions, refreshPlan } = useAppServices();
   const [mode, setMode] = useState<PlanViewMode>('day');
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(demoSelectedDate);
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
+  const [dayPlan, setDayPlan] = useState<DayPlan | null>(null);
+  const [periodDays, setPeriodDays] = useState<readonly PlanLoadDay[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      if (mode === 'day') {
+        setDayPlan(null);
+        const nextDayPlan = await planningActions.getDayPlan(selectedDate);
+        if (isMounted) {
+          setDayPlan(nextDayPlan);
+        }
+        return;
+      }
+
+      setPeriodDays([]);
+      const nextPeriodDays = await planningActions.getPlanLoadDays(selectedDate, mode);
+      if (isMounted) {
+        setPeriodDays(nextPeriodDays);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mode, plan.revision, planningActions, selectedDate]);
 
   const selectDate = (isoDate: string) => {
     setSelectedDate(isoDate);
@@ -37,13 +76,16 @@ export function PlanScreen() {
     <>
       {mode === 'day' ? (
         <DayDashboard
+          dayPlan={dayPlan}
           mode={mode}
           onCreateTask={() => setIsTaskSheetVisible(true)}
+          onRefresh={() => void refreshPlan()}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
         />
       ) : (
         <PeriodPlanView
+          days={periodDays}
           mode={mode}
           onChangeAnchor={(amount) => setSelectedDate((currentDate) => shiftPlanAnchor(currentDate, mode, amount))}
           onCreateTask={() => setIsTaskSheetVisible(true)}
@@ -72,6 +114,7 @@ export function PlanScreen() {
 }
 
 function PeriodPlanView({
+  days,
   mode,
   onChangeAnchor,
   onCreateTask,
@@ -79,6 +122,7 @@ function PeriodPlanView({
   onSelectMode,
   selectedDate,
 }: {
+  days: readonly PlanLoadDay[];
   mode: Exclude<PlanViewMode, 'day'>;
   onChangeAnchor: (amount: number) => void;
   onCreateTask: () => void;
@@ -113,9 +157,9 @@ function PeriodPlanView({
         />
         <View style={styles.periodContent}>
           {isWeek ? (
-            <WeekLoadList days={getWeekLoadDays(selectedDate)} onSelectDate={onSelectDate} selectedDate={selectedDate} />
+            <WeekLoadList days={days} onSelectDate={onSelectDate} selectedDate={selectedDate} />
           ) : (
-            <MonthLoadGrid onSelectDate={onSelectDate} selectedDate={selectedDate} weeks={getMonthLoadDays(selectedDate)} />
+            <MonthLoadGrid onSelectDate={onSelectDate} selectedDate={selectedDate} weeks={toMonthLoadWeeks(selectedDate, days)} />
           )}
         </View>
       </ScrollView>
@@ -131,56 +175,35 @@ function PeriodPlanView({
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: designTokens.color.surface.canvas,
-  },
+  safeArea: { flex: 1, backgroundColor: designTokens.color.surface.canvas },
   headerSurface: {
     backgroundColor: designTokens.color.surface.raised,
     borderBottomColor: designTokens.color.border.subtle,
     borderBottomWidth: 1,
   },
   headerContent: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: designTokens.space[16],
-    paddingVertical: designTokens.space[12],
+    alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between',
+    paddingHorizontal: designTokens.space[16], paddingVertical: designTokens.space[12],
   },
   screenTitle: {
-    color: designTokens.color.text.primary,
-    fontSize: designTokens.typography.size.screenTitle,
-    fontWeight: designTokens.typography.weight.bold,
-    letterSpacing: designTokens.typography.tracking.title,
+    color: designTokens.color.text.primary, fontSize: designTokens.typography.size.screenTitle,
+    fontWeight: designTokens.typography.weight.bold, letterSpacing: designTokens.typography.tracking.title,
     lineHeight: designTokens.typography.lineHeight.screenTitle,
   },
   date: {
-    color: designTokens.color.text.secondary,
-    fontSize: designTokens.typography.size.meta,
-    lineHeight: designTokens.typography.lineHeight.meta,
-    marginTop: designTokens.space[2],
+    color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta, marginTop: designTokens.space[2],
   },
   scrollContent: {
     paddingBottom: designTokens.space[32] + designTokens.size.floatingAction + designTokens.space[24],
-    paddingHorizontal: designTokens.space[16],
-    paddingTop: designTokens.space[12],
+    paddingHorizontal: designTokens.space[16], paddingTop: designTokens.space[12],
   },
-  periodContent: {
-    marginTop: designTokens.space[8],
-  },
+  periodContent: { marginTop: designTokens.space[8] },
   floatingAction: {
-    alignItems: 'center',
-    backgroundColor: designTokens.color.primary,
-    borderRadius: designTokens.radius.pill,
-    bottom: designTokens.space[16],
-    height: designTokens.size.floatingAction,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: designTokens.space[16],
-    width: designTokens.size.floatingAction,
+    alignItems: 'center', backgroundColor: designTokens.color.primary, borderRadius: designTokens.radius.pill,
+    bottom: designTokens.space[16], height: designTokens.size.floatingAction, justifyContent: 'center',
+    position: 'absolute', right: designTokens.space[16], width: designTokens.size.floatingAction,
     ...designTokens.elevation.floatingAction,
   },
-  pressed: {
-    opacity: designTokens.state.pressedOpacity,
-  },
+  pressed: { opacity: designTokens.state.pressedOpacity },
 });
