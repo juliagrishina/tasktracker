@@ -3,6 +3,7 @@ import type {
   CompletedItem,
   EntityId,
   Project,
+  RecurrenceOccurrence,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
@@ -28,8 +29,16 @@ export interface AppDataSource {
   saveScheduleBlock(block: ScheduleBlock): Promise<void>;
   getScheduleBlock(id: EntityId): Promise<ScheduleBlock | null>;
   listScheduleBlocks(): Promise<readonly ScheduleBlock[]>;
+  listScheduleBlocksForTaskItem(taskItemId: EntityId): Promise<readonly ScheduleBlock[]>;
+  deleteScheduleBlock(id: EntityId): Promise<void>;
   saveRecurrenceSeries(series: RecurrenceSeries): Promise<void>;
   getRecurrenceSeries(id: EntityId): Promise<RecurrenceSeries | null>;
+  listRecurrenceSeries(): Promise<readonly RecurrenceSeries[]>;
+  deleteRecurrenceSeries(id: EntityId): Promise<void>;
+  saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void>;
+  getRecurrenceOccurrence(id: EntityId): Promise<RecurrenceOccurrence | null>;
+  listRecurrenceOccurrences(): Promise<readonly RecurrenceOccurrence[]>;
+  deleteRecurrenceOccurrence(id: EntityId): Promise<void>;
   saveCompletedItem(item: CompletedItem): Promise<void>;
   getCompletedItem(id: EntityId): Promise<CompletedItem | null>;
   transaction<T>(operation: () => Promise<T>): Promise<T>;

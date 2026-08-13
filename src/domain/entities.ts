@@ -1,5 +1,7 @@
 export type EntityId = string;
 
+export type PlanningItemKind = 'task' | 'reminder';
+
 export interface BacklogRepeatRule {
   frequency: 'daily' | 'weekly' | 'monthly';
   interval: number;
@@ -21,6 +23,9 @@ export type TaskItem =
       parentTaskId: null;
       title: string;
       description: string | null;
+      scheduledOn: string | null;
+      periodStartOn: string | null;
+      periodEndOn: string | null;
       estimatedDurationMinutes: number | null;
       completedAt: string | null;
       createdAt: string;
@@ -32,6 +37,9 @@ export type TaskItem =
       parentTaskId: EntityId;
       title: string;
       description: string | null;
+      scheduledOn: string | null;
+      periodStartOn: string | null;
+      periodEndOn: string | null;
       estimatedDurationMinutes: number | null;
       completedAt: string | null;
       createdAt: string;
@@ -52,6 +60,7 @@ export interface Reminder {
 export interface ScheduleBlock {
   id: EntityId;
   taskItemId: EntityId;
+  occurrenceId: EntityId | null;
   startsAt: string;
   endsAt: string;
   createdAt: string;
@@ -59,10 +68,19 @@ export interface ScheduleBlock {
 
 export interface RecurrenceSeries {
   id: EntityId;
-  taskItemId: EntityId;
+  itemKind: PlanningItemKind;
+  itemId: EntityId;
   frequency: 'daily' | 'weekly' | 'monthly';
   interval: number;
   startsOn: string;
+  createdAt: string;
+}
+
+export interface RecurrenceOccurrence {
+  id: EntityId;
+  seriesId: EntityId;
+  occursOn: string;
+  status: 'active' | 'cancelled';
   createdAt: string;
 }
 

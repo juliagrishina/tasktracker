@@ -26,6 +26,9 @@ const task: TaskItem = {
   parentTaskId: null,
   title: 'Подготовить план',
   description: null,
+  scheduledOn: null,
+  periodStartOn: null,
+  periodEndOn: null,
   estimatedDurationMinutes: null,
   completedAt: null,
   createdAt,
@@ -38,6 +41,9 @@ const subtask: TaskItem = {
   parentTaskId: task.id,
   title: 'Собрать материалы',
   description: null,
+  scheduledOn: null,
+  periodStartOn: null,
+  periodEndOn: null,
   estimatedDurationMinutes: null,
   completedAt: null,
   createdAt,
@@ -58,6 +64,7 @@ const reminder: Reminder = {
 const scheduleBlock: ScheduleBlock = {
   id: 'block-1',
   taskItemId: task.id,
+  occurrenceId: null,
   startsAt: '2026-08-02T09:00:00.000Z',
   endsAt: '2026-08-02T09:30:00.000Z',
   createdAt,
@@ -65,7 +72,8 @@ const scheduleBlock: ScheduleBlock = {
 
 const recurrenceSeries: RecurrenceSeries = {
   id: 'recurrence-1',
-  taskItemId: task.id,
+  itemKind: 'task',
+  itemId: task.id,
   frequency: 'weekly',
   interval: 1,
   startsOn: '2026-08-02',

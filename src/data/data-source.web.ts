@@ -3,6 +3,7 @@ import type {
   CompletedItem,
   EntityId,
   Project,
+  RecurrenceOccurrence,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
@@ -42,6 +43,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   private readonly reminders = new Map<EntityId, Reminder>();
   private readonly scheduleBlocks = new Map<EntityId, ScheduleBlock>();
   private readonly recurrenceSeries = new Map<EntityId, RecurrenceSeries>();
+  private readonly recurrenceOccurrences = new Map<EntityId, RecurrenceOccurrence>();
   private readonly completedItems = new Map<EntityId, CompletedItem>();
 
   async initialize(): Promise<void> {
@@ -137,6 +139,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
 
   async deleteReminder(id: EntityId): Promise<void> {
     await this.initialize();
+    this.deletePlanningItemRelatedRows('reminder', id);
     this.reminders.delete(id);
   }
 
@@ -162,14 +165,60 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     return [...this.scheduleBlocks.values()].sort(compareByCreatedAt);
   }
 
+  async listScheduleBlocksForTaskItem(taskItemId: EntityId): Promise<readonly ScheduleBlock[]> {
+    await this.initialize();
+    return [...this.scheduleBlocks.values()]
+      .filter((block) => block.taskItemId === taskItemId)
+      .sort(compareByCreatedAt);
+  }
+
+  async deleteScheduleBlock(id: EntityId): Promise<void> {
+    await this.initialize();
+    this.scheduleBlocks.delete(id);
+  }
+
   async saveRecurrenceSeries(series: RecurrenceSeries): Promise<void> {
     await this.initialize();
+    await this.assertPlanningItemExists(series.itemKind, series.itemId);
     this.recurrenceSeries.set(series.id, series);
   }
 
   async getRecurrenceSeries(id: EntityId): Promise<RecurrenceSeries | null> {
     await this.initialize();
     return this.recurrenceSeries.get(id) ?? null;
+  }
+
+  async listRecurrenceSeries(): Promise<readonly RecurrenceSeries[]> {
+    await this.initialize();
+    return [...this.recurrenceSeries.values()].sort(compareByCreatedAt);
+  }
+
+  async deleteRecurrenceSeries(id: EntityId): Promise<void> {
+    await this.initialize();
+    this.deleteRecurrenceSeriesWithOccurrences(id);
+  }
+
+  async saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void> {
+    await this.initialize();
+    if (!this.recurrenceSeries.has(occurrence.seriesId)) {
+      throw new Error('Серия повторений для экземпляра не найдена');
+    }
+    this.recurrenceOccurrences.set(occurrence.id, occurrence);
+  }
+
+  async getRecurrenceOccurrence(id: EntityId): Promise<RecurrenceOccurrence | null> {
+    await this.initialize();
+    return this.recurrenceOccurrences.get(id) ?? null;
+  }
+
+  async listRecurrenceOccurrences(): Promise<readonly RecurrenceOccurrence[]> {
+    await this.initialize();
+    return [...this.recurrenceOccurrences.values()].sort(compareByCreatedAt);
+  }
+
+  async deleteRecurrenceOccurrence(id: EntityId): Promise<void> {
+    await this.initialize();
+    this.deleteRecurrenceOccurrenceAndUnlinkBlocks(id);
   }
 
   async saveCompletedItem(item: CompletedItem): Promise<void> {
@@ -191,6 +240,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       reminders: new Map(this.reminders),
       scheduleBlocks: new Map(this.scheduleBlocks),
       recurrenceSeries: new Map(this.recurrenceSeries),
+      recurrenceOccurrences: new Map(this.recurrenceOccurrences),
       completedItems: new Map(this.completedItems),
     };
 
@@ -203,6 +253,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       replaceMap(this.reminders, snapshot.reminders);
       replaceMap(this.scheduleBlocks, snapshot.scheduleBlocks);
       replaceMap(this.recurrenceSeries, snapshot.recurrenceSeries);
+      replaceMap(this.recurrenceOccurrences, snapshot.recurrenceOccurrences);
       replaceMap(this.completedItems, snapshot.completedItems);
       throw error;
     }
@@ -218,15 +269,47 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
         this.scheduleBlocks.delete(id);
       }
     }
-    for (const [id, series] of this.recurrenceSeries) {
-      if (series.taskItemId === taskItemId) {
-        this.recurrenceSeries.delete(id);
-      }
-    }
+    this.deletePlanningItemRelatedRows('task', taskItemId);
     for (const [id, item] of this.completedItems) {
       if (item.taskItemId === taskItemId) {
         this.completedItems.delete(id);
       }
+    }
+  }
+
+  private deletePlanningItemRelatedRows(itemKind: 'task' | 'reminder', itemId: EntityId): void {
+    for (const [id, series] of this.recurrenceSeries) {
+      if (series.itemKind === itemKind && series.itemId === itemId) {
+        this.deleteRecurrenceSeriesWithOccurrences(id);
+      }
+    }
+  }
+
+  private deleteRecurrenceSeriesWithOccurrences(id: EntityId): void {
+    this.recurrenceSeries.delete(id);
+    for (const [occurrenceId, occurrence] of this.recurrenceOccurrences) {
+      if (occurrence.seriesId === id) {
+        this.deleteRecurrenceOccurrenceAndUnlinkBlocks(occurrenceId);
+      }
+    }
+  }
+
+  private deleteRecurrenceOccurrenceAndUnlinkBlocks(id: EntityId): void {
+    this.recurrenceOccurrences.delete(id);
+    for (const [blockId, block] of this.scheduleBlocks) {
+      if (block.occurrenceId === id) {
+        this.scheduleBlocks.set(blockId, { ...block, occurrenceId: null });
+      }
+    }
+  }
+
+  private async assertPlanningItemExists(itemKind: 'task' | 'reminder', itemId: EntityId): Promise<void> {
+    const item = itemKind === 'task'
+      ? await this.getTaskItem(itemId)
+      : await this.getReminder(itemId);
+
+    if (item === null) {
+      throw new Error('Элемент планирования не найден');
     }
   }
 }

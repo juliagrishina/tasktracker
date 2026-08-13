@@ -15,6 +15,9 @@ const task: TaskItem = {
   parentTaskId: null,
   title: 'Подготовить план',
   description: null,
+  scheduledOn: null,
+  periodStartOn: null,
+  periodEndOn: null,
   estimatedDurationMinutes: null,
   completedAt: null,
   createdAt,
@@ -35,6 +38,7 @@ const reminder: Reminder = {
 const block: ScheduleBlock = {
   id: 'block-1',
   taskItemId: task.id,
+  occurrenceId: null,
   startsAt: '2026-08-01T09:00:00.000Z',
   endsAt: '2026-08-01T09:30:00.000Z',
   createdAt,

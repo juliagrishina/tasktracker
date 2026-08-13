@@ -38,11 +38,11 @@ describe('migrateDatabase', () => {
     await migrateDatabase(database as never);
 
     expect(database.executedSql.some((sql) => sql.includes('ALTER TABLE reminders ADD COLUMN title'))).toBe(true);
-    expect(database.appliedVersions).toEqual([2, 3]);
+    expect(database.appliedVersions).toEqual([2, 3, 4]);
   });
 
   test('does not reapply migrations after the latest version is installed', async () => {
-    const database = new MigrationDatabase(3);
+    const database = new MigrationDatabase(4);
 
     await migrateDatabase(database as never);
 
@@ -55,6 +55,18 @@ describe('migrateDatabase', () => {
     await migrateDatabase(database as never);
 
     expect(database.executedSql.join('\n')).toContain('reminders_v3');
-    expect(database.appliedVersions).toEqual([3]);
+    expect(database.appliedVersions).toEqual([3, 4]);
+  });
+
+  test('rebuilds legacy recurrence series and creates occurrence exceptions in migration four', async () => {
+    const database = new MigrationDatabase(3);
+
+    await migrateDatabase(database as never);
+
+    const sql = database.executedSql.join('\n');
+    expect(sql).toContain('recurrence_series_v4');
+    expect(sql).toContain("'task', task_item_id");
+    expect(sql).toContain('recurrence_occurrences');
+    expect(database.appliedVersions).toEqual([4]);
   });
 });

@@ -163,6 +163,55 @@ const schemaVersionThree = `
   ALTER TABLE reminders_v3 RENAME TO reminders;
 `;
 
+const schemaVersionFour = `
+  ALTER TABLE task_items ADD COLUMN scheduled_on TEXT;
+  ALTER TABLE task_items ADD COLUMN period_start_on TEXT;
+  ALTER TABLE task_items ADD COLUMN period_end_on TEXT;
+
+  CREATE TABLE recurrence_series_v4 (
+    id TEXT PRIMARY KEY,
+    item_kind TEXT NOT NULL CHECK (item_kind IN ('task', 'reminder')),
+    item_id TEXT NOT NULL,
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+    interval INTEGER NOT NULL CHECK (interval > 0),
+    starts_on TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  INSERT INTO recurrence_series_v4 (
+    id,
+    item_kind,
+    item_id,
+    frequency,
+    interval,
+    starts_on,
+    created_at
+  )
+  SELECT
+    id,
+    'task', task_item_id,
+    frequency,
+    interval,
+    starts_on,
+    created_at
+  FROM recurrence_series;
+
+  DROP TABLE recurrence_series;
+  ALTER TABLE recurrence_series_v4 RENAME TO recurrence_series;
+
+  CREATE TABLE recurrence_occurrences (
+    id TEXT PRIMARY KEY,
+    series_id TEXT NOT NULL REFERENCES recurrence_series(id) ON DELETE CASCADE,
+    occurs_on TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('active', 'cancelled')),
+    created_at TEXT NOT NULL,
+    UNIQUE(series_id, occurs_on)
+  );
+
+  ALTER TABLE schedule_blocks ADD COLUMN occurrence_id TEXT
+    REFERENCES recurrence_occurrences(id) ON DELETE SET NULL;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -197,6 +246,12 @@ const migrations: readonly Migration[] = [
     version: 3,
     async apply(database) {
       await database.execAsync(schemaVersionThree);
+    },
+  },
+  {
+    version: 4,
+    async apply(database) {
+      await database.execAsync(schemaVersionFour);
     },
   },
 ];

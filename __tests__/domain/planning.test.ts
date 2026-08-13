@@ -18,6 +18,7 @@ function block(id: string, startsAt: string, endsAt: string): ScheduleBlock {
   return {
     id,
     taskItemId: 'task-1',
+    occurrenceId: null,
     startsAt,
     endsAt,
     createdAt: '2026-08-05T06:00:00.000Z',

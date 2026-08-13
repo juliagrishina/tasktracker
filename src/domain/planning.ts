@@ -103,6 +103,7 @@ export function createDefaultScheduleBlock({
   return {
     id,
     taskItemId,
+    occurrenceId: null,
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
     createdAt,

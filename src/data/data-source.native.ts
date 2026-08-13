@@ -5,6 +5,7 @@ import type {
   CompletedItem,
   EntityId,
   Project,
+  RecurrenceOccurrence,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
@@ -41,6 +42,9 @@ interface TaskItemRow {
   parent_task_id: string | null;
   title: string;
   description: string | null;
+  scheduled_on: string | null;
+  period_start_on: string | null;
+  period_end_on: string | null;
   estimated_duration_minutes: number | null;
   completed_at: string | null;
   created_at: string;
@@ -62,6 +66,7 @@ interface ReminderRow {
 interface ScheduleBlockRow {
   id: string;
   task_item_id: string;
+  occurrence_id: string | null;
   starts_at: string;
   ends_at: string;
   created_at: string;
@@ -69,10 +74,19 @@ interface ScheduleBlockRow {
 
 interface RecurrenceSeriesRow {
   id: string;
-  task_item_id: string;
+  item_kind: RecurrenceSeries['itemKind'];
+  item_id: string;
   frequency: RecurrenceSeries['frequency'];
   interval: number;
   starts_on: string;
+  created_at: string;
+}
+
+interface RecurrenceOccurrenceRow {
+  id: string;
+  series_id: string;
+  occurs_on: string;
+  status: RecurrenceOccurrence['status'];
   created_at: string;
 }
 
@@ -221,16 +235,22 @@ class NativeDataSource implements AppDataSource {
         parent_task_id,
         title,
         description,
+        scheduled_on,
+        period_start_on,
+        period_end_on,
         estimated_duration_minutes,
         completed_at,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         kind = excluded.kind,
         project_id = excluded.project_id,
         parent_task_id = excluded.parent_task_id,
         title = excluded.title,
         description = excluded.description,
+        scheduled_on = excluded.scheduled_on,
+        period_start_on = excluded.period_start_on,
+        period_end_on = excluded.period_end_on,
         estimated_duration_minutes = excluded.estimated_duration_minutes,
         completed_at = excluded.completed_at,
         created_at = excluded.created_at`,
@@ -241,6 +261,9 @@ class NativeDataSource implements AppDataSource {
         task.parentTaskId,
         task.title,
         task.description,
+        task.scheduledOn,
+        task.periodStartOn,
+        task.periodEndOn,
         task.estimatedDurationMinutes,
         task.completedAt,
         task.createdAt,
@@ -253,7 +276,7 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<TaskItemRow>(
       `SELECT id, kind, project_id, parent_task_id, title, description,
-        estimated_duration_minutes, completed_at, created_at
+        scheduled_on, period_start_on, period_end_on, estimated_duration_minutes, completed_at, created_at
       FROM task_items
       WHERE id = ?`,
       [id],
@@ -271,6 +294,9 @@ class NativeDataSource implements AppDataSource {
         parentTaskId: null,
         title: row.title,
         description: row.description,
+        scheduledOn: row.scheduled_on,
+        periodStartOn: row.period_start_on,
+        periodEndOn: row.period_end_on,
         estimatedDurationMinutes: row.estimated_duration_minutes,
         completedAt: row.completed_at,
         createdAt: row.created_at,
@@ -288,6 +314,9 @@ class NativeDataSource implements AppDataSource {
       parentTaskId: row.parent_task_id,
       title: row.title,
       description: row.description,
+      scheduledOn: row.scheduled_on,
+      periodStartOn: row.period_start_on,
+      periodEndOn: row.period_end_on,
       estimatedDurationMinutes: row.estimated_duration_minutes,
       completedAt: row.completed_at,
       createdAt: row.created_at,
@@ -299,7 +328,7 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<TaskItemRow>(
       `SELECT id, kind, project_id, parent_task_id, title, description,
-        estimated_duration_minutes, completed_at, created_at
+        scheduled_on, period_start_on, period_end_on, estimated_duration_minutes, completed_at, created_at
       FROM task_items
       ORDER BY created_at ASC, id ASC`,
     );
@@ -313,6 +342,9 @@ class NativeDataSource implements AppDataSource {
           parentTaskId: null,
           title: row.title,
           description: row.description,
+          scheduledOn: row.scheduled_on,
+          periodStartOn: row.period_start_on,
+          periodEndOn: row.period_end_on,
           estimatedDurationMinutes: row.estimated_duration_minutes,
           completedAt: row.completed_at,
           createdAt: row.created_at,
@@ -330,6 +362,9 @@ class NativeDataSource implements AppDataSource {
         parentTaskId: row.parent_task_id,
         title: row.title,
         description: row.description,
+        scheduledOn: row.scheduled_on,
+        periodStartOn: row.period_start_on,
+        periodEndOn: row.period_end_on,
         estimatedDurationMinutes: row.estimated_duration_minutes,
         completedAt: row.completed_at,
         createdAt: row.created_at,
@@ -340,6 +375,14 @@ class NativeDataSource implements AppDataSource {
   async deleteTaskItem(id: EntityId): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
+    await database.runAsync(
+      `DELETE FROM recurrence_series
+      WHERE item_kind = 'task'
+        AND item_id IN (
+          SELECT id FROM task_items WHERE id = ? OR parent_task_id = ?
+        )`,
+      [id, id],
+    );
     await database.runAsync('DELETE FROM task_items WHERE id = ?', [id]);
   }
 
@@ -443,6 +486,10 @@ class NativeDataSource implements AppDataSource {
   async deleteReminder(id: EntityId): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
+    await database.runAsync(
+      `DELETE FROM recurrence_series WHERE item_kind = 'reminder' AND item_id = ?`,
+      [id],
+    );
     await database.runAsync('DELETE FROM reminders WHERE id = ?', [id]);
   }
 
@@ -454,17 +501,25 @@ class NativeDataSource implements AppDataSource {
       throw new Error('Задача для блока расписания не найдена');
     }
 
+    if (block.occurrenceId !== null) {
+      const occurrence = await this.getRecurrenceOccurrence(block.occurrenceId);
+      if (occurrence === null) {
+        throw new Error('Экземпляр повторения для блока не найден');
+      }
+    }
+
     assertScheduleBlockShape(block, task);
     const database = await this.getDatabase();
     await database.runAsync(
-      `INSERT INTO schedule_blocks (id, task_item_id, starts_at, ends_at, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO schedule_blocks (id, task_item_id, occurrence_id, starts_at, ends_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         task_item_id = excluded.task_item_id,
+        occurrence_id = excluded.occurrence_id,
         starts_at = excluded.starts_at,
         ends_at = excluded.ends_at,
         created_at = excluded.created_at`,
-      [block.id, block.taskItemId, block.startsAt, block.endsAt, block.createdAt],
+      [block.id, block.taskItemId, block.occurrenceId, block.startsAt, block.endsAt, block.createdAt],
     );
   }
 
@@ -472,7 +527,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, starts_at, ends_at, created_at
+      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, created_at
       FROM schedule_blocks
       WHERE id = ?`,
       [id],
@@ -483,6 +538,7 @@ class NativeDataSource implements AppDataSource {
       : {
           id: row.id,
           taskItemId: row.task_item_id,
+          occurrenceId: row.occurrence_id,
           startsAt: row.starts_at,
           endsAt: row.ends_at,
           createdAt: row.created_at,
@@ -493,7 +549,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, starts_at, ends_at, created_at
+      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, created_at
       FROM schedule_blocks
       ORDER BY created_at ASC, id ASC`,
     );
@@ -501,33 +557,72 @@ class NativeDataSource implements AppDataSource {
     return rows.map((row) => ({
       id: row.id,
       taskItemId: row.task_item_id,
+      occurrenceId: row.occurrence_id,
       startsAt: row.starts_at,
       endsAt: row.ends_at,
       createdAt: row.created_at,
     }));
   }
 
+  async listScheduleBlocksForTaskItem(taskItemId: EntityId): Promise<readonly ScheduleBlock[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<ScheduleBlockRow>(
+      `SELECT id, task_item_id, occurrence_id, starts_at, ends_at, created_at
+      FROM schedule_blocks
+      WHERE task_item_id = ?
+      ORDER BY created_at ASC, id ASC`,
+      [taskItemId],
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      taskItemId: row.task_item_id,
+      occurrenceId: row.occurrence_id,
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async deleteScheduleBlock(id: EntityId): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync('DELETE FROM schedule_blocks WHERE id = ?', [id]);
+  }
+
   async saveRecurrenceSeries(series: RecurrenceSeries): Promise<void> {
     await this.initialize();
+    const planningItem = series.itemKind === 'task'
+      ? await this.getTaskItem(series.itemId)
+      : await this.getReminder(series.itemId);
+
+    if (planningItem === null) {
+      throw new Error('Элемент планирования не найден');
+    }
+
     const database = await this.getDatabase();
     await database.runAsync(
       `INSERT INTO recurrence_series (
         id,
-        task_item_id,
+        item_kind,
+        item_id,
         frequency,
         interval,
         starts_on,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
-        task_item_id = excluded.task_item_id,
+        item_kind = excluded.item_kind,
+        item_id = excluded.item_id,
         frequency = excluded.frequency,
         interval = excluded.interval,
         starts_on = excluded.starts_on,
         created_at = excluded.created_at`,
       [
         series.id,
-        series.taskItemId,
+        series.itemKind,
+        series.itemId,
         series.frequency,
         series.interval,
         series.startsOn,
@@ -540,7 +635,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<RecurrenceSeriesRow>(
-      `SELECT id, task_item_id, frequency, interval, starts_on, created_at
+      `SELECT id, item_kind, item_id, frequency, interval, starts_on, created_at
       FROM recurrence_series
       WHERE id = ?`,
       [id],
@@ -550,12 +645,110 @@ class NativeDataSource implements AppDataSource {
       ? null
       : {
           id: row.id,
-          taskItemId: row.task_item_id,
+          itemKind: row.item_kind,
+          itemId: row.item_id,
           frequency: row.frequency,
           interval: row.interval,
           startsOn: row.starts_on,
           createdAt: row.created_at,
         };
+  }
+
+  async listRecurrenceSeries(): Promise<readonly RecurrenceSeries[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<RecurrenceSeriesRow>(
+      `SELECT id, item_kind, item_id, frequency, interval, starts_on, created_at
+      FROM recurrence_series
+      ORDER BY created_at ASC, id ASC`,
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      itemKind: row.item_kind,
+      itemId: row.item_id,
+      frequency: row.frequency,
+      interval: row.interval,
+      startsOn: row.starts_on,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async deleteRecurrenceSeries(id: EntityId): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync('DELETE FROM recurrence_series WHERE id = ?', [id]);
+  }
+
+  async saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void> {
+    await this.initialize();
+    const series = await this.getRecurrenceSeries(occurrence.seriesId);
+    if (series === null) {
+      throw new Error('Серия повторений для экземпляра не найдена');
+    }
+
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO recurrence_occurrences (id, series_id, occurs_on, status, created_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        series_id = excluded.series_id,
+        occurs_on = excluded.occurs_on,
+        status = excluded.status,
+        created_at = excluded.created_at`,
+      [
+        occurrence.id,
+        occurrence.seriesId,
+        occurrence.occursOn,
+        occurrence.status,
+        occurrence.createdAt,
+      ],
+    );
+  }
+
+  async getRecurrenceOccurrence(id: EntityId): Promise<RecurrenceOccurrence | null> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<RecurrenceOccurrenceRow>(
+      `SELECT id, series_id, occurs_on, status, created_at
+      FROM recurrence_occurrences
+      WHERE id = ?`,
+      [id],
+    );
+
+    return row === null
+      ? null
+      : {
+          id: row.id,
+          seriesId: row.series_id,
+          occursOn: row.occurs_on,
+          status: row.status,
+          createdAt: row.created_at,
+        };
+  }
+
+  async listRecurrenceOccurrences(): Promise<readonly RecurrenceOccurrence[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<RecurrenceOccurrenceRow>(
+      `SELECT id, series_id, occurs_on, status, created_at
+      FROM recurrence_occurrences
+      ORDER BY created_at ASC, id ASC`,
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      seriesId: row.series_id,
+      occursOn: row.occurs_on,
+      status: row.status,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async deleteRecurrenceOccurrence(id: EntityId): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync('DELETE FROM recurrence_occurrences WHERE id = ?', [id]);
   }
 
   async saveCompletedItem(item: CompletedItem): Promise<void> {
