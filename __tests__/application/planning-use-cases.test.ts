@@ -238,6 +238,22 @@ describe('planning use cases', () => {
     await expect(source.getScheduleBlock(foreignBlock.id)).resolves.toBeNull();
   });
 
+  test('rejects a submitted block id already owned by another task', async () => {
+    const source = createInMemoryDataSource();
+    const otherTask: TaskItem = { ...task, id: 'existing-block-owner-task' };
+    const existingForeignBlock = block('shared-block-id', otherTask.id);
+    const candidate = block('shared-block-id', task.id);
+    await source.saveTaskItem(task);
+    await source.saveTaskItem(otherTask);
+    await source.saveScheduleBlock(existingForeignBlock);
+
+    await expect(saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [candidate],
+    })).rejects.toThrow('другой задаче');
+    await expect(source.getScheduleBlock(existingForeignBlock.id)).resolves.toEqual(existingForeignBlock);
+  });
+
   test('rejects deletion of a block owned by another task', async () => {
     const source = createInMemoryDataSource();
     const otherTask: TaskItem = { ...task, id: 'foreign-deleted-block-task' };

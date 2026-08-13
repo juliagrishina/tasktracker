@@ -347,6 +347,10 @@ export async function saveTaskPlanning(
     if (block.taskItemId !== task.id) {
       throw new Error('Блок планирования принадлежит другой задаче');
     }
+    const persistedBlock = existingBlocks.find((existing) => existing.id === block.id);
+    if (persistedBlock !== undefined && persistedBlock.taskItemId !== task.id) {
+      throw new Error('Идентификатор блока уже принадлежит другой задаче');
+    }
     if (block.occurrenceId !== null) {
       throw new Error('Блок экземпляра нельзя сохранять как план серии задачи');
     }

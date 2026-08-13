@@ -249,6 +249,16 @@ const schemaVersionSeven = `
   ALTER TABLE recurrence_occurrences
     ADD COLUMN blocks_overridden INTEGER NOT NULL DEFAULT 0
     CHECK (blocks_overridden IN (0, 1));
+
+  UPDATE recurrence_occurrences
+  SET blocks_overridden = 1
+  WHERE status = 'active'
+    AND task_patch IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM schedule_blocks
+      WHERE schedule_blocks.occurrence_id = recurrence_occurrences.id
+    );
 `;
 
 const migrations: readonly Migration[] = [
