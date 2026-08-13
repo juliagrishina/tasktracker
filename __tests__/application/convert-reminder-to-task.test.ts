@@ -34,4 +34,33 @@ describe('convertReminderToTask', () => {
     await expect(source.getReminder('reminder-1')).resolves.toBeNull();
     await expect(source.getTaskItem('task-2')).resolves.toEqual(task);
   });
+
+  test('keeps the reminder when conversion cannot complete', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder({
+      id: 'reminder-rollback',
+      title: 'Проверить договор',
+      remindsOn: '2026-08-02',
+      periodStartOn: null,
+      periodEndOn: null,
+      repeatRule: null,
+      estimatedDurationMinutes: null,
+      completedAt: null,
+      createdAt,
+    });
+    jest.spyOn(source, 'deleteReminder').mockRejectedValueOnce(new Error('storage failure'));
+
+    await expect(
+      convertReminderToTask(source, {
+        reminderId: 'reminder-rollback',
+        taskId: 'task-rollback',
+        createdAt,
+      }),
+    ).rejects.toThrow('storage failure');
+
+    await expect(source.getReminder('reminder-rollback')).resolves.toMatchObject({
+      title: 'Проверить договор',
+    });
+    await expect(source.getTaskItem('task-rollback')).resolves.toBeNull();
+  });
 });

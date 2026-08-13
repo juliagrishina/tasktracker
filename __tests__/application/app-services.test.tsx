@@ -37,6 +37,16 @@ function BacklogProbe({ onCreate }: { onCreate: () => Promise<unknown> }) {
   );
 }
 
+function PlanningActionsProbe() {
+  const { isReady, planningActions } = useAppServices();
+
+  if (!isReady) {
+    return <Text>loading planning</Text>;
+  }
+
+  return <Text>{typeof planningActions.saveTaskPlanning}</Text>;
+}
+
 describe('AppServicesProvider', () => {
   test('exposes seeded settings and Plan demo data after initialization', async () => {
     const view = await render(
@@ -74,6 +84,18 @@ describe('AppServicesProvider', () => {
 
     await waitFor(() => {
       expect(view.getByText('unassigned:Новая задача')).toBeOnTheScreen();
+    });
+  });
+
+  test('exposes planning actions after initialization', async () => {
+    const view = await render(
+      <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
+        <PlanningActionsProbe />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.getByText('function')).toBeOnTheScreen();
     });
   });
 });

@@ -48,6 +48,22 @@ import {
 } from './backlog-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
+import type {
+  ConvertReminderAndScheduleInput,
+  ResolveScheduleConflictInput,
+  SaveOccurrenceExceptionInput,
+  SaveReminderPlanningInput,
+  SaveTaskPlanningInput,
+  SaveTaskPlanningResult,
+} from './planning-types';
+import {
+  convertReminderAndSchedule,
+  getPlanLoad,
+  resolveScheduleConflict,
+  saveOccurrenceException,
+  saveReminderPlanning,
+  saveTaskPlanning,
+} from './planning-use-cases';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -62,6 +78,15 @@ interface BacklogActions {
   deleteItem(input: DeleteBacklogItemInput): Promise<void>;
 }
 
+interface PlanningActions {
+  saveTaskPlanning(input: SaveTaskPlanningInput): Promise<SaveTaskPlanningResult>;
+  saveReminderPlanning(input: SaveReminderPlanningInput): Promise<Reminder>;
+  resolveScheduleConflict(input: ResolveScheduleConflictInput): Promise<void>;
+  convertReminderAndSchedule(input: ConvertReminderAndScheduleInput): Promise<TaskItem>;
+  saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
+  getPlanLoad(isoDate: string): Promise<number>;
+}
+
 interface AppServicesContextValue {
   isReady: boolean;
   projects: ProjectRepository;
@@ -69,6 +94,7 @@ interface AppServicesContextValue {
   demoTasks: DemoTaskGroups;
   backlog: BacklogView;
   backlogActions: BacklogActions;
+  planningActions: PlanningActions;
   refreshBacklog(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
@@ -117,6 +143,14 @@ export function AppServicesProvider({
     },
     [refreshBacklog],
   );
+  const runPlanningAction = useCallback(
+    async <T,>(action: () => Promise<T>): Promise<T> => {
+      const result = await action();
+      await refreshBacklog();
+      return result;
+    },
+    [refreshBacklog],
+  );
   const backlogActions = useMemo<BacklogActions>(
     () => ({
       createProject: (input) =>
@@ -140,6 +174,23 @@ export function AppServicesProvider({
         runBacklogAction(() => deleteBacklogItem(appSource, input)),
     }),
     [appSource, runBacklogAction],
+  );
+  const planningActions = useMemo<PlanningActions>(
+    () => ({
+      saveTaskPlanning: (input) =>
+        runPlanningAction(() => saveTaskPlanning(appSource, input)),
+      saveReminderPlanning: (input) =>
+        runPlanningAction(() => saveReminderPlanning(appSource, input)),
+      resolveScheduleConflict: (input) =>
+        runPlanningAction(() => resolveScheduleConflict(appSource, input)),
+      convertReminderAndSchedule: (input) =>
+        runPlanningAction(() => convertReminderAndSchedule(appSource, input)),
+      saveOccurrenceException: async (input) => {
+        await runPlanningAction(() => saveOccurrenceException(appSource, input));
+      },
+      getPlanLoad: (isoDate) => getPlanLoad(appSource, isoDate),
+    }),
+    [appSource, runPlanningAction],
   );
 
   useEffect(() => {
@@ -192,6 +243,7 @@ export function AppServicesProvider({
         demoTasks,
         backlog,
         backlogActions,
+        planningActions,
         refreshBacklog,
         runBacklogAction,
         runStorageDiagnostic,
