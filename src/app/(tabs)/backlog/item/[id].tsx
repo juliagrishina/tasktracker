@@ -141,15 +141,17 @@ export default function ItemRoute() {
           item={item}
           mode="edit"
           onClose={closeEditor}
-          planningContext={kind === 'task' || kind === 'subtask'
-            ? {
-                defaultDate: getLocalIsoDate(),
-                initialBlockIds: planningSnapshot?.blocks.map((block) => block.id) ?? [],
-                initialDraft: planningSnapshot === null
-                  ? createInitialTaskPlanningDraft()
-                  : createPlanningDraft(item as TaskItem, planningSnapshot),
-              }
-            : undefined}
+          planningContext={{
+            defaultDate: getLocalIsoDate(),
+            ...(kind === 'task' || kind === 'subtask'
+              ? {
+                  initialBlockIds: planningSnapshot?.blocks.map((block) => block.id) ?? [],
+                  initialDraft: planningSnapshot === null
+                    ? createInitialTaskPlanningDraft()
+                    : createPlanningDraft(item as TaskItem, planningSnapshot),
+                }
+              : {}),
+          }}
           type={formType}
           visible
         />

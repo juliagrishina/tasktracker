@@ -56,6 +56,48 @@ describe('DayDashboard', () => {
     expect(view.getByText('Проверить макеты')).toBeOnTheScreen();
     expect(view.queryByText('Планёрка команды')).toBeNull();
   });
+
+  test('makes an untimed recurring reminder available for editing with its occurrence context', async () => {
+    const onEditItem = jest.fn();
+    const reminder = {
+      id: 'recurring-reminder',
+      title: 'Принять лекарство',
+      remindsOn: '2026-08-15',
+      periodStartOn: null,
+      periodEndOn: null,
+      repeatRule: { frequency: 'daily' as const, interval: 1 },
+      estimatedDurationMinutes: 5,
+      completedAt: null,
+      createdAt: '2026-08-15T08:00:00.000Z',
+      occurrence: {
+        id: 'occurrence-reminder-series-2026-08-15',
+        seriesId: 'reminder-series',
+        occursOn: '2026-08-15',
+        frequency: 'daily' as const,
+        interval: 1,
+        startsOn: '2026-08-15',
+      },
+    };
+    const view = await render(
+      <DayDashboard
+        dayPlan={{
+          loadPercent: 0.5952380952380952,
+          tone: 'low',
+          blocks: [],
+          untimedTasks: [],
+          untimedReminders: [reminder],
+        }}
+        onEditItem={onEditItem}
+        selectedDate="2026-08-15"
+      />,
+    );
+
+    const editAction = view.getByLabelText('Редактировать Принять лекарство');
+    expect(editAction).toBeOnTheScreen();
+    await fireEvent.press(editAction);
+
+    expect(onEditItem).toHaveBeenCalledWith(reminder, reminder.occurrence, undefined);
+  });
 });
 
 describe('MonthLoadGrid', () => {

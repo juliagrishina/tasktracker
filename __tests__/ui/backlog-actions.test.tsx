@@ -6,6 +6,23 @@ import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { ItemDetailActions } from '../../src/ui/backlog/item-detail-actions';
 
 describe('Backlog item actions', () => {
+  test.each(['task', 'subtask', 'reminder'] as const)(
+    'opens the planning editor for a %s instead of showing a future-stage placeholder',
+    async (kind) => {
+      const onEdit = jest.fn();
+      const view = await render(
+        <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
+          <ItemDetailActions id={`${kind}-planning`} kind={kind} onEdit={onEdit} />
+        </AppServicesProvider>,
+      );
+
+      await fireEvent.press(view.getByRole('button', { name: 'Запланировать' }));
+
+      expect(onEdit).toHaveBeenCalledTimes(1);
+      expect(view.queryByText(/следующем этапе планирования/)).toBeNull();
+    },
+  );
+
   test('completes a task with its subtask and deletes only after confirmation', async () => {
     const source = createInMemoryDataSource();
     const task = await createTask(source, {
@@ -34,7 +51,7 @@ describe('Backlog item actions', () => {
       expect(view.getByText('Завершить')).toBeTruthy();
     });
 
-    fireEvent.press(view.getByText('Завершить'));
+    await fireEvent.press(view.getByText('Завершить'));
     await waitFor(async () => {
       await expect(source.getTaskItem(task.id)).resolves.toMatchObject({
         completedAt: expect.any(String),
@@ -44,7 +61,7 @@ describe('Backlog item actions', () => {
       });
     });
 
-    fireEvent.press(view.getByText('Удалить'));
+    await fireEvent.press(view.getByText('Удалить'));
     await waitFor(() => {
       expect(deniedConfirmation).toHaveBeenCalledTimes(1);
     });
@@ -67,7 +84,7 @@ describe('Backlog item actions', () => {
     await waitFor(() => {
       expect(view.getByText('Удалить')).toBeTruthy();
     });
-    fireEvent.press(view.getByText('Удалить'));
+    await fireEvent.press(view.getByText('Удалить'));
 
     await waitFor(async () => {
       await expect(source.getTaskItem(task.id)).resolves.toBeNull();

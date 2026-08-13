@@ -208,8 +208,8 @@ export function PlanningDatePicker({
                     accessibilityState={{ disabled, selected }}
                     disabled={disabled}
                     onPress={() => {
-                      onChange(isoDate);
                       setVisible(false);
+                      onChange(isoDate);
                     }}
                     style={({ pressed }) => [
                       styles.dayButton,

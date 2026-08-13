@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { DayPlan, DayPlanBlock, DayPlanOccurrence } from '../../application/plan-load-selector';
-import type { TaskItem } from '../../domain/entities';
+import type { Reminder, TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
@@ -17,7 +17,7 @@ interface DayDashboardProps {
   dayPlan: DayPlan | null;
   mode?: PlanViewMode;
   onCreateTask?: () => void;
-  onEditTask?: (task: TaskItem, occurrence?: DayPlanOccurrence, block?: DayPlanBlock) => void;
+  onEditItem?: (item: TaskItem | Reminder, occurrence?: DayPlanOccurrence, block?: DayPlanBlock) => void;
   onRefresh?: () => void;
   onSelectMode?: () => void;
   selectedDate: string;
@@ -28,7 +28,7 @@ interface DayListItem {
   title: string;
   detail: string;
   kind: 'task' | 'reminder' | 'block';
-  task?: TaskItem;
+  item?: TaskItem | Reminder;
   occurrence?: DayPlanOccurrence;
   block?: DayPlanBlock;
 }
@@ -48,7 +48,7 @@ export function DayDashboard({
   dayPlan,
   mode = 'day',
   onCreateTask,
-  onEditTask,
+  onEditItem,
   onRefresh,
   onSelectMode,
   selectedDate,
@@ -60,7 +60,7 @@ export function DayDashboard({
     title: block.title,
     detail: `${formatBlockTime(block.startsAt)}–${formatBlockTime(block.endsAt)}${block.description === null ? '' : ` · ${block.description}`}`,
     kind: 'block',
-    task: block.task,
+    item: block.task,
     occurrence: block.occurrence,
     block,
   })) ?? [];
@@ -72,13 +72,16 @@ export function DayDashboard({
           title: task.title,
           detail: task.description ?? 'Задача',
           kind: 'task' as const,
-          task,
+          item: task,
+          occurrence: task.occurrence,
         })),
         ...dayPlan.untimedReminders.map((reminder) => ({
           id: reminder.id,
           title: reminder.title,
           detail: 'Напоминание',
           kind: 'reminder' as const,
+          item: reminder,
+          occurrence: reminder.occurrence,
         })),
       ];
 
@@ -136,14 +139,14 @@ export function DayDashboard({
         <SectionHeader action={`${untimedItems.length} дел`} title="Без времени" />
         <View style={styles.list}>
           {untimedItems.length === 0 ? <EmptyPlanRow message="Нет задач и напоминаний без времени" /> : untimedItems.map((item) => (
-            <PlanListRow item={item} key={item.id} onEditTask={onEditTask} />
+            <PlanListRow item={item} key={item.id} onEditItem={onEditItem} />
           ))}
         </View>
 
         <SectionHeader action={`${scheduledItems.length} блоков`} title="Расписание" />
         <View style={styles.list}>
           {scheduledItems.length === 0 ? <EmptyPlanRow message="Нет временных блоков" /> : scheduledItems.map((item) => (
-            <PlanListRow item={item} key={item.id} onEditTask={onEditTask} />
+            <PlanListRow item={item} key={item.id} onEditItem={onEditItem} />
           ))}
         </View>
 
@@ -186,17 +189,17 @@ function EmptyPlanRow({ message }: { message: string }) {
 
 function PlanListRow({
   item,
-  onEditTask,
+  onEditItem,
 }: {
   item: DayListItem;
-  onEditTask?: (task: TaskItem, occurrence?: DayPlanOccurrence, block?: DayPlanBlock) => void;
+  onEditItem?: (planItem: TaskItem | Reminder, occurrence?: DayPlanOccurrence, block?: DayPlanBlock) => void;
 }) {
   return (
     <SurfaceCard
-      accessibilityLabel={item.task === undefined ? undefined : `Редактировать ${item.title}`}
-      onPress={item.task === undefined || onEditTask === undefined
+      accessibilityLabel={item.item === undefined ? undefined : `Редактировать ${item.title}`}
+      onPress={item.item === undefined || onEditItem === undefined
         ? undefined
-        : () => onEditTask(item.task as TaskItem, item.occurrence, item.block)}
+        : () => onEditItem(item.item as TaskItem | Reminder, item.occurrence, item.block)}
       style={styles.listRow}>
       <View style={[styles.dot, item.kind === 'reminder' && styles.reminderDot]} />
       <View style={styles.listCopy}>

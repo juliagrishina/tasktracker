@@ -297,7 +297,10 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
         <Field label="Дата задачи">
           <PlanningDatePicker
             accessibilityLabel="Дата задачи"
-            onChange={(scheduledOn) => update({ scheduledOn })}
+            onChange={(scheduledOn) => {
+              update({ scheduledOn });
+              setOpenDatePicker(null);
+            }}
             onVisibleChange={(visible) => setOpenDatePicker(visible ? 'scheduled' : null)}
             value={value.scheduledOn}
             visible={openDatePicker === 'scheduled'}
@@ -328,7 +331,10 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
             <PlanningDatePicker
               accessibilityLabel="Конец периода задачи"
               minimumValue={value.periodStartOn || undefined}
-              onChange={(periodEndOn) => update({ periodEndOn })}
+              onChange={(periodEndOn) => {
+                update({ periodEndOn });
+                setOpenDatePicker(null);
+              }}
               onVisibleChange={(visible) => setOpenDatePicker(visible ? 'period-end' : null)}
               value={value.periodEndOn}
               visible={openDatePicker === 'period-end'}

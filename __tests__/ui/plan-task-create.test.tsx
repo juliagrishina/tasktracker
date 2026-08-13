@@ -1,16 +1,57 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { AppServicesProvider } from '../../src/application/app-services-provider';
-import { createTask } from '../../src/application/backlog-use-cases';
+import { createReminder, createTask } from '../../src/application/backlog-use-cases';
+import { getDayPlan } from '../../src/application/plan-load-selector';
+import { saveTaskPlanning } from '../../src/application/planning-use-cases';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { ItemFormSheet } from '../../src/ui/backlog/item-form-sheet';
 import { PlanScreen } from '../../src/ui/plan/plan-screen';
 
+type RenderedView = Awaited<ReturnType<typeof render>>;
+
+async function choosePickerValue(view: RenderedView, triggerLabel: string, optionLabel: string) {
+  await waitFor(() => {
+    expect(view.getByLabelText(triggerLabel)).toBeOnTheScreen();
+  });
+  await fireEvent.press(view.getByLabelText(triggerLabel));
+  await waitFor(() => {
+    expect(view.getByLabelText(optionLabel)).toBeOnTheScreen();
+  });
+  await fireEvent.press(view.getByLabelText(optionLabel));
+}
+
+async function chooseSelectedPickerValue(view: RenderedView, triggerLabel: string) {
+  await fireEvent.press(view.getByLabelText(triggerLabel));
+  const selectedOption = await waitFor(() => {
+    const option = view.getAllByRole('button').find((candidate) => (
+      candidate.props.accessibilityState?.selected === true
+      && /^\d{2}:\d{2}/.test(candidate.props.accessibilityLabel ?? '')
+    ));
+    expect(option).toBeDefined();
+    return option;
+  });
+  await fireEvent.press(selectedOption!);
+}
+
+async function chooseCalendarDate(view: RenderedView, triggerLabel: string, dayLabel: string) {
+  if (view.queryByLabelText(dayLabel) === null) {
+    await fireEvent.press(view.getByLabelText(triggerLabel));
+  }
+  await waitFor(() => {
+    expect(view.getByLabelText(dayLabel)).toBeOnTheScreen();
+  });
+  await fireEvent.press(view.getByLabelText(dayLabel));
+  await waitFor(() => {
+    expect(view.getByLabelText(triggerLabel).props.accessibilityState?.expanded).toBe(false);
+  });
+}
+
 describe('Plan task creation sheet', () => {
-  test('opens the approved planning states from the Plan FAB', async () => {
+  test('opens calendar and value picker planning controls from the Plan FAB', async () => {
     const view = await render(
       <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
-        <PlanScreen />
+        <PlanScreen initialDate="2026-08-13" />
       </AppServicesProvider>,
     );
 
@@ -21,33 +62,26 @@ describe('Plan task creation sheet', () => {
 
     await waitFor(() => {
       expect(view.getByText('Новая задача')).toBeOnTheScreen();
-      expect(view.getByText('Без даты')).toBeOnTheScreen();
+      expect(view.getByRole('button', { name: 'Без даты' })).toBeOnTheScreen();
       expect(view.getByText('Повторение')).toBeOnTheScreen();
     });
-
-    await fireEvent.press(view.getByText('Период'));
+    await fireEvent.press(view.getByRole('button', { name: 'Период' }));
     await waitFor(() => {
       expect(view.getByLabelText('Начало периода задачи')).toBeOnTheScreen();
       expect(view.getByLabelText('Конец периода задачи')).toBeOnTheScreen();
     });
-
-    await fireEvent.press(view.getByText('Каждую неделю'));
+    await fireEvent.press(view.getByLabelText('Добавить временной интервал'));
     await waitFor(() => {
-      expect(view.getByLabelText('Интервал повторения')).toBeOnTheScreen();
-    });
-
-    await fireEvent.press(view.getByText('Добавить блок времени'));
-    await waitFor(() => {
-      expect(view.getByLabelText('Начало блока 1')).toBeOnTheScreen();
-      expect(view.getByLabelText('Длительность блока 1')).toBeOnTheScreen();
+      expect(view.getByLabelText('Начало интервала 1')).toBeOnTheScreen();
+      expect(view.getByLabelText('Конец интервала 1')).toBeOnTheScreen();
     });
   });
 
-  test('persists the Plan task date and time block', async () => {
+  test('persists a picker-selected task date and exact interval', async () => {
     const source = createInMemoryDataSource();
     const view = await render(
       <AppServicesProvider source={source} seedDevelopmentData={false}>
-        <PlanScreen />
+        <PlanScreen initialDate="2026-08-05" />
       </AppServicesProvider>,
     );
 
@@ -59,308 +93,289 @@ describe('Plan task creation sheet', () => {
       expect(view.getByLabelText('Название')).toBeOnTheScreen();
     });
     await fireEvent.changeText(view.getByLabelText('Название'), 'Подготовить план релиза');
-    await fireEvent.press(view.getByText('Дата'));
+    await fireEvent.press(view.getByRole('button', { name: 'Дата' }));
     await waitFor(() => {
       expect(view.getByLabelText('Дата задачи')).toBeOnTheScreen();
     });
-    await fireEvent.changeText(view.getByLabelText('Дата задачи'), '2026-08-05');
-    await waitFor(() => {
-      expect(view.getByLabelText('Дата задачи').props.value).toBe('2026-08-05');
-    });
-    await fireEvent.press(view.getByText('Добавить блок времени'));
-    await waitFor(() => {
-      expect(view.getByLabelText('Дата блока 1')).toBeOnTheScreen();
-    });
-    await fireEvent.changeText(view.getByLabelText('Дата блока 1'), '2026-08-05');
-    await fireEvent.changeText(view.getByLabelText('Начало блока 1'), '09:00');
-    await fireEvent.changeText(view.getByLabelText('Длительность блока 1'), '30');
+    await chooseCalendarDate(view, 'Дата задачи', '5 августа 2026');
+    await fireEvent.press(view.getByLabelText('Добавить временной интервал'));
+    await chooseSelectedPickerValue(view, 'Начало интервала 1');
+    await chooseSelectedPickerValue(view, 'Конец интервала 1');
     await fireEvent.press(view.getByText('Создать'));
 
     await waitFor(async () => {
-      expect((await source.listTaskItems()).map((task) => task.title)).toContain('Подготовить план релиза');
+      await expect(source.listTaskItems()).resolves.toContainEqual(
+        expect.objectContaining({ title: 'Подготовить план релиза', scheduledOn: '2026-08-05' }),
+      );
     });
-    await expect(source.listScheduleBlocks()).resolves.toHaveLength(1);
-    await expect(source.listTaskItems()).resolves.toContainEqual(
-      expect.objectContaining({ scheduledOn: '2026-08-05' }),
-    );
+    await expect(source.listScheduleBlocks()).resolves.toContainEqual(expect.objectContaining({
+      startsAt: expect.stringContaining('2026-08-05T'),
+    }));
   });
 
-  test('keeps a conflicting block unsaved until the user confirms it', async () => {
-    const source = createInMemoryDataSource();
-    const existingTask = await createTask(source, {
-      id: 'existing-task',
-      title: 'Занятый интервал',
-      createdAt: '2026-08-05T08:00:00.000Z',
-    });
-    await source.saveScheduleBlock({
-      id: 'existing-block',
-      taskItemId: existingTask.id,
-      occurrenceId: null,
-      startsAt: '2026-08-05T06:00:00.000Z',
-      endsAt: '2026-08-05T07:00:00.000Z',
-      timeZoneId: null,
-      createdAt: '2026-08-05T08:00:00.000Z',
-    });
-    const view = await render(
-      <AppServicesProvider source={source} seedDevelopmentData={false}>
-        <PlanScreen />
-      </AppServicesProvider>,
-    );
-
-    await waitFor(() => {
-      expect(view.getByLabelText('Добавить в план')).toBeOnTheScreen();
-    });
-    await fireEvent.press(view.getByLabelText('Добавить в план'));
-    await waitFor(() => {
-      expect(view.getByLabelText('Название')).toBeOnTheScreen();
-    });
-    await fireEvent.changeText(view.getByLabelText('Название'), 'Новый блок');
-    await fireEvent.press(view.getByText('Добавить блок времени'));
-    await waitFor(() => {
-      expect(view.getByLabelText('Дата блока 1')).toBeOnTheScreen();
-    });
-    await fireEvent.changeText(view.getByLabelText('Дата блока 1'), '2026-08-05');
-    await fireEvent.changeText(view.getByLabelText('Начало блока 1'), '09:30');
-    await fireEvent.changeText(view.getByLabelText('Длительность блока 1'), '30');
-    await fireEvent.press(view.getByText('Создать'));
-
-    await waitFor(() => {
-      expect(view.getByText('Пересечение в расписании')).toBeOnTheScreen();
-    });
-    expect(await source.listScheduleBlocks()).toHaveLength(1);
-
-    await fireEvent.press(view.getByText('Сохранить с пересечением'));
-    await waitFor(async () => {
-      expect(await source.listScheduleBlocks()).toHaveLength(2);
-    });
-  });
-
-  test('changes only a supplied recurring occurrence when the user selects its scope', async () => {
+  test('keeps a date-only plan when it is opened and saved again', async () => {
     const source = createInMemoryDataSource();
     const task = await createTask(source, {
-      id: 'recurring-task',
-      title: 'Ежемесячный отчёт',
-      createdAt: '2028-01-31T08:00:00.000Z',
+      id: 'date-only-task',
+      title: 'Задача на дату',
+      estimatedDurationMinutes: 45,
+      createdAt: '2026-08-15T08:00:00.000Z',
     });
-    const series = {
-      id: 'monthly-series',
-      itemKind: 'task' as const,
-      itemId: task.id,
-      frequency: 'monthly' as const,
-      interval: 1,
-      startsOn: '2028-01-31',
-      createdAt: task.createdAt,
-    };
-    await source.saveRecurrenceSeries(series);
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      scheduledOn: '2026-08-15',
+      blocks: [],
+    });
     const view = await render(
       <AppServicesProvider source={source} seedDevelopmentData={false}>
-        <ItemFormSheet
-          item={task}
-          mode="edit"
-          onClose={jest.fn()}
-          planningContext={{
-            defaultDate: '2028-02-29',
-            occurrence: {
-              id: 'occurrence-february',
-              occursOn: '2028-02-29',
-              seriesId: series.id,
-            },
-          }}
-          type="task"
-          visible
-        />
+        <PlanScreen initialDate="2026-08-15" />
       </AppServicesProvider>,
     );
 
     await waitFor(() => {
-      expect(view.getByText('Только этот экземпляр')).toBeOnTheScreen();
-      expect(view.getByText('Всю серию')).toBeOnTheScreen();
+      expect(view.getByLabelText('Редактировать Задача на дату')).toBeOnTheScreen();
     });
-    await fireEvent.changeText(view.getByLabelText('Название'), 'Отчёт только за февраль');
-    await fireEvent.press(view.getByText('Только этот экземпляр'));
-    await fireEvent.press(view.getByText('Создать'));
-
-    await expect(source.getRecurrenceOccurrence('occurrence-february')).resolves.toMatchObject({
-      occursOn: '2028-02-29',
-      seriesId: series.id,
-      taskPatch: expect.objectContaining({ title: 'Отчёт только за февраль' }),
-    });
-    await expect(source.getTaskItem(task.id)).resolves.toMatchObject({
-      title: task.title,
-    });
-    await expect(source.getRecurrenceSeries(series.id)).resolves.toEqual(series);
-  });
-
-  test('opens the instance scope chooser from a recurring block in Plan', async () => {
-    const source = createInMemoryDataSource();
-    const task = await createTask(source, {
-      id: 'plan-recurring-task',
-      title: 'Плановая сверка',
-      createdAt: '2026-08-05T08:00:00.000Z',
-    });
-    await source.saveScheduleBlock({
-      id: 'plan-recurring-source-block',
-      taskItemId: task.id,
-      occurrenceId: null,
-      startsAt: '2026-08-05T09:00:00+03:00',
-      endsAt: '2026-08-05T10:00:00+03:00',
-      timeZoneId: null,
-      createdAt: task.createdAt,
-    });
-    await source.saveRecurrenceSeries({
-      id: 'plan-recurring-series',
-      itemKind: 'task',
-      itemId: task.id,
-      frequency: 'weekly',
-      interval: 1,
-      startsOn: '2026-08-05',
-      createdAt: task.createdAt,
-    });
-    const view = await render(
-      <AppServicesProvider source={source} seedDevelopmentData={false}>
-        <PlanScreen initialDate="2026-08-12" />
-      </AppServicesProvider>,
-    );
+    await fireEvent.press(view.getByLabelText('Редактировать Задача на дату'));
 
     await waitFor(() => {
-      expect(view.getByLabelText('Редактировать Плановая сверка')).toBeOnTheScreen();
+      expect(view.getByText('15.08.2026')).toBeOnTheScreen();
+      expect(view.getByText('Сохранить')).toBeOnTheScreen();
     });
-    await fireEvent.press(view.getByLabelText('Редактировать Плановая сверка'));
-
-    await waitFor(() => {
-      expect(view.getByText('Только этот экземпляр')).toBeOnTheScreen();
-      expect(view.getByText('Всю серию')).toBeOnTheScreen();
-    });
-  });
-
-  test('edits the full source interval when a Plan block continues from the previous day', async () => {
-    const source = createInMemoryDataSource();
-    const task = await createTask(source, {
-      id: 'overnight-edit-task',
-      title: 'Ночная сверка',
-      createdAt: '2026-08-05T08:00:00.000Z',
-    });
-    await source.saveScheduleBlock({
-      id: 'overnight-edit-block',
-      taskItemId: task.id,
-      occurrenceId: null,
-      startsAt: '2026-08-05T23:30:00+03:00',
-      endsAt: '2026-08-06T00:30:00+03:00',
-      timeZoneId: null,
-      createdAt: task.createdAt,
-    });
-    const view = await render(
-      <AppServicesProvider source={source} seedDevelopmentData={false}>
-        <PlanScreen initialDate="2026-08-06" />
-      </AppServicesProvider>,
-    );
-
-    await waitFor(() => {
-      expect(view.getByLabelText('Редактировать Ночная сверка')).toBeOnTheScreen();
-    });
-    await fireEvent.press(view.getByLabelText('Редактировать Ночная сверка'));
-
-    await waitFor(() => {
-      expect(view.getByLabelText('Дата блока 1').props.value).toBe('2026-08-05');
-      expect(view.getByLabelText('Начало блока 1').props.value).toBe('23:30');
-      expect(view.getByLabelText('Длительность блока 1').props.value).toBe('60');
-    });
-    await fireEvent.press(view.getByText('Создать'));
+    await fireEvent.press(view.getByText('Сохранить'));
 
     await waitFor(async () => {
-      await expect(source.getScheduleBlock('overnight-edit-block')).resolves.toMatchObject({
-        startsAt: '2026-08-05T23:30:00+03:00',
-        endsAt: '2026-08-06T00:30:00+03:00',
+      await expect(source.getTaskItem(task.id)).resolves.toMatchObject({
+        scheduledOn: '2026-08-15',
+        estimatedDurationMinutes: 45,
       });
     });
   });
 
-  test('switches to the complete master schedule before saving a recurring series', async () => {
+  test('hydrates an existing exact block and deletes it when the user removes the interval', async () => {
     const source = createInMemoryDataSource();
     const task = await createTask(source, {
-      id: 'series-edit-task',
-      title: 'РЎРµСЂРёСЏ РґР»СЏ РёР·РјРµРЅРµРЅРёСЏ',
-      createdAt: '2026-08-05T08:00:00.000Z',
+      id: 'remove-block-task',
+      title: 'Убрать точное время',
+      createdAt: '2026-08-15T08:00:00.000Z',
     });
-    const series = {
-      id: 'series-edit-series',
-      itemKind: 'task' as const,
-      itemId: task.id,
-      frequency: 'weekly' as const,
-      interval: 1,
-      startsOn: '2026-08-05',
+    await source.saveScheduleBlock({
+      id: 'remove-block',
+      taskItemId: task.id,
+      occurrenceId: null,
+      startsAt: '2026-08-15T09:00:00+03:00',
+      endsAt: '2026-08-15T10:00:00+03:00',
+      timeZoneId: 'Europe/Moscow',
       createdAt: task.createdAt,
-    };
-    const masterBlocks = [
-      {
-        id: 'series-master-one', taskItemId: task.id, occurrenceId: null,
-        startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', timeZoneId: null, createdAt: task.createdAt,
-      },
-      {
-        id: 'series-master-two', taskItemId: task.id, occurrenceId: null,
-        startsAt: '2026-08-05T13:00:00+03:00', endsAt: '2026-08-05T14:00:00+03:00', timeZoneId: null, createdAt: task.createdAt,
-      },
-    ];
-    await source.saveRecurrenceSeries(series);
-    await Promise.all(masterBlocks.map((entry) => source.saveScheduleBlock(entry)));
-    const seriesDraft = {
-      blocks: masterBlocks.map((entry) => ({
-        id: entry.id,
-        date: '2026-08-05',
-        startsAt: entry.startsAt.slice(11, 16),
-        durationMinutes: '60',
-      })),
-      periodEndOn: '', periodStartOn: '', repeatFrequency: 'weekly' as const,
-      repeatInterval: '1', scheduledOn: '', scheduleMode: 'none' as const,
-    };
+    });
     const view = await render(
       <AppServicesProvider source={source} seedDevelopmentData={false}>
-        <ItemFormSheet
-          item={task}
-          mode="edit"
-          onClose={jest.fn()}
-          planningContext={{
-            defaultDate: '2026-08-12',
-            initialBlockIds: ['recurrence-series-edit-series-2026-08-12-series-master-one'],
-            initialDraft: {
-              ...seriesDraft,
-              blocks: [{
-                id: 'recurrence-series-edit-series-2026-08-12-series-master-one',
-                date: '2026-08-12', startsAt: '09:00', durationMinutes: '60',
-              }],
-            },
-            seriesInitialBlockIds: masterBlocks.map((entry) => entry.id),
-            seriesDraft,
-            occurrence: { id: 'series-edit-occurrence', occursOn: '2026-08-12', seriesId: series.id },
-          }}
-          type="task"
-          visible
-        />
+        <PlanScreen initialDate="2026-08-15" />
       </AppServicesProvider>,
     );
 
-    await fireEvent.press(view.getByText('\u0412\u0441\u044e \u0441\u0435\u0440\u0438\u044e'));
     await waitFor(() => {
-      expect(view.getByLabelText('\u041d\u0430\u0447\u0430\u043b\u043e \u0431\u043b\u043e\u043a\u0430 2')).toBeOnTheScreen();
+      expect(view.getByLabelText('Редактировать Убрать точное время')).toBeOnTheScreen();
     });
-    await fireEvent.changeText(view.getByLabelText('\u041d\u0430\u0447\u0430\u043b\u043e \u0431\u043b\u043e\u043a\u0430 1'), '08:00');
-    await fireEvent.press(view.getByLabelText('\u041d\u0435\u0442'));
-    await fireEvent.press(view.getByText('\u0421\u043e\u0437\u0434\u0430\u0442\u044c'));
+    await fireEvent.press(view.getByLabelText('Редактировать Убрать точное время'));
+    await waitFor(() => {
+      expect(view.getByText('09:00')).toBeOnTheScreen();
+      expect(view.getByText('Сохранить')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByLabelText('Удалить интервал 1'));
+    await fireEvent.press(view.getByText('Сохранить'));
 
     await waitFor(async () => {
-      await expect(source.listScheduleBlocks()).resolves.toEqual([
-        expect.objectContaining({ id: 'series-master-one', startsAt: '2026-08-05T08:00:00+03:00' }),
-        expect.objectContaining({ id: 'series-master-two' }),
-      ]);
+      await expect(source.getScheduleBlock('remove-block')).resolves.toBeNull();
     });
-    await expect(source.getRecurrenceSeries(series.id)).resolves.toBeNull();
   });
 
-  test('cancels a supplied recurring instance without changing the series', async () => {
+  test('moves only one recurring task instance and marks its block state overridden', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, {
+      id: 'move-task-instance',
+      title: 'Повторяющаяся задача',
+      estimatedDurationMinutes: 30,
+      createdAt: '2026-08-15T08:00:00.000Z',
+    });
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      scheduledOn: '2026-08-15',
+      blocks: [],
+      recurrence: {
+        id: 'move-task-series',
+        frequency: 'daily',
+        interval: 1,
+        startsOn: '2026-08-15',
+        createdAt: task.createdAt,
+      },
+    });
+    const view = await render(
+      <AppServicesProvider source={source} seedDevelopmentData={false}>
+        <PlanScreen initialDate="2026-08-15" />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.getByLabelText('Редактировать Повторяющаяся задача')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByLabelText('Редактировать Повторяющаяся задача'));
+    await waitFor(() => {
+      expect(view.getByText('Только этот экземпляр')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByText('Только этот экземпляр'));
+    await chooseCalendarDate(view, 'Дата задачи', '16 августа 2026');
+    await fireEvent.press(view.getByText('Сохранить'));
+
+    await waitFor(async () => {
+      await expect(source.getRecurrenceOccurrence('occurrence-move-task-series-2026-08-15')).resolves.toMatchObject({
+        status: 'active',
+        blocksOverridden: true,
+        taskPatch: expect.objectContaining({ scheduledOn: '2026-08-16' }),
+      });
+    });
+    await expect(getDayPlan(source, '2026-08-15')).resolves.toMatchObject({ untimedTasks: [] });
+    const movedTaskDay = await getDayPlan(source, '2026-08-16');
+    expect(movedTaskDay.untimedTasks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Повторяющаяся задача' }),
+    ]));
+  });
+
+  test('moves only one recurring reminder instance', async () => {
+    const source = createInMemoryDataSource();
+    const reminder = await createReminder(source, {
+      id: 'move-reminder-instance',
+      title: 'Повторяющееся напоминание',
+      remindsOn: '2026-08-15',
+      repeatRule: { frequency: 'daily', interval: 1 },
+      estimatedDurationMinutes: 20,
+      createdAt: '2026-08-15T08:00:00.000Z',
+    });
+    await source.saveRecurrenceSeries({
+      id: 'move-reminder-series',
+      itemKind: 'reminder',
+      itemId: reminder.id,
+      frequency: 'daily',
+      interval: 1,
+      startsOn: '2026-08-15',
+      createdAt: reminder.createdAt,
+    });
+    const view = await render(
+      <AppServicesProvider source={source} seedDevelopmentData={false}>
+        <PlanScreen initialDate="2026-08-15" />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.getByLabelText('Редактировать Повторяющееся напоминание')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByLabelText('Редактировать Повторяющееся напоминание'));
+    await fireEvent.press(view.getByText('Только этот экземпляр'));
+    await chooseCalendarDate(view, 'Дата напоминания', '16 августа 2026');
+    await fireEvent.press(view.getByText('Сохранить'));
+
+    await waitFor(async () => {
+      await expect(source.getRecurrenceOccurrence('occurrence-move-reminder-series-2026-08-15')).resolves.toMatchObject({
+        status: 'active',
+        reminderPatch: expect.objectContaining({ remindsOn: '2026-08-16' }),
+      });
+    });
+    await expect(getDayPlan(source, '2026-08-15')).resolves.toMatchObject({ untimedReminders: [] });
+    const movedReminderDay = await getDayPlan(source, '2026-08-16');
+    expect(movedReminderDay.untimedReminders).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Повторяющееся напоминание' }),
+    ]));
+  });
+
+  test('completes only one recurring reminder instance with a valid completion instant', async () => {
+    const source = createInMemoryDataSource();
+    const reminder = await createReminder(source, {
+      id: 'complete-reminder-instance',
+      title: 'Отметить приём лекарства',
+      remindsOn: '2026-08-15',
+      repeatRule: { frequency: 'daily', interval: 1 },
+      estimatedDurationMinutes: 5,
+      createdAt: '2026-08-15T08:00:00.000Z',
+    });
+    await source.saveRecurrenceSeries({
+      id: 'complete-reminder-series',
+      itemKind: 'reminder',
+      itemId: reminder.id,
+      frequency: 'daily',
+      interval: 1,
+      startsOn: '2026-08-15',
+      createdAt: reminder.createdAt,
+    });
+    const view = await render(
+      <AppServicesProvider source={source} seedDevelopmentData={false}>
+        <PlanScreen initialDate="2026-08-15" />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.getByLabelText('Редактировать Отметить приём лекарства')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByLabelText('Редактировать Отметить приём лекарства'));
+    await fireEvent.press(view.getByLabelText('Завершить этот экземпляр'));
+
+    await waitFor(async () => {
+      const occurrence = await source.getRecurrenceOccurrence('occurrence-complete-reminder-series-2026-08-15');
+      expect(occurrence).toMatchObject({ status: 'completed' });
+      expect(occurrence?.completedAt).toEqual(expect.any(String));
+      expect(Number.isNaN(Date.parse(occurrence?.completedAt ?? ''))).toBe(false);
+    });
+    await expect(getDayPlan(source, '2026-08-15')).resolves.toMatchObject({ untimedReminders: [] });
+    await expect(getDayPlan(source, '2026-08-16')).resolves.toMatchObject({
+      untimedReminders: [expect.objectContaining({ title: 'Отметить приём лекарства' })],
+    });
+  });
+
+  test('applies edits to the whole recurring task series when that scope is selected', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, {
+      id: 'series-edit-task',
+      title: 'Старая серия',
+      createdAt: '2026-08-15T08:00:00.000Z',
+    });
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      scheduledOn: '2026-08-15',
+      blocks: [],
+      recurrence: {
+        id: 'series-edit-series',
+        frequency: 'weekly',
+        interval: 1,
+        startsOn: '2026-08-15',
+        createdAt: task.createdAt,
+      },
+    });
+    const view = await render(
+      <AppServicesProvider source={source} seedDevelopmentData={false}>
+        <PlanScreen initialDate="2026-08-15" />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.getByLabelText('Редактировать Старая серия')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByLabelText('Редактировать Старая серия'));
+    await fireEvent.press(view.getByText('Всю серию'));
+    await fireEvent.changeText(view.getByLabelText('Название'), 'Обновлённая серия');
+    await fireEvent.press(view.getByText('Сохранить'));
+
+    await waitFor(async () => {
+      await expect(source.getTaskItem(task.id)).resolves.toMatchObject({ title: 'Обновлённая серия' });
+    });
+    await expect(source.getRecurrenceSeries('series-edit-series')).resolves.toMatchObject({
+      frequency: 'weekly',
+      interval: 1,
+    });
+  });
+
+  test('cancels a supplied recurring task instance without changing the series', async () => {
     const source = createInMemoryDataSource();
     const task = await createTask(source, {
       id: 'cancel-instance-task',
-      title: 'РЎРІРµСЂРєР° РґР»СЏ РѕС‚РјРµРЅС‹',
+      title: 'Проверка для отмены',
       createdAt: '2026-08-05T08:00:00.000Z',
     });
     const series = {
@@ -393,13 +408,12 @@ describe('Plan task creation sheet', () => {
       </AppServicesProvider>,
     );
 
-    await waitFor(() => {
-      expect(view.getByLabelText('\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u044d\u0442\u043e\u0442 \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440')).toBeOnTheScreen();
-    });
-    await fireEvent.press(view.getByLabelText('\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c \u044d\u0442\u043e\u0442 \u044d\u043a\u0437\u0435\u043c\u043f\u043b\u044f\u0440'));
+    await fireEvent.press(view.getByLabelText('Отменить этот экземпляр'));
 
-    await expect(source.getRecurrenceOccurrence('cancel-instance-occurrence')).resolves.toMatchObject({
-      status: 'cancelled',
+    await waitFor(async () => {
+      await expect(source.getRecurrenceOccurrence('cancel-instance-occurrence')).resolves.toMatchObject({
+        status: 'cancelled',
+      });
     });
     await expect(source.getRecurrenceSeries(series.id)).resolves.toEqual(series);
   });

@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { DayPlan, DayPlanBlock, DayPlanOccurrence, PlanLoadDay } from '../../application/plan-load-selector';
 import { useAppServices } from '../../application/app-services-provider';
 import type { TaskPlanningSnapshot } from '../../application/planning-use-cases';
-import type { TaskItem } from '../../domain/entities';
+import type { Reminder, TaskItem } from '../../domain/entities';
 import {
   createInitialTaskPlanningDraft,
   type TaskPlanningDraft,
@@ -90,10 +90,11 @@ export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps)
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
-  const [editingPlanTask, setEditingPlanTask] = useState<{
-    task: TaskItem;
+  const [editingPlanItem, setEditingPlanItem] = useState<{
+    item: TaskItem | Reminder;
     occurrence?: DayPlanOccurrence;
     block?: DayPlanBlock;
+    initialDraft?: TaskPlanningDraft;
     seriesInitialBlockIds?: readonly string[];
     seriesDraft?: TaskPlanningDraft;
   } | null>(null);
@@ -129,23 +130,36 @@ export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps)
     setSelectedDate(isoDate);
     setMode('day');
   };
-  const openTaskEditor = async (
-    task: TaskItem,
+  const openItemEditor = async (
+    item: TaskItem | Reminder,
     occurrence?: DayPlanOccurrence,
     block?: DayPlanBlock,
   ) => {
-    if (occurrence === undefined) {
-      setEditingPlanTask({ task, occurrence, block });
+    if (!('kind' in item)) {
+      setEditingPlanItem({ item, occurrence });
       return;
     }
 
-    const snapshot = await planningActions.getTaskPlanningSnapshot(task.id);
-    setEditingPlanTask({
-      task,
+    const snapshot = await planningActions.getTaskPlanningSnapshot(item.id);
+    const seriesDraft = createSeriesDraft(item, snapshot);
+    setEditingPlanItem({
+      item,
       occurrence,
       block,
+      initialDraft: occurrence !== undefined && block !== undefined
+        ? createBlockDraft(block)
+        : occurrence !== undefined
+          ? {
+              ...seriesDraft,
+              scheduleMode: 'date',
+              scheduledOn: occurrence.occursOn,
+              periodStartOn: '',
+              periodEndOn: '',
+              blocks: [],
+            }
+          : seriesDraft,
       seriesInitialBlockIds: snapshot.blocks.map((entry) => entry.id),
-      seriesDraft: createSeriesDraft(task, snapshot),
+      seriesDraft,
     });
   };
 
@@ -156,7 +170,7 @@ export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps)
           dayPlan={dayPlan}
           mode={mode}
           onCreateTask={() => setIsTaskSheetVisible(true)}
-          onEditTask={(task, occurrence, block) => void openTaskEditor(task, occurrence, block)}
+          onEditItem={(item, occurrence, block) => void openItemEditor(item, occurrence, block)}
           onRefresh={() => void refreshPlan()}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
@@ -186,24 +200,20 @@ export function PlanScreen({ initialDate = getLocalIsoDate() }: PlanScreenProps)
           type="task"
           visible
         />
-      ) : editingPlanTask !== null ? (
+      ) : editingPlanItem !== null ? (
         <ItemFormSheet
-          item={editingPlanTask.task}
+          item={editingPlanItem.item}
           mode="edit"
-          onClose={() => setEditingPlanTask(null)}
+          onClose={() => setEditingPlanItem(null)}
           planningContext={{
             defaultDate: selectedDate,
-            initialBlockIds: editingPlanTask.block === undefined
-              ? []
-              : [editingPlanTask.block.sourceBlock?.id ?? editingPlanTask.block.id],
-            initialDraft: editingPlanTask.block === undefined
-              ? createInitialTaskPlanningDraft()
-              : createBlockDraft(editingPlanTask.block),
-            seriesInitialBlockIds: editingPlanTask.seriesInitialBlockIds,
-            seriesDraft: editingPlanTask.seriesDraft,
-            occurrence: editingPlanTask.occurrence,
+            initialBlockIds: editingPlanItem.initialDraft?.blocks.map((entry) => entry.id) ?? [],
+            initialDraft: editingPlanItem.initialDraft,
+            seriesInitialBlockIds: editingPlanItem.seriesInitialBlockIds,
+            seriesDraft: editingPlanItem.seriesDraft,
+            occurrence: editingPlanItem.occurrence,
           }}
-          type={editingPlanTask.task.kind}
+          type={'kind' in editingPlanItem.item ? editingPlanItem.item.kind : 'reminder'}
           visible
         />
       ) : null}
