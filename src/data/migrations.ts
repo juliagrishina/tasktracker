@@ -186,6 +186,33 @@ const schemaVersionFive = `
   UPDATE recurrence_series SET updated_at = created_at WHERE updated_at IS NULL;
 `;
 
+const schemaVersionSix = `
+  DROP TRIGGER IF EXISTS validate_subtask_parent_on_insert;
+  DROP TRIGGER IF EXISTS validate_subtask_parent_on_update;
+
+  CREATE TRIGGER validate_subtask_parent_on_insert
+  BEFORE INSERT ON task_items
+  WHEN NEW.kind = 'subtask'
+    AND COALESCE(
+      (SELECT kind FROM task_items WHERE id = NEW.parent_task_id AND deleted_at IS NULL),
+      ''
+    ) != 'task'
+  BEGIN
+    SELECT RAISE(ABORT, 'Subtask parent must be a task');
+  END;
+
+  CREATE TRIGGER validate_subtask_parent_on_update
+  BEFORE UPDATE OF kind, parent_task_id ON task_items
+  WHEN NEW.kind = 'subtask'
+    AND COALESCE(
+      (SELECT kind FROM task_items WHERE id = NEW.parent_task_id AND deleted_at IS NULL),
+      ''
+    ) != 'task'
+  BEGIN
+    SELECT RAISE(ABORT, 'Subtask parent must be a task');
+  END;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -232,6 +259,12 @@ const migrations: readonly Migration[] = [
     version: 5,
     async apply(database) {
       await database.execAsync(schemaVersionFive);
+    },
+  },
+  {
+    version: 6,
+    async apply(database) {
+      await database.execAsync(schemaVersionSix);
     },
   },
 ];

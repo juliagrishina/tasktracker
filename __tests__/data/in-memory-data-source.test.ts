@@ -169,4 +169,38 @@ describe('in-memory data source', () => {
       'Родителем подзадачи может быть только задача',
     );
   });
+
+  test('soft-deletes a task, its subtask, and their related schedule block and recurrence series', async () => {
+    const source = createInMemoryDataSource();
+
+    await source.saveTaskItem(task);
+    await source.saveTaskItem(subtask);
+    await source.saveScheduleBlock(scheduleBlock);
+    await source.saveRecurrenceSeries(recurrenceSeries);
+
+    await source.deleteTaskItem(task.id);
+
+    await expect(source.getTaskItem(task.id)).resolves.toBeNull();
+    expect(source.debugRowExists(task.id)).toBe(true);
+
+    await expect(source.getTaskItem(subtask.id)).resolves.toBeNull();
+    expect(source.debugRowExists(subtask.id)).toBe(true);
+
+    await expect(source.getScheduleBlock(scheduleBlock.id)).resolves.toBeNull();
+    expect(source.debugRowExists(scheduleBlock.id)).toBe(true);
+
+    await expect(source.getRecurrenceSeries(recurrenceSeries.id)).resolves.toBeNull();
+    expect(source.debugRowExists(recurrenceSeries.id)).toBe(true);
+  });
+
+  test('rejects creating a subtask whose parent task was soft-deleted', async () => {
+    const source = createInMemoryDataSource();
+
+    await source.saveTaskItem(task);
+    await source.deleteTaskItem(task.id);
+
+    await expect(source.saveTaskItem(subtask)).rejects.toThrow(
+      'Задача-родитель подзадачи не найдена',
+    );
+  });
 });

@@ -18,6 +18,7 @@ import { getDefaultSettings } from './default-settings';
 
 export interface InMemoryDataSource extends AppDataSource {
   debugSettingsRowCount(): number;
+  debugRowExists(id: EntityId): boolean;
 }
 
 function compareByCreatedAt<T extends { id: EntityId; createdAt: string }>(
@@ -93,9 +94,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   async saveTaskItem(task: TaskItem): Promise<void> {
     await this.initialize();
     const parent =
-      task.kind === 'subtask'
-        ? (this.taskItems.get(task.parentTaskId) ?? null)
-        : null;
+      task.kind === 'subtask' ? await this.getTaskItem(task.parentTaskId) : null;
     assertTaskItemParent(task, parent);
     this.taskItems.set(task.id, { ...task, updatedAt: new Date().toISOString() });
   }
@@ -121,13 +120,13 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       .map((task) => task.id);
 
     for (const childId of childIds) {
-      this.deleteTaskRelatedRows(childId);
+      this.deleteTaskRelatedRows(childId, deletedAt);
       const child = this.taskItems.get(childId);
       if (child !== undefined) {
         this.taskItems.set(childId, { ...child, deletedAt, updatedAt: deletedAt });
       }
     }
-    this.deleteTaskRelatedRows(id);
+    this.deleteTaskRelatedRows(id, deletedAt);
     const task = this.taskItems.get(id);
     if (task !== undefined) {
       this.taskItems.set(id, { ...task, deletedAt, updatedAt: deletedAt });
@@ -226,15 +225,25 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     return this.settings === null ? 0 : 1;
   }
 
-  private deleteTaskRelatedRows(taskItemId: EntityId): void {
+  debugRowExists(id: EntityId): boolean {
+    return (
+      this.projects.has(id) ||
+      this.taskItems.has(id) ||
+      this.reminders.has(id) ||
+      this.scheduleBlocks.has(id) ||
+      this.recurrenceSeries.has(id)
+    );
+  }
+
+  private deleteTaskRelatedRows(taskItemId: EntityId, deletedAt: string): void {
     for (const [id, block] of this.scheduleBlocks) {
       if (block.taskItemId === taskItemId) {
-        this.scheduleBlocks.delete(id);
+        this.scheduleBlocks.set(id, { ...block, deletedAt, updatedAt: deletedAt });
       }
     }
     for (const [id, series] of this.recurrenceSeries) {
       if (series.taskItemId === taskItemId) {
-        this.recurrenceSeries.delete(id);
+        this.recurrenceSeries.set(id, { ...series, deletedAt, updatedAt: deletedAt });
       }
     }
   }

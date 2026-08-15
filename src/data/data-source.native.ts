@@ -368,16 +368,16 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const deletedAt = new Date().toISOString();
     await database.runAsync(
-      `DELETE FROM schedule_blocks
+      `UPDATE schedule_blocks SET deleted_at = ?, updated_at = ?
       WHERE task_item_id = ?
         OR task_item_id IN (SELECT id FROM task_items WHERE parent_task_id = ?)`,
-      [id, id],
+      [deletedAt, deletedAt, id, id],
     );
     await database.runAsync(
-      `DELETE FROM recurrence_series
+      `UPDATE recurrence_series SET deleted_at = ?, updated_at = ?
       WHERE task_item_id = ?
         OR task_item_id IN (SELECT id FROM task_items WHERE parent_task_id = ?)`,
-      [id, id],
+      [deletedAt, deletedAt, id, id],
     );
     await database.runAsync(
       'UPDATE task_items SET deleted_at = ?, updated_at = ? WHERE id = ? OR parent_task_id = ?',
