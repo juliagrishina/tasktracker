@@ -60,27 +60,34 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
 
   async saveProject(project: Project): Promise<void> {
     await this.initialize();
-    this.projects.set(project.id, project);
+    this.projects.set(project.id, { ...project, updatedAt: new Date().toISOString() });
   }
 
   async getProject(id: EntityId): Promise<Project | null> {
     await this.initialize();
-    return this.projects.get(id) ?? null;
+    const project = this.projects.get(id) ?? null;
+    return project === null || project.deletedAt !== null ? null : project;
   }
 
   async listProjects(): Promise<readonly Project[]> {
     await this.initialize();
-    return [...this.projects.values()].sort(compareByCreatedAt);
+    return [...this.projects.values()]
+      .filter((project) => project.deletedAt === null)
+      .sort(compareByCreatedAt);
   }
 
   async deleteProject(id: EntityId): Promise<void> {
     await this.initialize();
+    const deletedAt = new Date().toISOString();
     for (const task of this.taskItems.values()) {
       if (task.projectId === id) {
-        this.taskItems.set(task.id, { ...task, projectId: null });
+        this.taskItems.set(task.id, { ...task, projectId: null, updatedAt: deletedAt });
       }
     }
-    this.projects.delete(id);
+    const project = this.projects.get(id);
+    if (project !== undefined) {
+      this.projects.set(id, { ...project, deletedAt, updatedAt: deletedAt });
+    }
   }
 
   async saveTaskItem(task: TaskItem): Promise<void> {
@@ -90,52 +97,69 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
         ? (this.taskItems.get(task.parentTaskId) ?? null)
         : null;
     assertTaskItemParent(task, parent);
-    this.taskItems.set(task.id, task);
+    this.taskItems.set(task.id, { ...task, updatedAt: new Date().toISOString() });
   }
 
   async getTaskItem(id: EntityId): Promise<TaskItem | null> {
     await this.initialize();
-    return this.taskItems.get(id) ?? null;
+    const task = this.taskItems.get(id) ?? null;
+    return task === null || task.deletedAt !== null ? null : task;
   }
 
   async listTaskItems(): Promise<readonly TaskItem[]> {
     await this.initialize();
-    return [...this.taskItems.values()].sort(compareByCreatedAt);
+    return [...this.taskItems.values()]
+      .filter((task) => task.deletedAt === null)
+      .sort(compareByCreatedAt);
   }
 
   async deleteTaskItem(id: EntityId): Promise<void> {
     await this.initialize();
+    const deletedAt = new Date().toISOString();
     const childIds = [...this.taskItems.values()]
       .filter((task) => task.kind === 'subtask' && task.parentTaskId === id)
       .map((task) => task.id);
 
     for (const childId of childIds) {
       this.deleteTaskRelatedRows(childId);
-      this.taskItems.delete(childId);
+      const child = this.taskItems.get(childId);
+      if (child !== undefined) {
+        this.taskItems.set(childId, { ...child, deletedAt, updatedAt: deletedAt });
+      }
     }
     this.deleteTaskRelatedRows(id);
-    this.taskItems.delete(id);
+    const task = this.taskItems.get(id);
+    if (task !== undefined) {
+      this.taskItems.set(id, { ...task, deletedAt, updatedAt: deletedAt });
+    }
   }
 
   async saveReminder(reminder: Reminder): Promise<void> {
     await this.initialize();
     assertReminderShape(reminder);
-    this.reminders.set(reminder.id, reminder);
+    this.reminders.set(reminder.id, { ...reminder, updatedAt: new Date().toISOString() });
   }
 
   async getReminder(id: EntityId): Promise<Reminder | null> {
     await this.initialize();
-    return this.reminders.get(id) ?? null;
+    const reminder = this.reminders.get(id) ?? null;
+    return reminder === null || reminder.deletedAt !== null ? null : reminder;
   }
 
   async listReminders(): Promise<readonly Reminder[]> {
     await this.initialize();
-    return [...this.reminders.values()].sort(compareByCreatedAt);
+    return [...this.reminders.values()]
+      .filter((reminder) => reminder.deletedAt === null)
+      .sort(compareByCreatedAt);
   }
 
   async deleteReminder(id: EntityId): Promise<void> {
     await this.initialize();
-    this.reminders.delete(id);
+    const reminder = this.reminders.get(id);
+    if (reminder !== undefined) {
+      const deletedAt = new Date().toISOString();
+      this.reminders.set(id, { ...reminder, deletedAt, updatedAt: deletedAt });
+    }
   }
 
   async saveScheduleBlock(block: ScheduleBlock): Promise<void> {
@@ -147,27 +171,31 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     }
 
     assertScheduleBlockShape(block, task);
-    this.scheduleBlocks.set(block.id, block);
+    this.scheduleBlocks.set(block.id, { ...block, updatedAt: new Date().toISOString() });
   }
 
   async getScheduleBlock(id: EntityId): Promise<ScheduleBlock | null> {
     await this.initialize();
-    return this.scheduleBlocks.get(id) ?? null;
+    const block = this.scheduleBlocks.get(id) ?? null;
+    return block === null || block.deletedAt !== null ? null : block;
   }
 
   async listScheduleBlocks(): Promise<readonly ScheduleBlock[]> {
     await this.initialize();
-    return [...this.scheduleBlocks.values()].sort(compareByCreatedAt);
+    return [...this.scheduleBlocks.values()]
+      .filter((block) => block.deletedAt === null)
+      .sort(compareByCreatedAt);
   }
 
   async saveRecurrenceSeries(series: RecurrenceSeries): Promise<void> {
     await this.initialize();
-    this.recurrenceSeries.set(series.id, series);
+    this.recurrenceSeries.set(series.id, { ...series, updatedAt: new Date().toISOString() });
   }
 
   async getRecurrenceSeries(id: EntityId): Promise<RecurrenceSeries | null> {
     await this.initialize();
-    return this.recurrenceSeries.get(id) ?? null;
+    const series = this.recurrenceSeries.get(id) ?? null;
+    return series === null || series.deletedAt !== null ? null : series;
   }
 
   async transaction<T>(operation: () => Promise<T>): Promise<T> {

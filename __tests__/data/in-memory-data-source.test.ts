@@ -16,6 +16,8 @@ const project: Project = {
   description: null,
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const task: TaskItem = {
@@ -28,6 +30,8 @@ const task: TaskItem = {
   estimatedDurationMinutes: null,
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const subtask: TaskItem = {
@@ -40,6 +44,8 @@ const subtask: TaskItem = {
   estimatedDurationMinutes: null,
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const reminder: Reminder = {
@@ -52,6 +58,8 @@ const reminder: Reminder = {
   estimatedDurationMinutes: null,
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const scheduleBlock: ScheduleBlock = {
@@ -60,6 +68,8 @@ const scheduleBlock: ScheduleBlock = {
   startsAt: '2026-08-02T09:00:00.000Z',
   endsAt: '2026-08-02T09:30:00.000Z',
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const recurrenceSeries: RecurrenceSeries = {
@@ -69,6 +79,8 @@ const recurrenceSeries: RecurrenceSeries = {
   interval: 1,
   startsOn: '2026-08-02',
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const changedSettings: AppSettings = {
@@ -102,8 +114,14 @@ describe('in-memory data source', () => {
     await source.saveTaskItem(task);
     await source.initialize();
 
-    await expect(source.getProject(project.id)).resolves.toEqual(project);
-    await expect(source.getTaskItem(task.id)).resolves.toEqual(task);
+    await expect(source.getProject(project.id)).resolves.toEqual({
+      ...project,
+      updatedAt: expect.any(String),
+    });
+    await expect(source.getTaskItem(task.id)).resolves.toEqual({
+      ...task,
+      updatedAt: expect.any(String),
+    });
   });
 
   test('preserves every entity and changed settings after reinitialization', async () => {
@@ -119,13 +137,18 @@ describe('in-memory data source', () => {
     await source.saveSettings(changedSettings);
     await source.initialize();
 
-    await expect(source.getReminder(reminder.id)).resolves.toEqual(reminder);
-    await expect(source.getScheduleBlock(scheduleBlock.id)).resolves.toEqual(
-      scheduleBlock,
-    );
-    await expect(source.getRecurrenceSeries(recurrenceSeries.id)).resolves.toEqual(
-      recurrenceSeries,
-    );
+    await expect(source.getReminder(reminder.id)).resolves.toEqual({
+      ...reminder,
+      updatedAt: expect.any(String),
+    });
+    await expect(source.getScheduleBlock(scheduleBlock.id)).resolves.toEqual({
+      ...scheduleBlock,
+      updatedAt: expect.any(String),
+    });
+    await expect(source.getRecurrenceSeries(recurrenceSeries.id)).resolves.toEqual({
+      ...recurrenceSeries,
+      updatedAt: expect.any(String),
+    });
     await expect(source.getSettings()).resolves.toEqual(changedSettings);
   });
 

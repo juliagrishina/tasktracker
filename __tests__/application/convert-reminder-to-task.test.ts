@@ -16,6 +16,8 @@ describe('convertReminderToTask', () => {
       estimatedDurationMinutes: null,
       completedAt: null,
       createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
     });
 
     const task = await convertReminderToTask(source, {
@@ -32,6 +34,9 @@ describe('convertReminderToTask', () => {
       title: 'Позвонить в страховую',
     });
     await expect(source.getReminder('reminder-1')).resolves.toBeNull();
-    await expect(source.getTaskItem('task-2')).resolves.toEqual(task);
+    await expect(source.getTaskItem('task-2')).resolves.toEqual({
+      ...task,
+      updatedAt: expect.any(String),
+    });
   });
 });

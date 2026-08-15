@@ -161,6 +161,8 @@ export async function createProject(
     description: normalizeDescription(input.description),
     completedAt: null,
     createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    deletedAt: null,
   };
 
   await source.saveProject(project);
@@ -188,6 +190,8 @@ export async function createTask(
     estimatedDurationMinutes: normalizeDuration(input.estimatedDurationMinutes),
     completedAt: null,
     createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    deletedAt: null,
   };
 
   await source.saveTaskItem(task);
@@ -215,6 +219,8 @@ export async function createSubtask(
     estimatedDurationMinutes: normalizeDuration(input.estimatedDurationMinutes),
     completedAt: null,
     createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    deletedAt: null,
   };
 
   await source.saveTaskItem(subtask);
@@ -236,6 +242,8 @@ export async function createReminder(
     estimatedDurationMinutes: normalizeDuration(input.estimatedDurationMinutes),
     completedAt: null,
     createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+    deletedAt: null,
   };
 
   assertReminderScheduleShape(reminder);

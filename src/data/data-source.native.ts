@@ -31,6 +31,7 @@ interface ProjectRow {
   description: string | null;
   completed_at: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 interface TaskItemRow {
@@ -43,6 +44,7 @@ interface TaskItemRow {
   estimated_duration_minutes: number | null;
   completed_at: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 interface ReminderRow {
@@ -56,6 +58,7 @@ interface ReminderRow {
   estimated_duration_minutes: number | null;
   completed_at: string | null;
   created_at: string;
+  updated_at: string | null;
 }
 
 interface ScheduleBlockRow {
@@ -64,6 +67,7 @@ interface ScheduleBlockRow {
   starts_at: string;
   ends_at: string;
   created_at: string;
+  updated_at: string | null;
 }
 
 interface RecurrenceSeriesRow {
@@ -73,6 +77,7 @@ interface RecurrenceSeriesRow {
   interval: number;
   starts_on: string;
   created_at: string;
+  updated_at: string | null;
 }
 
 class NativeDataSource implements AppDataSource {
@@ -134,20 +139,23 @@ class NativeDataSource implements AppDataSource {
   async saveProject(project: Project): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
+    const updatedAt = new Date().toISOString();
     await database.runAsync(
-      `INSERT INTO projects (id, title, description, completed_at, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO projects (id, title, description, completed_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         description = excluded.description,
         completed_at = excluded.completed_at,
-        created_at = excluded.created_at`,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at`,
       [
         project.id,
         project.title,
         project.description,
         project.completedAt,
         project.createdAt,
+        updatedAt,
       ],
     );
   }
@@ -156,8 +164,8 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ProjectRow>(
-      `SELECT id, title, description, completed_at, created_at
-      FROM projects WHERE id = ?`,
+      `SELECT id, title, description, completed_at, created_at, updated_at
+      FROM projects WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
 
@@ -169,6 +177,8 @@ class NativeDataSource implements AppDataSource {
           description: row.description,
           completedAt: row.completed_at,
           createdAt: row.created_at,
+          updatedAt: row.updated_at ?? row.created_at,
+          deletedAt: null,
         };
   }
 
@@ -176,8 +186,9 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ProjectRow>(
-      `SELECT id, title, description, completed_at, created_at
+      `SELECT id, title, description, completed_at, created_at, updated_at
       FROM projects
+      WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
     );
 
@@ -187,13 +198,23 @@ class NativeDataSource implements AppDataSource {
       description: row.description,
       completedAt: row.completed_at,
       createdAt: row.created_at,
+      updatedAt: row.updated_at ?? row.created_at,
+      deletedAt: null,
     }));
   }
 
   async deleteProject(id: EntityId): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
-    await database.runAsync('DELETE FROM projects WHERE id = ?', [id]);
+    const deletedAt = new Date().toISOString();
+    await database.runAsync(
+      'UPDATE task_items SET project_id = NULL, updated_at = ? WHERE project_id = ?',
+      [deletedAt, id],
+    );
+    await database.runAsync(
+      'UPDATE projects SET deleted_at = ?, updated_at = ? WHERE id = ?',
+      [deletedAt, deletedAt, id],
+    );
   }
 
   async saveTaskItem(task: TaskItem): Promise<void> {
@@ -205,6 +226,7 @@ class NativeDataSource implements AppDataSource {
     assertTaskItemParent(task, parent);
 
     const database = await this.getDatabase();
+    const updatedAt = new Date().toISOString();
     await database.runAsync(
       `INSERT INTO task_items (
         id,
@@ -215,8 +237,9 @@ class NativeDataSource implements AppDataSource {
         description,
         estimated_duration_minutes,
         completed_at,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         kind = excluded.kind,
         project_id = excluded.project_id,
@@ -225,7 +248,8 @@ class NativeDataSource implements AppDataSource {
         description = excluded.description,
         estimated_duration_minutes = excluded.estimated_duration_minutes,
         completed_at = excluded.completed_at,
-        created_at = excluded.created_at`,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at`,
       [
         task.id,
         task.kind,
@@ -236,6 +260,7 @@ class NativeDataSource implements AppDataSource {
         task.estimatedDurationMinutes,
         task.completedAt,
         task.createdAt,
+        updatedAt,
       ],
     );
   }
@@ -245,9 +270,9 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<TaskItemRow>(
       `SELECT id, kind, project_id, parent_task_id, title, description,
-        estimated_duration_minutes, completed_at, created_at
+        estimated_duration_minutes, completed_at, created_at, updated_at
       FROM task_items
-      WHERE id = ?`,
+      WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
 
@@ -266,6 +291,8 @@ class NativeDataSource implements AppDataSource {
         estimatedDurationMinutes: row.estimated_duration_minutes,
         completedAt: row.completed_at,
         createdAt: row.created_at,
+        updatedAt: row.updated_at ?? row.created_at,
+        deletedAt: null,
       };
     }
 
@@ -283,6 +310,8 @@ class NativeDataSource implements AppDataSource {
       estimatedDurationMinutes: row.estimated_duration_minutes,
       completedAt: row.completed_at,
       createdAt: row.created_at,
+      updatedAt: row.updated_at ?? row.created_at,
+      deletedAt: null,
     };
   }
 
@@ -291,8 +320,9 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<TaskItemRow>(
       `SELECT id, kind, project_id, parent_task_id, title, description,
-        estimated_duration_minutes, completed_at, created_at
+        estimated_duration_minutes, completed_at, created_at, updated_at
       FROM task_items
+      WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
     );
 
@@ -308,6 +338,8 @@ class NativeDataSource implements AppDataSource {
           estimatedDurationMinutes: row.estimated_duration_minutes,
           completedAt: row.completed_at,
           createdAt: row.created_at,
+          updatedAt: row.updated_at ?? row.created_at,
+          deletedAt: null,
         };
       }
 
@@ -325,6 +357,8 @@ class NativeDataSource implements AppDataSource {
         estimatedDurationMinutes: row.estimated_duration_minutes,
         completedAt: row.completed_at,
         createdAt: row.created_at,
+        updatedAt: row.updated_at ?? row.created_at,
+        deletedAt: null,
       };
     });
   }
@@ -332,13 +366,30 @@ class NativeDataSource implements AppDataSource {
   async deleteTaskItem(id: EntityId): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
-    await database.runAsync('DELETE FROM task_items WHERE id = ?', [id]);
+    const deletedAt = new Date().toISOString();
+    await database.runAsync(
+      `DELETE FROM schedule_blocks
+      WHERE task_item_id = ?
+        OR task_item_id IN (SELECT id FROM task_items WHERE parent_task_id = ?)`,
+      [id, id],
+    );
+    await database.runAsync(
+      `DELETE FROM recurrence_series
+      WHERE task_item_id = ?
+        OR task_item_id IN (SELECT id FROM task_items WHERE parent_task_id = ?)`,
+      [id, id],
+    );
+    await database.runAsync(
+      'UPDATE task_items SET deleted_at = ?, updated_at = ? WHERE id = ? OR parent_task_id = ?',
+      [deletedAt, deletedAt, id, id],
+    );
   }
 
   async saveReminder(reminder: Reminder): Promise<void> {
     await this.initialize();
     assertReminderShape(reminder);
     const database = await this.getDatabase();
+    const updatedAt = new Date().toISOString();
     await database.runAsync(
       `INSERT INTO reminders (
         id,
@@ -350,8 +401,9 @@ class NativeDataSource implements AppDataSource {
         repeat_interval,
         estimated_duration_minutes,
         completed_at,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         reminds_on = excluded.reminds_on,
@@ -361,7 +413,8 @@ class NativeDataSource implements AppDataSource {
         repeat_interval = excluded.repeat_interval,
         estimated_duration_minutes = excluded.estimated_duration_minutes,
         completed_at = excluded.completed_at,
-        created_at = excluded.created_at`,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at`,
       [
         reminder.id,
         reminder.title,
@@ -373,6 +426,7 @@ class NativeDataSource implements AppDataSource {
         reminder.estimatedDurationMinutes,
         reminder.completedAt,
         reminder.createdAt,
+        updatedAt,
       ],
     );
   }
@@ -382,9 +436,9 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ReminderRow>(
       `SELECT id, title, reminds_on, period_start_on, period_end_on,
-        repeat_frequency, repeat_interval, estimated_duration_minutes, completed_at, created_at
+        repeat_frequency, repeat_interval, estimated_duration_minutes, completed_at, created_at, updated_at
       FROM reminders
-      WHERE id = ?`,
+      WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
 
@@ -403,6 +457,8 @@ class NativeDataSource implements AppDataSource {
           estimatedDurationMinutes: row.estimated_duration_minutes,
           completedAt: row.completed_at,
           createdAt: row.created_at,
+          updatedAt: row.updated_at ?? row.created_at,
+          deletedAt: null,
         };
   }
 
@@ -411,8 +467,9 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ReminderRow>(
       `SELECT id, title, reminds_on, period_start_on, period_end_on,
-        repeat_frequency, repeat_interval, estimated_duration_minutes, completed_at, created_at
+        repeat_frequency, repeat_interval, estimated_duration_minutes, completed_at, created_at, updated_at
       FROM reminders
+      WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
     );
 
@@ -429,13 +486,19 @@ class NativeDataSource implements AppDataSource {
       estimatedDurationMinutes: row.estimated_duration_minutes,
       completedAt: row.completed_at,
       createdAt: row.created_at,
+      updatedAt: row.updated_at ?? row.created_at,
+      deletedAt: null,
     }));
   }
 
   async deleteReminder(id: EntityId): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
-    await database.runAsync('DELETE FROM reminders WHERE id = ?', [id]);
+    const deletedAt = new Date().toISOString();
+    await database.runAsync(
+      'UPDATE reminders SET deleted_at = ?, updated_at = ? WHERE id = ?',
+      [deletedAt, deletedAt, id],
+    );
   }
 
   async saveScheduleBlock(block: ScheduleBlock): Promise<void> {
@@ -448,15 +511,17 @@ class NativeDataSource implements AppDataSource {
 
     assertScheduleBlockShape(block, task);
     const database = await this.getDatabase();
+    const updatedAt = new Date().toISOString();
     await database.runAsync(
-      `INSERT INTO schedule_blocks (id, task_item_id, starts_at, ends_at, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO schedule_blocks (id, task_item_id, starts_at, ends_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         task_item_id = excluded.task_item_id,
         starts_at = excluded.starts_at,
         ends_at = excluded.ends_at,
-        created_at = excluded.created_at`,
-      [block.id, block.taskItemId, block.startsAt, block.endsAt, block.createdAt],
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at`,
+      [block.id, block.taskItemId, block.startsAt, block.endsAt, block.createdAt, updatedAt],
     );
   }
 
@@ -464,9 +529,9 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, starts_at, ends_at, created_at
+      `SELECT id, task_item_id, starts_at, ends_at, created_at, updated_at
       FROM schedule_blocks
-      WHERE id = ?`,
+      WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
 
@@ -478,6 +543,8 @@ class NativeDataSource implements AppDataSource {
           startsAt: row.starts_at,
           endsAt: row.ends_at,
           createdAt: row.created_at,
+          updatedAt: row.updated_at ?? row.created_at,
+          deletedAt: null,
         };
   }
 
@@ -485,8 +552,9 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, starts_at, ends_at, created_at
+      `SELECT id, task_item_id, starts_at, ends_at, created_at, updated_at
       FROM schedule_blocks
+      WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
     );
 
@@ -496,12 +564,15 @@ class NativeDataSource implements AppDataSource {
       startsAt: row.starts_at,
       endsAt: row.ends_at,
       createdAt: row.created_at,
+      updatedAt: row.updated_at ?? row.created_at,
+      deletedAt: null,
     }));
   }
 
   async saveRecurrenceSeries(series: RecurrenceSeries): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
+    const updatedAt = new Date().toISOString();
     await database.runAsync(
       `INSERT INTO recurrence_series (
         id,
@@ -509,14 +580,16 @@ class NativeDataSource implements AppDataSource {
         frequency,
         interval,
         starts_on,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         task_item_id = excluded.task_item_id,
         frequency = excluded.frequency,
         interval = excluded.interval,
         starts_on = excluded.starts_on,
-        created_at = excluded.created_at`,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at`,
       [
         series.id,
         series.taskItemId,
@@ -524,6 +597,7 @@ class NativeDataSource implements AppDataSource {
         series.interval,
         series.startsOn,
         series.createdAt,
+        updatedAt,
       ],
     );
   }
@@ -532,9 +606,9 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<RecurrenceSeriesRow>(
-      `SELECT id, task_item_id, frequency, interval, starts_on, created_at
+      `SELECT id, task_item_id, frequency, interval, starts_on, created_at, updated_at
       FROM recurrence_series
-      WHERE id = ?`,
+      WHERE id = ? AND deleted_at IS NULL`,
       [id],
     );
 
@@ -547,6 +621,8 @@ class NativeDataSource implements AppDataSource {
           interval: row.interval,
           startsOn: row.starts_on,
           createdAt: row.created_at,
+          updatedAt: row.updated_at ?? row.created_at,
+          deletedAt: null,
         };
   }
 

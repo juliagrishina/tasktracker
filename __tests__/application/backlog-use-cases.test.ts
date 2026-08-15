@@ -260,4 +260,27 @@ describe('backlog use cases', () => {
     await expect(source.getProject(project.id)).resolves.toBeNull();
     await expect(source.getTaskItem(task.id)).resolves.toMatchObject({ projectId: null });
   });
+
+  test('deleting a task also soft-deletes its subtask and both disappear from the backlog', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, {
+      id: 'task-1',
+      title: 'Организовать переезд',
+      createdAt,
+    });
+    const subtask = await createSubtask(source, {
+      id: 'subtask-1',
+      parentTaskId: task.id,
+      title: 'Заказать коробки',
+      createdAt,
+    });
+
+    await deleteBacklogItem(source, { kind: 'task', id: task.id, confirmed: true });
+
+    await expect(source.getTaskItem(task.id)).resolves.toBeNull();
+    await expect(source.getTaskItem(subtask.id)).resolves.toBeNull();
+
+    const view = await getBacklogView(source);
+    expect(view.unassignedTasks).toEqual([]);
+  });
 });

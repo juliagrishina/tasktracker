@@ -13,12 +13,16 @@ const createdAt = '2026-08-02T09:00:00.000Z';
 const projectDefaults = {
   description: null,
   completedAt: null,
+  updatedAt: createdAt,
+  deletedAt: null,
 } as const;
 
 const taskDefaults = {
   description: null,
   estimatedDurationMinutes: null,
   completedAt: null,
+  updatedAt: createdAt,
+  deletedAt: null,
 } as const;
 
 const reminderDefaults = {
@@ -28,6 +32,8 @@ const reminderDefaults = {
   repeatRule: null,
   estimatedDurationMinutes: null,
   completedAt: null,
+  updatedAt: createdAt,
+  deletedAt: null,
 } as const;
 
 const projects: readonly Project[] = [
@@ -138,6 +144,8 @@ const scheduleBlocks: readonly ScheduleBlock[] = [
     startsAt: '2026-08-02T09:00:00.000Z',
     endsAt: '2026-08-02T09:30:00.000Z',
     createdAt,
+    updatedAt: createdAt,
+    deletedAt: null,
   },
   {
     id: 'demo-plan-team-call-block',
@@ -145,6 +153,8 @@ const scheduleBlocks: readonly ScheduleBlock[] = [
     startsAt: '2026-08-02T11:00:00.000Z',
     endsAt: '2026-08-02T11:45:00.000Z',
     createdAt,
+    updatedAt: createdAt,
+    deletedAt: null,
   },
 ];
 
@@ -156,6 +166,8 @@ const recurrenceSeries: readonly RecurrenceSeries[] = [
     interval: 1,
     startsOn: '2026-08-02',
     createdAt,
+    updatedAt: createdAt,
+    deletedAt: null,
   },
 ];
 

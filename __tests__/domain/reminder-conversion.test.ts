@@ -13,6 +13,8 @@ const reminder: Reminder = {
   estimatedDurationMinutes: 15,
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 describe('createTaskFromReminder', () => {
@@ -27,6 +29,8 @@ describe('createTaskFromReminder', () => {
       estimatedDurationMinutes: 15,
       completedAt: null,
       createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
     });
   });
 });

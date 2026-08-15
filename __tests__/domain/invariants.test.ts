@@ -18,6 +18,8 @@ const task: TaskItem = {
   estimatedDurationMinutes: null,
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const reminder: Reminder = {
@@ -30,6 +32,8 @@ const reminder: Reminder = {
   estimatedDurationMinutes: null,
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const block: ScheduleBlock = {
@@ -38,6 +42,8 @@ const block: ScheduleBlock = {
   startsAt: '2026-08-01T09:00:00.000Z',
   endsAt: '2026-08-01T09:30:00.000Z',
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 describe('domain invariants', () => {

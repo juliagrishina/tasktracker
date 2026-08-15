@@ -167,6 +167,25 @@ const schemaVersionFour = `
   DROP TABLE completed_items;
 `;
 
+const schemaVersionFive = `
+  ALTER TABLE projects ADD COLUMN updated_at TEXT;
+  ALTER TABLE projects ADD COLUMN deleted_at TEXT;
+  ALTER TABLE task_items ADD COLUMN updated_at TEXT;
+  ALTER TABLE task_items ADD COLUMN deleted_at TEXT;
+  ALTER TABLE reminders ADD COLUMN updated_at TEXT;
+  ALTER TABLE reminders ADD COLUMN deleted_at TEXT;
+  ALTER TABLE schedule_blocks ADD COLUMN updated_at TEXT;
+  ALTER TABLE schedule_blocks ADD COLUMN deleted_at TEXT;
+  ALTER TABLE recurrence_series ADD COLUMN updated_at TEXT;
+  ALTER TABLE recurrence_series ADD COLUMN deleted_at TEXT;
+
+  UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL;
+  UPDATE task_items SET updated_at = created_at WHERE updated_at IS NULL;
+  UPDATE reminders SET updated_at = created_at WHERE updated_at IS NULL;
+  UPDATE schedule_blocks SET updated_at = created_at WHERE updated_at IS NULL;
+  UPDATE recurrence_series SET updated_at = created_at WHERE updated_at IS NULL;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -207,6 +226,12 @@ const migrations: readonly Migration[] = [
     version: 4,
     async apply(database) {
       await database.execAsync(schemaVersionFour);
+    },
+  },
+  {
+    version: 5,
+    async apply(database) {
+      await database.execAsync(schemaVersionFive);
     },
   },
 ];

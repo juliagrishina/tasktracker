@@ -11,6 +11,8 @@ export interface Project {
   description: string | null;
   completedAt: string | null;
   createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
 
 export type TaskItem =
@@ -24,6 +26,8 @@ export type TaskItem =
       estimatedDurationMinutes: number | null;
       completedAt: string | null;
       createdAt: string;
+      updatedAt: string;
+      deletedAt: string | null;
     }
   | {
       id: EntityId;
@@ -35,6 +39,8 @@ export type TaskItem =
       estimatedDurationMinutes: number | null;
       completedAt: string | null;
       createdAt: string;
+      updatedAt: string;
+      deletedAt: string | null;
     };
 
 export interface Reminder {
@@ -47,6 +53,8 @@ export interface Reminder {
   estimatedDurationMinutes: number | null;
   completedAt: string | null;
   createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
 
 export interface ScheduleBlock {
@@ -55,6 +63,8 @@ export interface ScheduleBlock {
   startsAt: string;
   endsAt: string;
   createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
 
 export interface RecurrenceSeries {
@@ -64,6 +74,8 @@ export interface RecurrenceSeries {
   interval: number;
   startsOn: string;
   createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
 
 export interface AppSettings {

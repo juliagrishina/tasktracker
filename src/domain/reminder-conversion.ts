@@ -15,5 +15,7 @@ export function createTaskFromReminder(
     estimatedDurationMinutes: reminder.estimatedDurationMinutes,
     completedAt: null,
     createdAt,
+    updatedAt: createdAt,
+    deletedAt: null,
   };
 }

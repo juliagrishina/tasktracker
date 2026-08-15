@@ -20,6 +20,8 @@ export async function runPersistenceDiagnostic(
     description: null,
     completedAt: null,
     createdAt,
+    updatedAt: createdAt,
+    deletedAt: null,
   });
   await source.saveTaskItem({
     id: diagnosticTaskId,
@@ -31,6 +33,8 @@ export async function runPersistenceDiagnostic(
     estimatedDurationMinutes: null,
     completedAt: null,
     createdAt,
+    updatedAt: createdAt,
+    deletedAt: null,
   });
 
   return 'created';

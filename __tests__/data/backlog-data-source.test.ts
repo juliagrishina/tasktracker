@@ -9,6 +9,8 @@ const project: Project = {
   description: 'Описание',
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 const task: TaskItem = {
@@ -21,6 +23,8 @@ const task: TaskItem = {
   estimatedDurationMinutes: 30,
   completedAt: null,
   createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
 };
 
 describe('backlog data source', () => {
@@ -30,7 +34,11 @@ describe('backlog data source', () => {
     await source.saveProject(project);
     await source.saveTaskItem(task);
 
-    await expect(source.listProjects()).resolves.toEqual([project]);
-    await expect(source.listTaskItems()).resolves.toEqual([task]);
+    await expect(source.listProjects()).resolves.toEqual([
+      { ...project, updatedAt: expect.any(String) },
+    ]);
+    await expect(source.listTaskItems()).resolves.toEqual([
+      { ...task, updatedAt: expect.any(String) },
+    ]);
   });
 });
