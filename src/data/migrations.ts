@@ -163,6 +163,10 @@ const schemaVersionThree = `
   ALTER TABLE reminders_v3 RENAME TO reminders;
 `;
 
+const schemaVersionFour = `
+  DROP TABLE completed_items;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -197,6 +201,12 @@ const migrations: readonly Migration[] = [
     version: 3,
     async apply(database) {
       await database.execAsync(schemaVersionThree);
+    },
+  },
+  {
+    version: 4,
+    async apply(database) {
+      await database.execAsync(schemaVersionFour);
     },
   },
 ];

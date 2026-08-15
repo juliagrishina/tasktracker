@@ -1,6 +1,5 @@
 import type {
   AppSettings,
-  CompletedItem,
   EntityId,
   Project,
   RecurrenceSeries,
@@ -42,7 +41,6 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   private readonly reminders = new Map<EntityId, Reminder>();
   private readonly scheduleBlocks = new Map<EntityId, ScheduleBlock>();
   private readonly recurrenceSeries = new Map<EntityId, RecurrenceSeries>();
-  private readonly completedItems = new Map<EntityId, CompletedItem>();
 
   async initialize(): Promise<void> {
     if (this.settings === null) {
@@ -172,16 +170,6 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     return this.recurrenceSeries.get(id) ?? null;
   }
 
-  async saveCompletedItem(item: CompletedItem): Promise<void> {
-    await this.initialize();
-    this.completedItems.set(item.id, item);
-  }
-
-  async getCompletedItem(id: EntityId): Promise<CompletedItem | null> {
-    await this.initialize();
-    return this.completedItems.get(id) ?? null;
-  }
-
   async transaction<T>(operation: () => Promise<T>): Promise<T> {
     await this.initialize();
     const snapshot = {
@@ -191,7 +179,6 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       reminders: new Map(this.reminders),
       scheduleBlocks: new Map(this.scheduleBlocks),
       recurrenceSeries: new Map(this.recurrenceSeries),
-      completedItems: new Map(this.completedItems),
     };
 
     try {
@@ -203,7 +190,6 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       replaceMap(this.reminders, snapshot.reminders);
       replaceMap(this.scheduleBlocks, snapshot.scheduleBlocks);
       replaceMap(this.recurrenceSeries, snapshot.recurrenceSeries);
-      replaceMap(this.completedItems, snapshot.completedItems);
       throw error;
     }
   }
@@ -221,11 +207,6 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     for (const [id, series] of this.recurrenceSeries) {
       if (series.taskItemId === taskItemId) {
         this.recurrenceSeries.delete(id);
-      }
-    }
-    for (const [id, item] of this.completedItems) {
-      if (item.taskItemId === taskItemId) {
-        this.completedItems.delete(id);
       }
     }
   }

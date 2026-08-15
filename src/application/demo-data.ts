@@ -1,5 +1,4 @@
 import type {
-  CompletedItem,
   Project,
   RecurrenceSeries,
   Reminder,
@@ -160,21 +159,6 @@ const recurrenceSeries: readonly RecurrenceSeries[] = [
   },
 ];
 
-const completedItems: readonly CompletedItem[] = [
-  {
-    id: 'demo-completed-review-completion',
-    taskItemId: 'demo-completed-review',
-    completedAt: '2026-08-02T17:00:00.000Z',
-    createdAt,
-  },
-  {
-    id: 'demo-completed-brief-completion',
-    taskItemId: 'demo-completed-brief',
-    completedAt: '2026-08-02T18:00:00.000Z',
-    createdAt,
-  },
-];
-
 interface DemoTaskDefinition {
   id: string;
   detail: string;
@@ -217,10 +201,6 @@ export async function seedDemoData(source: AppDataSource): Promise<void> {
 
   for (const series of recurrenceSeries) {
     await source.saveRecurrenceSeries(series);
-  }
-
-  for (const item of completedItems) {
-    await source.saveCompletedItem(item);
   }
 
   const settings = await source.getSettings();

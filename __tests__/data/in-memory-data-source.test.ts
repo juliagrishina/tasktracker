@@ -1,6 +1,5 @@
 import type {
   AppSettings,
-  CompletedItem,
   Project,
   RecurrenceSeries,
   Reminder,
@@ -72,13 +71,6 @@ const recurrenceSeries: RecurrenceSeries = {
   createdAt,
 };
 
-const completedItem: CompletedItem = {
-  id: 'completed-1',
-  taskItemId: task.id,
-  completedAt: '2026-08-02T12:00:00.000Z',
-  createdAt,
-};
-
 const changedSettings: AppSettings = {
   workdayStartsAt: '08:00',
   workdayEndsAt: '22:00',
@@ -124,7 +116,6 @@ describe('in-memory data source', () => {
     await source.saveReminder(reminder);
     await source.saveScheduleBlock(scheduleBlock);
     await source.saveRecurrenceSeries(recurrenceSeries);
-    await source.saveCompletedItem(completedItem);
     await source.saveSettings(changedSettings);
     await source.initialize();
 
@@ -134,9 +125,6 @@ describe('in-memory data source', () => {
     );
     await expect(source.getRecurrenceSeries(recurrenceSeries.id)).resolves.toEqual(
       recurrenceSeries,
-    );
-    await expect(source.getCompletedItem(completedItem.id)).resolves.toEqual(
-      completedItem,
     );
     await expect(source.getSettings()).resolves.toEqual(changedSettings);
   });

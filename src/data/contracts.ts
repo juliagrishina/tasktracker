@@ -1,6 +1,5 @@
 import type {
   AppSettings,
-  CompletedItem,
   EntityId,
   Project,
   RecurrenceSeries,
@@ -30,7 +29,5 @@ export interface AppDataSource {
   listScheduleBlocks(): Promise<readonly ScheduleBlock[]>;
   saveRecurrenceSeries(series: RecurrenceSeries): Promise<void>;
   getRecurrenceSeries(id: EntityId): Promise<RecurrenceSeries | null>;
-  saveCompletedItem(item: CompletedItem): Promise<void>;
-  getCompletedItem(id: EntityId): Promise<CompletedItem | null>;
   transaction<T>(operation: () => Promise<T>): Promise<T>;
 }

@@ -66,13 +66,6 @@ export interface RecurrenceSeries {
   createdAt: string;
 }
 
-export interface CompletedItem {
-  id: EntityId;
-  taskItemId: EntityId;
-  completedAt: string;
-  createdAt: string;
-}
-
 export interface AppSettings {
   workdayStartsAt: string;
   workdayEndsAt: string;

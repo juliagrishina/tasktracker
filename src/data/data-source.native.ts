@@ -2,7 +2,6 @@ import * as SQLite from 'expo-sqlite';
 
 import type {
   AppSettings,
-  CompletedItem,
   EntityId,
   Project,
   RecurrenceSeries,
@@ -73,13 +72,6 @@ interface RecurrenceSeriesRow {
   frequency: RecurrenceSeries['frequency'];
   interval: number;
   starts_on: string;
-  created_at: string;
-}
-
-interface CompletedItemRow {
-  id: string;
-  task_item_id: string;
-  completed_at: string;
   created_at: string;
 }
 
@@ -554,40 +546,6 @@ class NativeDataSource implements AppDataSource {
           frequency: row.frequency,
           interval: row.interval,
           startsOn: row.starts_on,
-          createdAt: row.created_at,
-        };
-  }
-
-  async saveCompletedItem(item: CompletedItem): Promise<void> {
-    await this.initialize();
-    const database = await this.getDatabase();
-    await database.runAsync(
-      `INSERT INTO completed_items (id, task_item_id, completed_at, created_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        task_item_id = excluded.task_item_id,
-        completed_at = excluded.completed_at,
-        created_at = excluded.created_at`,
-      [item.id, item.taskItemId, item.completedAt, item.createdAt],
-    );
-  }
-
-  async getCompletedItem(id: EntityId): Promise<CompletedItem | null> {
-    await this.initialize();
-    const database = await this.getDatabase();
-    const row = await database.getFirstAsync<CompletedItemRow>(
-      `SELECT id, task_item_id, completed_at, created_at
-      FROM completed_items
-      WHERE id = ?`,
-      [id],
-    );
-
-    return row === null
-      ? null
-      : {
-          id: row.id,
-          taskItemId: row.task_item_id,
-          completedAt: row.completed_at,
           createdAt: row.created_at,
         };
   }

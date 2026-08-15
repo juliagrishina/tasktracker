@@ -17,9 +17,9 @@ describe('development demo data', () => {
     await expect(source.getReminder('demo-reminder-insurance')).resolves.not.toBeNull();
     await expect(source.getScheduleBlock('demo-plan-week-draft-block')).resolves.not.toBeNull();
     await expect(source.getRecurrenceSeries('demo-plan-week-draft-recurrence')).resolves.not.toBeNull();
-    await expect(
-      source.getCompletedItem('demo-completed-review-completion'),
-    ).resolves.not.toBeNull();
+    await expect(source.getTaskItem('demo-completed-review')).resolves.toMatchObject({
+      completedAt: expect.any(String),
+    });
     await expect(source.getSettings()).resolves.toMatchObject({
       notificationLeadMinutes: 15,
     });
