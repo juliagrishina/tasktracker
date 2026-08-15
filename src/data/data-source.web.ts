@@ -188,6 +188,12 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
 
   async saveRecurrenceSeries(series: RecurrenceSeries): Promise<void> {
     await this.initialize();
+    const task = await this.getTaskItem(series.taskItemId);
+
+    if (task === null) {
+      throw new Error('Задача для серии повторения не найдена');
+    }
+
     this.recurrenceSeries.set(series.id, { ...series, updatedAt: new Date().toISOString() });
   }
 

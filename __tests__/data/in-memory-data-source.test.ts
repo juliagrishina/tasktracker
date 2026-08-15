@@ -203,4 +203,23 @@ describe('in-memory data source', () => {
       'Задача-родитель подзадачи не найдена',
     );
   });
+
+  test('rejects a recurrence series whose task item does not exist', async () => {
+    const source = createInMemoryDataSource();
+
+    await expect(source.saveRecurrenceSeries(recurrenceSeries)).rejects.toThrow(
+      'Задача для серии повторения не найдена',
+    );
+  });
+
+  test('rejects a recurrence series whose task item was soft-deleted', async () => {
+    const source = createInMemoryDataSource();
+
+    await source.saveTaskItem(task);
+    await source.deleteTaskItem(task.id);
+
+    await expect(source.saveRecurrenceSeries(recurrenceSeries)).rejects.toThrow(
+      'Задача для серии повторения не найдена',
+    );
+  });
 });
