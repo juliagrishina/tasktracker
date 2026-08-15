@@ -10,6 +10,7 @@ import {
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { AppSettings, Project, Reminder, TaskItem } from '../domain/entities';
+import { ensureAnonymousSession } from '../data/auth-session';
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
 import { getDefaultSettings } from '../data/default-settings';
@@ -141,6 +142,12 @@ export function AppServicesProvider({
     }),
     [appSource, runBacklogAction],
   );
+
+  useEffect(() => {
+    // Устанавливаем облачную identity независимо от локальной инициализации:
+    // приложение остаётся local-first и не должно ждать сеть/Supabase.
+    void ensureAnonymousSession().catch(() => {});
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

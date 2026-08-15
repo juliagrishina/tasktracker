@@ -1,4 +1,5 @@
 import type { AppDataSource } from '../data/contracts';
+import { recordEvent, type EventEntityType } from '../data/events-client';
 import {
   assertBacklogTitle,
   assertEstimatedDuration,
@@ -56,6 +57,18 @@ function normalizeDuration(value: number | null | undefined): number | null {
   const duration = value ?? null;
   assertEstimatedDuration(duration);
   return duration;
+}
+
+function entityTypeForBacklogKind(kind: BacklogItemKind): EventEntityType {
+  if (kind === 'project') {
+    return 'project';
+  }
+
+  if (kind === 'reminder') {
+    return 'reminder';
+  }
+
+  return 'task_item';
 }
 
 function setCompletedAt<T extends { completedAt: string | null }>(
@@ -151,6 +164,7 @@ export async function createProject(
   };
 
   await source.saveProject(project);
+  void recordEvent({ entityType: 'project', entityId: project.id, eventType: 'task_created' });
   return project;
 }
 
@@ -177,6 +191,7 @@ export async function createTask(
   };
 
   await source.saveTaskItem(task);
+  void recordEvent({ entityType: 'task_item', entityId: task.id, eventType: 'task_created' });
   return task;
 }
 
@@ -203,6 +218,7 @@ export async function createSubtask(
   };
 
   await source.saveTaskItem(subtask);
+  void recordEvent({ entityType: 'task_item', entityId: subtask.id, eventType: 'task_created' });
   return subtask;
 }
 
@@ -224,6 +240,7 @@ export async function createReminder(
 
   assertReminderScheduleShape(reminder);
   await source.saveReminder(reminder);
+  void recordEvent({ entityType: 'reminder', entityId: reminder.id, eventType: 'task_created' });
   return reminder;
 }
 
@@ -393,6 +410,12 @@ export async function completeBacklogItem(
         .map((candidate) => source.saveTaskItem(setCompletedAt(candidate, input.completedAt))),
     );
   });
+
+  void recordEvent({
+    entityType: entityTypeForBacklogKind(input.kind),
+    entityId: input.id,
+    eventType: 'task_completed',
+  });
 }
 
 export async function deleteBacklogItem(
@@ -423,6 +446,12 @@ export async function deleteBacklogItem(
     }
 
     await source.deleteTaskItem(input.id);
+  });
+
+  void recordEvent({
+    entityType: entityTypeForBacklogKind(input.kind),
+    entityId: input.id,
+    eventType: 'task_deleted',
   });
 }
 
