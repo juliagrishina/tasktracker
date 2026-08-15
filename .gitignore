@@ -27,6 +27,7 @@ Carthage/Build/
 .superpowers/
 .env
 .env.*
+!.env.example
 *.pem
 *.p12
 *.mobileprovision
