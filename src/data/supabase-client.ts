@@ -6,23 +6,19 @@ import { createClient, processLock } from '@supabase/supabase-js';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-if (!supabaseUrl || !supabasePublishableKey) {
-  throw new Error(
-    'Отсутствуют переменные окружения EXPO_PUBLIC_SUPABASE_URL и/или EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
-  );
-}
+export const supabase = supabaseUrl && supabasePublishableKey
+  ? createClient(supabaseUrl, supabasePublishableKey, {
+      auth: {
+        ...(Platform.OS !== 'web' ? { storage: AsyncStorage } : {}),
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+        lock: processLock,
+      },
+    })
+  : null;
 
-export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
-  auth: {
-    ...(Platform.OS !== 'web' ? { storage: AsyncStorage } : {}),
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-    lock: processLock,
-  },
-});
-
-if (Platform.OS !== 'web') {
+if (Platform.OS !== 'web' && supabase !== null) {
   AppState.addEventListener('change', (state) => {
     if (state === 'active') {
       supabase.auth.startAutoRefresh();

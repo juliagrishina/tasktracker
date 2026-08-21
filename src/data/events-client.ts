@@ -33,6 +33,10 @@ interface RecordEventInput {
  * block or fail the underlying (local) use-case.
  */
 export async function recordEvent(input: RecordEventInput): Promise<void> {
+  if (supabase === null) {
+    return;
+  }
+
   const { data: userData, error: userError } = await supabase.auth.getUser();
 
   if (userError !== null || userData.user === null) {
