@@ -9,6 +9,7 @@ import type {
   Reminder,
   ScheduleBlock,
   TaskItem,
+  TransferHistory,
 } from '../domain/entities';
 import {
   assertReminderShape,
@@ -43,6 +44,9 @@ interface TaskItemRow {
   title: string;
   description: string | null;
   estimated_duration_minutes: number | null;
+  scheduled_on: string | null;
+  period_start_on: string | null;
+  period_end_on: string | null;
   completed_at: string | null;
   created_at: string;
   updated_at: string | null;
@@ -56,6 +60,7 @@ interface ReminderRow {
   period_end_on: string | null;
   repeat_frequency: NonNullable<Reminder['repeatRule']>['frequency'] | null;
   repeat_interval: number | null;
+  repeat_weekdays_json: string | null;
   estimated_duration_minutes: number | null;
   completed_at: string | null;
   created_at: string;
@@ -79,9 +84,18 @@ interface RecurrenceSeriesRow {
   item_id: string;
   frequency: RecurrenceSeries['frequency'];
   interval: number;
+  weekdays_json: string | null;
   starts_on: string;
   created_at: string;
   updated_at: string | null;
+}
+
+interface TransferHistoryRow {
+  id: string;
+  task_item_id: string;
+  reason: string | null;
+  returned_at: string;
+  created_at: string;
 }
 
 interface RecurrenceOccurrenceRow {
@@ -253,10 +267,13 @@ class NativeDataSource implements AppDataSource {
         title,
         description,
         estimated_duration_minutes,
+        scheduled_on,
+        period_start_on,
+        period_end_on,
         completed_at,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         kind = excluded.kind,
         project_id = excluded.project_id,
@@ -264,6 +281,9 @@ class NativeDataSource implements AppDataSource {
         title = excluded.title,
         description = excluded.description,
         estimated_duration_minutes = excluded.estimated_duration_minutes,
+        scheduled_on = excluded.scheduled_on,
+        period_start_on = excluded.period_start_on,
+        period_end_on = excluded.period_end_on,
         completed_at = excluded.completed_at,
         created_at = excluded.created_at,
         updated_at = excluded.updated_at`,
@@ -275,6 +295,9 @@ class NativeDataSource implements AppDataSource {
         task.title,
         task.description,
         task.estimatedDurationMinutes,
+        task.scheduledOn ?? null,
+        task.periodStartOn ?? null,
+        task.periodEndOn ?? null,
         task.completedAt,
         task.createdAt,
         updatedAt,
@@ -287,7 +310,8 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<TaskItemRow>(
       `SELECT id, kind, project_id, parent_task_id, title, description,
-        estimated_duration_minutes, completed_at, created_at, updated_at
+        estimated_duration_minutes, scheduled_on, period_start_on, period_end_on,
+        completed_at, created_at, updated_at
       FROM task_items
       WHERE id = ? AND deleted_at IS NULL`,
       [id],
@@ -306,6 +330,9 @@ class NativeDataSource implements AppDataSource {
         title: row.title,
         description: row.description,
         estimatedDurationMinutes: row.estimated_duration_minutes,
+        scheduledOn: row.scheduled_on,
+        periodStartOn: row.period_start_on,
+        periodEndOn: row.period_end_on,
         completedAt: row.completed_at,
         createdAt: row.created_at,
         updatedAt: row.updated_at ?? row.created_at,
@@ -325,6 +352,9 @@ class NativeDataSource implements AppDataSource {
       title: row.title,
       description: row.description,
       estimatedDurationMinutes: row.estimated_duration_minutes,
+      scheduledOn: row.scheduled_on,
+      periodStartOn: row.period_start_on,
+      periodEndOn: row.period_end_on,
       completedAt: row.completed_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at ?? row.created_at,
@@ -337,7 +367,8 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<TaskItemRow>(
       `SELECT id, kind, project_id, parent_task_id, title, description,
-        estimated_duration_minutes, completed_at, created_at, updated_at
+        estimated_duration_minutes, scheduled_on, period_start_on, period_end_on,
+        completed_at, created_at, updated_at
       FROM task_items
       WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
@@ -353,6 +384,9 @@ class NativeDataSource implements AppDataSource {
           title: row.title,
           description: row.description,
           estimatedDurationMinutes: row.estimated_duration_minutes,
+          scheduledOn: row.scheduled_on,
+          periodStartOn: row.period_start_on,
+          periodEndOn: row.period_end_on,
           completedAt: row.completed_at,
           createdAt: row.created_at,
           updatedAt: row.updated_at ?? row.created_at,
@@ -372,6 +406,9 @@ class NativeDataSource implements AppDataSource {
         title: row.title,
         description: row.description,
         estimatedDurationMinutes: row.estimated_duration_minutes,
+        scheduledOn: row.scheduled_on,
+        periodStartOn: row.period_start_on,
+        periodEndOn: row.period_end_on,
         completedAt: row.completed_at,
         createdAt: row.created_at,
         updatedAt: row.updated_at ?? row.created_at,
@@ -411,6 +448,33 @@ class NativeDataSource implements AppDataSource {
     );
   }
 
+  async saveTransferHistory(history: TransferHistory): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO transfer_history (id, task_item_id, reason, returned_at, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         task_item_id = excluded.task_item_id,
+         reason = excluded.reason,
+         returned_at = excluded.returned_at,
+         created_at = excluded.created_at`,
+      [history.id, history.taskItemId, history.reason, history.returnedAt, history.createdAt],
+    );
+  }
+
+  async listTransferHistories(taskItemId?: EntityId): Promise<readonly TransferHistory[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<TransferHistoryRow>(
+      taskItemId === undefined
+        ? 'SELECT id, task_item_id, reason, returned_at, created_at FROM transfer_history ORDER BY returned_at ASC, id ASC'
+        : 'SELECT id, task_item_id, reason, returned_at, created_at FROM transfer_history WHERE task_item_id = ? ORDER BY returned_at ASC, id ASC',
+      taskItemId === undefined ? [] : [taskItemId],
+    );
+    return rows.map((row) => ({ id: row.id, taskItemId: row.task_item_id, reason: row.reason, returnedAt: row.returned_at, createdAt: row.created_at }));
+  }
+
   async saveReminder(reminder: Reminder): Promise<void> {
     await this.initialize();
     assertReminderShape(reminder);
@@ -425,11 +489,12 @@ class NativeDataSource implements AppDataSource {
         period_end_on,
         repeat_frequency,
         repeat_interval,
+        repeat_weekdays_json,
         estimated_duration_minutes,
         completed_at,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
         reminds_on = excluded.reminds_on,
@@ -437,6 +502,7 @@ class NativeDataSource implements AppDataSource {
         period_end_on = excluded.period_end_on,
         repeat_frequency = excluded.repeat_frequency,
         repeat_interval = excluded.repeat_interval,
+        repeat_weekdays_json = excluded.repeat_weekdays_json,
         estimated_duration_minutes = excluded.estimated_duration_minutes,
         completed_at = excluded.completed_at,
         created_at = excluded.created_at,
@@ -449,6 +515,7 @@ class NativeDataSource implements AppDataSource {
         reminder.periodEndOn,
         reminder.repeatRule?.frequency ?? null,
         reminder.repeatRule?.interval ?? null,
+        reminder.repeatRule?.weekdays === undefined ? null : JSON.stringify(reminder.repeatRule.weekdays),
         reminder.estimatedDurationMinutes,
         reminder.completedAt,
         reminder.createdAt,
@@ -462,7 +529,7 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ReminderRow>(
       `SELECT id, title, reminds_on, period_start_on, period_end_on,
-        repeat_frequency, repeat_interval, estimated_duration_minutes, completed_at, created_at, updated_at
+        repeat_frequency, repeat_interval, repeat_weekdays_json, estimated_duration_minutes, completed_at, created_at, updated_at
       FROM reminders
       WHERE id = ? AND deleted_at IS NULL`,
       [id],
@@ -479,7 +546,7 @@ class NativeDataSource implements AppDataSource {
           repeatRule:
             row.repeat_frequency === null || row.repeat_interval === null
               ? null
-              : { frequency: row.repeat_frequency, interval: row.repeat_interval },
+              : { frequency: row.repeat_frequency, interval: row.repeat_interval, weekdays: row.repeat_weekdays_json === null ? undefined : JSON.parse(row.repeat_weekdays_json) },
           estimatedDurationMinutes: row.estimated_duration_minutes,
           completedAt: row.completed_at,
           createdAt: row.created_at,
@@ -493,7 +560,7 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ReminderRow>(
       `SELECT id, title, reminds_on, period_start_on, period_end_on,
-        repeat_frequency, repeat_interval, estimated_duration_minutes, completed_at, created_at, updated_at
+        repeat_frequency, repeat_interval, repeat_weekdays_json, estimated_duration_minutes, completed_at, created_at, updated_at
       FROM reminders
       WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
@@ -508,7 +575,7 @@ class NativeDataSource implements AppDataSource {
       repeatRule:
         row.repeat_frequency === null || row.repeat_interval === null
           ? null
-          : { frequency: row.repeat_frequency, interval: row.repeat_interval },
+          : { frequency: row.repeat_frequency, interval: row.repeat_interval, weekdays: row.repeat_weekdays_json === null ? undefined : JSON.parse(row.repeat_weekdays_json) },
       estimatedDurationMinutes: row.estimated_duration_minutes,
       completedAt: row.completed_at,
       createdAt: row.created_at,
@@ -661,15 +728,17 @@ class NativeDataSource implements AppDataSource {
         item_id,
         frequency,
         interval,
+        weekdays_json,
         starts_on,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         item_kind = excluded.item_kind,
         item_id = excluded.item_id,
         frequency = excluded.frequency,
         interval = excluded.interval,
+        weekdays_json = excluded.weekdays_json,
         starts_on = excluded.starts_on,
         created_at = excluded.created_at,
         updated_at = excluded.updated_at`,
@@ -679,6 +748,7 @@ class NativeDataSource implements AppDataSource {
         series.itemId,
         series.frequency,
         series.interval,
+        series.weekdays === undefined ? null : JSON.stringify(series.weekdays),
         series.startsOn,
         series.createdAt,
         updatedAt,
@@ -690,7 +760,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<RecurrenceSeriesRow>(
-      `SELECT id, item_kind, item_id, frequency, interval, starts_on, created_at, updated_at
+      `SELECT id, item_kind, item_id, frequency, interval, weekdays_json, starts_on, created_at, updated_at
       FROM recurrence_series
       WHERE id = ? AND deleted_at IS NULL`,
       [id],
@@ -704,6 +774,7 @@ class NativeDataSource implements AppDataSource {
           itemId: row.item_id,
           frequency: row.frequency,
           interval: row.interval,
+          weekdays: row.weekdays_json === null ? undefined : JSON.parse(row.weekdays_json),
           startsOn: row.starts_on,
           createdAt: row.created_at,
           updatedAt: row.updated_at ?? row.created_at,
@@ -715,7 +786,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<RecurrenceSeriesRow>(
-      `SELECT id, item_kind, item_id, frequency, interval, starts_on, created_at, updated_at
+      `SELECT id, item_kind, item_id, frequency, interval, weekdays_json, starts_on, created_at, updated_at
       FROM recurrence_series
       WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
@@ -726,6 +797,7 @@ class NativeDataSource implements AppDataSource {
       itemId: row.item_id,
       frequency: row.frequency,
       interval: row.interval,
+      weekdays: row.weekdays_json === null ? undefined : JSON.parse(row.weekdays_json),
       startsOn: row.starts_on,
       createdAt: row.created_at,
       updatedAt: row.updated_at ?? row.created_at,

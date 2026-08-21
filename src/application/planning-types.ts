@@ -8,13 +8,25 @@ export interface PlanningRecurrenceInput {
   createdAt: string;
 }
 
-export interface ScheduleConflict { candidate: ScheduleBlock; block: ScheduleBlock; }
+export interface ScheduleConflict {
+  candidate: ScheduleBlock;
+  block: ScheduleBlock;
+  itemTitle: string;
+  startsAt: string;
+  endsAt: string;
+}
+export interface TaskPlacementInput {
+  scheduledOn: string | null;
+  periodStartOn: string | null;
+  periodEndOn: string | null;
+}
 export interface SaveTaskPlanningInput {
   taskId: EntityId;
   blocks: readonly ScheduleBlock[];
   deletedBlockIds?: readonly EntityId[];
   forceConflicts?: boolean;
   recurrence?: PlanningRecurrenceInput | null;
+  placement?: TaskPlacementInput;
 }
 export interface SaveOccurrenceExceptionInput {
   occurrence: RecurrenceOccurrence;

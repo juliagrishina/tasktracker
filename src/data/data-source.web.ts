@@ -7,6 +7,7 @@ import type {
   Reminder,
   ScheduleBlock,
   TaskItem,
+  TransferHistory,
 } from '../domain/entities';
 import {
   assertReminderShape,
@@ -44,6 +45,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   private readonly scheduleBlocks = new Map<EntityId, ScheduleBlock>();
   private readonly recurrenceSeries = new Map<EntityId, RecurrenceSeries>();
   private readonly recurrenceOccurrences = new Map<EntityId, RecurrenceOccurrence>();
+  private readonly transferHistories = new Map<EntityId, TransferHistory>();
 
   async initialize(): Promise<void> {
     if (this.settings === null) {
@@ -189,6 +191,18 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       .sort(compareByCreatedAt);
   }
 
+  async saveTransferHistory(history: TransferHistory): Promise<void> {
+    await this.initialize();
+    this.transferHistories.set(history.id, { ...history });
+  }
+
+  async listTransferHistories(taskItemId?: EntityId): Promise<readonly TransferHistory[]> {
+    await this.initialize();
+    return [...this.transferHistories.values()]
+      .filter((history) => taskItemId === undefined || history.taskItemId === taskItemId)
+      .sort(compareByCreatedAt);
+  }
+
   async listScheduleBlocksForTaskItem(taskItemId: EntityId): Promise<readonly ScheduleBlock[]> {
     const blocks = await this.listScheduleBlocks();
     return blocks.filter((block) => block.taskItemId === taskItemId);
@@ -299,6 +313,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       scheduleBlocks: new Map(this.scheduleBlocks),
       recurrenceSeries: new Map(this.recurrenceSeries),
       recurrenceOccurrences: new Map(this.recurrenceOccurrences),
+      transferHistories: new Map(this.transferHistories),
     };
 
     try {
@@ -311,6 +326,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       replaceMap(this.scheduleBlocks, snapshot.scheduleBlocks);
       replaceMap(this.recurrenceSeries, snapshot.recurrenceSeries);
       replaceMap(this.recurrenceOccurrences, snapshot.recurrenceOccurrences);
+      replaceMap(this.transferHistories, snapshot.transferHistories);
       throw error;
     }
   }

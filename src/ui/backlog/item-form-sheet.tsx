@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppServices } from '../../application/app-services-provider';
-import type { CreateTimedReminderTaskWithPlanningInput, SaveTaskWithPlanningInput } from '../../application/planning-types';
+import type { CreateTimedReminderTaskWithPlanningInput, SaveTaskWithPlanningInput, ScheduleConflict } from '../../application/planning-types';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 import {
@@ -28,8 +28,8 @@ export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
 type FormItem = Project | TaskItem | Reminder;
 type PendingConflict =
-  | { kind: 'task'; input: SaveTaskWithPlanningInput }
-  | { kind: 'timedReminder'; input: CreateTimedReminderTaskWithPlanningInput };
+  | { kind: 'task'; input: SaveTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] }
+  | { kind: 'timedReminder'; input: CreateTimedReminderTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] };
 const estimateOptions = [
   { label: 'Без оценки', value: '' },
   ...Array.from({ length: 96 }, (_, index) => ({ label: `${(index + 1) * 5} мин`, value: String((index + 1) * 5) })),
@@ -85,7 +85,7 @@ function getInitialReminderValue(item: FormItem | undefined, key: 'remindsOn' | 
   return '';
 }
 
-function getInitialRepeatFrequency(item: FormItem | undefined): '' | 'daily' | 'weekly' | 'monthly' {
+function getInitialRepeatFrequency(item: FormItem | undefined): '' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays' {
   if (item !== undefined && 'repeatRule' in item && item.repeatRule !== null) {
     return item.repeatRule.frequency;
   }
@@ -119,7 +119,7 @@ export function ItemFormSheet({
   const [remindsOn, setRemindsOn] = useState(() => getInitialReminderValue(item, 'remindsOn'));
   const [periodStartOn, setPeriodStartOn] = useState(() => getInitialReminderValue(item, 'periodStartOn'));
   const [periodEndOn, setPeriodEndOn] = useState(() => getInitialReminderValue(item, 'periodEndOn'));
-  const [repeatFrequency, setRepeatFrequency] = useState<'' | 'daily' | 'weekly' | 'monthly'>(() => getInitialRepeatFrequency(item));
+  const [repeatFrequency, setRepeatFrequency] = useState<'' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays'>(() => getInitialRepeatFrequency(item));
   const [repeatInterval, setRepeatInterval] = useState(() => getInitialRepeatInterval(item));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -135,14 +135,18 @@ export function ItemFormSheet({
   const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
   useEffect(() => {
     if (!visible || !isPlanTaskForm || item === undefined || !('kind' in item)) return;
-    void planningActions.getTaskPlanningSnapshot(item.id).then(({ blocks, recurrence }) => {
+    void planningActions.getTaskPlanningSnapshot(item.id).then(({ blocks, recurrence, placement }) => {
       setPersistedBlockIds(blocks.map((block) => block.id));
       setPlanningDraft({
         ...createInitialTaskPlanningDraft(),
         blocks: blocks.map((block) => ({ id: block.id, date: block.startsAt.slice(0, 10), startsAt: block.startsAt.slice(11, 16), durationMinutes: String((new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000) })),
         repeatFrequency: recurrence?.frequency ?? 'none',
         repeatInterval: String(recurrence?.interval ?? 1),
-        scheduledOn: recurrence?.startsOn ?? '',
+        repeatWeekdays: recurrence?.weekdays === undefined ? [] : [...recurrence.weekdays],
+        scheduledOn: placement.scheduledOn ?? recurrence?.startsOn ?? '',
+        periodStartOn: placement.periodStartOn ?? '',
+        periodEndOn: placement.periodEndOn ?? '',
+        scheduleMode: placement.scheduledOn !== null ? 'date' : placement.periodStartOn !== null ? 'period' : 'none',
       });
     });
   }, [isPlanTaskForm, item, planningActions, visible]);
@@ -192,6 +196,7 @@ export function ItemFormSheet({
           id: `series-${taskId}`,
           frequency: planningDraft.repeatFrequency,
           interval: Number(planningDraft.repeatInterval),
+          weekdays: planningDraft.repeatFrequency === 'weekly' && planningDraft.repeatWeekdays.length > 0 ? planningDraft.repeatWeekdays : undefined,
           startsOn: planningDraft.blocks[0]?.date ?? planningDraft.scheduledOn ?? planningContext?.defaultDate ?? '',
           createdAt: now,
         };
@@ -207,11 +212,21 @@ export function ItemFormSheet({
             parentTaskId,
             createdAt: now,
           },
-          planning: { taskId, blocks, deletedBlockIds: persistedBlockIds.filter((id) => !blocks.some((block) => block.id === id)), recurrence },
+          planning: {
+            taskId,
+            blocks,
+            deletedBlockIds: persistedBlockIds.filter((id) => !blocks.some((block) => block.id === id)),
+            recurrence,
+            placement: {
+              scheduledOn: planningDraft.scheduleMode === 'date' ? emptyToNull(planningDraft.scheduledOn) : null,
+              periodStartOn: planningDraft.scheduleMode === 'period' ? emptyToNull(planningDraft.periodStartOn) : null,
+              periodEndOn: planningDraft.scheduleMode === 'period' ? emptyToNull(planningDraft.periodEndOn) : null,
+            },
+          },
         };
         const result = await planningActions.saveTaskWithPlanning(input);
         if (result.conflict !== null) {
-          setPendingConflict({ kind: 'task', input });
+          setPendingConflict({ kind: 'task', input, conflicts: result.conflict });
           setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
           return;
         }
@@ -316,7 +331,7 @@ export function ItemFormSheet({
             };
             const result = await planningActions.createTimedReminderTaskWithPlanning(timedReminderInput);
             if (result.conflict !== null) {
-              setPendingConflict({ kind: 'timedReminder', input: timedReminderInput });
+              setPendingConflict({ kind: 'timedReminder', input: timedReminderInput, conflicts: result.conflict });
               setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
               return;
             }
@@ -439,6 +454,8 @@ export function ItemFormSheet({
                     ['Каждый день', 'daily'],
                     ['Каждую неделю', 'weekly'],
                     ['Каждый месяц', 'monthly'],
+                    ['Каждый год', 'yearly'],
+                    ['Каждые N дней', 'intervalDays'],
                   ] as const).map(([label, value]) => (
                     <Pressable
                       key={label}
@@ -456,7 +473,7 @@ export function ItemFormSheet({
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
-            {pendingConflict === null ? null : <Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable>}
+            {pendingConflict === null ? null : <View>{pendingConflict.conflicts.map((conflict) => <Text key={`${conflict.candidate.id}-${conflict.block.id}`} style={styles.error}>{`${conflict.itemTitle}: ${conflict.startsAt.slice(11, 16)}–${conflict.endsAt.slice(11, 16)}`}</Text>)}<Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable></View>}
           </ScrollView>
           <View style={styles.footer}>
             <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>

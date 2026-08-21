@@ -7,6 +7,7 @@ import type {
   Reminder,
   ScheduleBlock,
   TaskItem,
+  TransferHistory,
 } from '../domain/entities';
 
 export interface AppDataSource {
@@ -21,6 +22,8 @@ export interface AppDataSource {
   getTaskItem(id: EntityId): Promise<TaskItem | null>;
   listTaskItems(): Promise<readonly TaskItem[]>;
   deleteTaskItem(id: EntityId): Promise<void>;
+  saveTransferHistory(history: TransferHistory): Promise<void>;
+  listTransferHistories(taskItemId?: EntityId): Promise<readonly TransferHistory[]>;
   saveReminder(reminder: Reminder): Promise<void>;
   getReminder(id: EntityId): Promise<Reminder | null>;
   listReminders(): Promise<readonly Reminder[]>;

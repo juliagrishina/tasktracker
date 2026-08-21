@@ -38,11 +38,11 @@ describe('migrateDatabase', () => {
     await migrateDatabase(database as never);
 
     expect(database.executedSql.some((sql) => sql.includes('ALTER TABLE reminders ADD COLUMN title'))).toBe(true);
-    expect(database.appliedVersions).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(database.appliedVersions).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
   test('does not reapply migrations after the latest version is installed', async () => {
-    const database = new MigrationDatabase(7);
+    const database = new MigrationDatabase(9);
 
     await migrateDatabase(database as never);
 
@@ -55,7 +55,7 @@ describe('migrateDatabase', () => {
     await migrateDatabase(database as never);
 
     expect(database.executedSql.join('\n')).toContain('reminders_v3');
-    expect(database.appliedVersions).toEqual([3, 4, 5, 6, 7]);
+    expect(database.appliedVersions).toEqual([3, 4, 5, 6, 7, 8, 9]);
   });
 
   test('drops the completed_items table in migration four', async () => {
@@ -64,7 +64,7 @@ describe('migrateDatabase', () => {
     await migrateDatabase(database as never);
 
     expect(database.executedSql.join('\n')).toContain('DROP TABLE completed_items');
-    expect(database.appliedVersions).toEqual([4, 5, 6, 7]);
+    expect(database.appliedVersions).toEqual([4, 5, 6, 7, 8, 9]);
   });
 
   test('adds updated_at and deleted_at columns in migration five', async () => {
@@ -83,7 +83,7 @@ describe('migrateDatabase', () => {
     expect(sql).toContain('ALTER TABLE schedule_blocks ADD COLUMN deleted_at TEXT');
     expect(sql).toContain('ALTER TABLE recurrence_series ADD COLUMN updated_at TEXT');
     expect(sql).toContain('ALTER TABLE recurrence_series ADD COLUMN deleted_at TEXT');
-    expect(database.appliedVersions).toEqual([5, 6, 7]);
+    expect(database.appliedVersions).toEqual([5, 6, 7, 8, 9]);
   });
 
   test('redefines the subtask-parent triggers to ignore soft-deleted parents in migration six', async () => {
@@ -95,7 +95,7 @@ describe('migrateDatabase', () => {
     expect(sql).toContain('DROP TRIGGER IF EXISTS validate_subtask_parent_on_insert');
     expect(sql).toContain('DROP TRIGGER IF EXISTS validate_subtask_parent_on_update');
     expect(sql.match(/WHERE id = NEW\.parent_task_id AND deleted_at IS NULL/g)).toHaveLength(2);
-    expect(database.appliedVersions).toEqual([6, 7]);
+    expect(database.appliedVersions).toEqual([6, 7, 8, 9]);
   });
 
   test('adds soft-delete-aware recurrence occurrences and timezone blocks in migration seven', async () => {
@@ -109,6 +109,19 @@ describe('migrateDatabase', () => {
     expect(sql).toContain('CREATE TABLE recurrence_occurrences');
     expect(sql).toContain('deleted_at TEXT');
     expect(sql).toContain('recurrence_occurrences_live_series_date');
-    expect(database.appliedVersions).toEqual([7]);
+    expect(database.appliedVersions).toEqual([7, 8, 9]);
+  });
+
+  test('adds task placement/history and expanded recurrence storage', async () => {
+    const database = new MigrationDatabase(7);
+
+    await migrateDatabase(database as never);
+
+    const sql = database.executedSql.join('\n');
+    expect(sql).toContain('ALTER TABLE task_items ADD COLUMN scheduled_on TEXT');
+    expect(sql).toContain('CREATE TABLE transfer_history');
+    expect(sql).toContain("'yearly', 'intervalDays'");
+    expect(sql).toContain('weekdays_json TEXT');
+    expect(database.appliedVersions).toEqual([8, 9]);
   });
 });

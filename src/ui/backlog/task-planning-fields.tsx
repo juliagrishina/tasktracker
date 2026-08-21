@@ -5,7 +5,7 @@ import { PlanningValuePicker, type PlanningValueOption } from './planning-value-
 import { PlanningDatePicker } from './planning-date-picker';
 
 export type TaskScheduleMode = 'none' | 'date' | 'period';
-export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly';
+export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays';
 
 export interface TaskPlanningBlock {
   date: string;
@@ -20,6 +20,7 @@ export interface TaskPlanningDraft {
   periodStartOn: string;
   repeatFrequency: TaskRepeatFrequency;
   repeatInterval: string;
+  repeatWeekdays: number[];
   scheduledOn: string;
   scheduleMode: TaskScheduleMode;
 }
@@ -41,6 +42,8 @@ const repeatOptions: { label: string; value: TaskRepeatFrequency }[] = [
   { label: 'Каждый день', value: 'daily' },
   { label: 'Каждую неделю', value: 'weekly' },
   { label: 'Каждый месяц', value: 'monthly' },
+  { label: 'Каждый год', value: 'yearly' },
+  { label: 'Каждые N дней', value: 'intervalDays' },
 ];
 const timeOptions: readonly PlanningValueOption[] = Array.from({ length: 288 }, (_, index) => {
   const value = `${String(Math.floor(index / 12)).padStart(2, '0')}:${String((index % 12) * 5).padStart(2, '0')}`;
@@ -55,6 +58,7 @@ export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
     periodStartOn: '',
     repeatFrequency: 'none',
     repeatInterval: '1',
+    repeatWeekdays: [],
     scheduledOn: '',
     scheduleMode: 'none',
   };
@@ -151,6 +155,7 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
       {value.repeatFrequency !== 'none' ? (
         <PlanningInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" label="Интервал" onChangeText={(repeatInterval) => update({ repeatInterval })} value={value.repeatInterval} />
       ) : null}
+      {value.repeatFrequency === 'weekly' ? <View><Text style={styles.label}>Дни недели</Text><View style={styles.chips}>{[['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]].map(([label, day]) => { const selected = value.repeatWeekdays.includes(day as number); return <Pressable accessibilityLabel={String(label)} key={String(label)} onPress={() => update({ repeatWeekdays: selected ? value.repeatWeekdays.filter((entry) => entry !== day) : [...value.repeatWeekdays, day as number] })} style={[styles.chip, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></Pressable>; })}</View></View> : null}
       <View style={styles.blockHeader}>
         <Text style={styles.label}>Временные блоки</Text>
         <Pressable

@@ -6,6 +6,7 @@ import {
   getDayLoadPercent,
   getPlanLoadTone,
   getRecurrenceDates,
+  shiftScheduleBlockToDate,
 } from '../../src/domain/planning';
 
 const settings: AppSettings = {
@@ -31,6 +32,26 @@ describe('planning domain', () => {
     expect(getRecurrenceDates({ frequency: 'weekly', interval: 2, startsOn: '2026-08-03' }, '2026-08-01', '2026-09-01'))
       .toEqual(['2026-08-03', '2026-08-17', '2026-08-31']);
     expect(() => assertRecurrenceOccurrence({ frequency: 'weekly', interval: 1, startsOn: '2026-08-03' }, '2026-08-02')).toThrow();
+  });
+
+  test('projects selected weekdays, yearly dates and every N days', () => {
+    expect(getRecurrenceDates({ frequency: 'weekly', interval: 1, startsOn: '2026-08-03', weekdays: [1, 3, 5] } as never, '2026-08-03', '2026-08-09'))
+      .toEqual(['2026-08-03', '2026-08-05', '2026-08-07']);
+    expect(getRecurrenceDates({ frequency: 'yearly', interval: 1, startsOn: '2024-02-29' } as never, '2025-01-01', '2026-12-31'))
+      .toEqual(['2025-02-28', '2026-02-28']);
+    expect(getRecurrenceDates({ frequency: 'intervalDays', interval: 3, startsOn: '2026-08-01' } as never, '2026-08-01', '2026-08-10'))
+      .toEqual(['2026-08-01', '2026-08-04', '2026-08-07', '2026-08-10']);
+  });
+
+  test('covers month/year boundaries, leap day and DST local-time preservation', () => {
+    expect(getRecurrenceDates({ frequency: 'monthly', interval: 1, startsOn: '2026-01-31' }, '2026-01-01', '2026-03-31'))
+      .toEqual(['2026-01-31', '2026-02-28', '2026-03-31']);
+    expect(getRecurrenceDates({ frequency: 'yearly', interval: 1, startsOn: '2024-02-29' }, '2024-01-01', '2028-12-31'))
+      .toEqual(['2024-02-29', '2025-02-28', '2026-02-28', '2027-02-28', '2028-02-29']);
+    expect(shiftScheduleBlockToDate({ ...block, timeZoneId: 'Europe/Berlin', startsAt: '2026-03-28T09:00:00+01:00', endsAt: '2026-03-28T10:00:00+01:00' }, '2026-03-29')).toMatchObject({
+      startsAt: '2026-03-29T09:00:00+02:00',
+      endsAt: '2026-03-29T10:00:00+02:00',
+    });
   });
 
   test('finds overlap but allows adjacent blocks and makes a future five-minute default', () => {

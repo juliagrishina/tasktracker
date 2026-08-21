@@ -323,7 +323,10 @@ export async function getBacklogView(source: AppDataSource): Promise<BacklogView
     source.listReminders(),
     source.listScheduleBlocks(),
   ]);
-  const scheduledTaskIds = new Set(scheduleBlocks.map((block) => block.taskItemId));
+  const scheduledTaskIds = new Set([
+    ...scheduleBlocks.map((block) => block.taskItemId),
+    ...taskItems.filter((task) => task.scheduledOn !== null && task.scheduledOn !== undefined || task.periodStartOn !== null && task.periodStartOn !== undefined).map((task) => task.id),
+  ]);
 
   const projectsView: readonly BacklogProjectTree[] = projects
     .filter((project) => project.completedAt === null)

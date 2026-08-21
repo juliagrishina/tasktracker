@@ -1,8 +1,9 @@
 export type EntityId = string;
 
 export interface BacklogRepeatRule {
-  frequency: 'daily' | 'weekly' | 'monthly';
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays';
   interval: number;
+  weekdays?: readonly number[];
 }
 
 export interface Project {
@@ -24,6 +25,9 @@ export type TaskItem =
       title: string;
       description: string | null;
       estimatedDurationMinutes: number | null;
+      scheduledOn?: string | null;
+      periodStartOn?: string | null;
+      periodEndOn?: string | null;
       completedAt: string | null;
       createdAt: string;
       updatedAt: string;
@@ -37,6 +41,9 @@ export type TaskItem =
       title: string;
       description: string | null;
       estimatedDurationMinutes: number | null;
+      scheduledOn?: string | null;
+      periodStartOn?: string | null;
+      periodEndOn?: string | null;
       completedAt: string | null;
       createdAt: string;
       updatedAt: string;
@@ -73,8 +80,9 @@ export interface RecurrenceSeries {
   id: EntityId;
   itemKind: 'task' | 'reminder';
   itemId: EntityId;
-  frequency: 'daily' | 'weekly' | 'monthly';
+  frequency: BacklogRepeatRule['frequency'];
   interval: number;
+  weekdays?: readonly number[];
   startsOn: string;
   createdAt: string;
   updatedAt: string;
@@ -93,6 +101,14 @@ export interface RecurrenceOccurrence {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+}
+
+export interface TransferHistory {
+  id: EntityId;
+  taskItemId: EntityId;
+  reason: string | null;
+  returnedAt: string;
+  createdAt: string;
 }
 
 export interface AppSettings {

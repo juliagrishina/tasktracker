@@ -1,7 +1,7 @@
 import type { AppSettings, EntityId, ScheduleBlock } from './entities';
 
 export type PlanLoadTone = 'low' | 'medium' | 'high';
-export interface RecurrenceRule { frequency: 'daily' | 'weekly' | 'monthly'; interval: number; startsOn: string; }
+export interface RecurrenceRule { frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays'; interval: number; startsOn: string; weekdays?: readonly number[]; }
 export interface PlanningDateRange { singleDate: string | null; periodStartOn: string | null; periodEndOn: string | null; }
 
 function dateOf(value: string): Date {
@@ -14,6 +14,7 @@ function dateOf(value: string): Date {
 function iso(date: Date): string { return date.toISOString().slice(0, 10); }
 function addDays(value: string, amount: number): string { const date = dateOf(value); date.setUTCDate(date.getUTCDate() + amount); return iso(date); }
 function addMonths(value: string, amount: number): string { const source = dateOf(value); const month = source.getUTCMonth() + amount; const year = source.getUTCFullYear() + Math.floor(month / 12); const targetMonth = (month % 12 + 12) % 12; return iso(new Date(Date.UTC(year, targetMonth, Math.min(source.getUTCDate(), new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate())))); }
+function weekday(value: string): number { return dateOf(value).getUTCDay(); }
 function minutes(value: string): number { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new Error('Время должно иметь формат ЧЧ:ММ'); const [hours, mins] = value.split(':').map(Number); return hours * 60 + mins; }
 function zoneParts(instant: Date, timeZone: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(instant);
@@ -40,8 +41,16 @@ function bounds(block: ScheduleBlock, day: string): [number, number] {
 }
 
 export function assertPlanningDateRange(value: PlanningDateRange): void { if (value.singleDate !== null) dateOf(value.singleDate); if (value.periodStartOn === null && value.periodEndOn === null) return; if (value.periodStartOn === null || value.periodEndOn === null || dateOf(value.periodStartOn) > dateOf(value.periodEndOn)) throw new Error('Начало и конец периода нужно указать вместе и в правильном порядке'); }
-export function assertRecurrenceRule(rule: RecurrenceRule): void { dateOf(rule.startsOn); if (!Number.isInteger(rule.interval) || rule.interval <= 0) throw new Error('Интервал повторения должен быть положительным целым числом'); }
-export function getRecurrenceDates(rule: RecurrenceRule, from: string, to: string): string[] { assertRecurrenceRule(rule); if (dateOf(from) > dateOf(to)) throw new Error('Начало диапазона позже конца'); const result: string[] = []; for (let index = 0; ; index += 1) { const value = rule.frequency === 'daily' ? addDays(rule.startsOn, index * rule.interval) : rule.frequency === 'weekly' ? addDays(rule.startsOn, index * rule.interval * 7) : addMonths(rule.startsOn, index * rule.interval); if (dateOf(value) > dateOf(to)) break; if (dateOf(value) >= dateOf(from)) result.push(value); } return result; }
+export function assertRecurrenceRule(rule: RecurrenceRule): void { dateOf(rule.startsOn); if (!Number.isInteger(rule.interval) || rule.interval <= 0) throw new Error('Интервал повторения должен быть положительным целым числом'); if (rule.weekdays !== undefined && (rule.weekdays.length === 0 || rule.weekdays.some((day) => !Number.isInteger(day) || day < 0 || day > 6))) throw new Error('Дни недели должны быть числами от 0 до 6'); }
+export function getRecurrenceDates(rule: RecurrenceRule, from: string, to: string): string[] {
+  assertRecurrenceRule(rule); if (dateOf(from) > dateOf(to)) throw new Error('Начало диапазона позже конца');
+  if (rule.frequency === 'weekly' && rule.weekdays !== undefined) {
+    const result: string[] = []; const days = new Set(rule.weekdays); let value = rule.startsOn;
+    while (dateOf(value) <= dateOf(to)) { const weeks = Math.floor((dateOf(value).getTime() - dateOf(rule.startsOn).getTime()) / 604_800_000); if (weeks % rule.interval === 0 && days.has(weekday(value)) && dateOf(value) >= dateOf(from)) result.push(value); value = addDays(value, 1); }
+    return result;
+  }
+  const result: string[] = []; for (let index = 0; ; index += 1) { const value = rule.frequency === 'daily' ? addDays(rule.startsOn, index) : rule.frequency === 'intervalDays' ? addDays(rule.startsOn, index * rule.interval) : rule.frequency === 'weekly' ? addDays(rule.startsOn, index * rule.interval * 7) : rule.frequency === 'monthly' ? addMonths(rule.startsOn, index * rule.interval) : addMonths(rule.startsOn, index * rule.interval * 12); if (dateOf(value) > dateOf(to)) break; if (dateOf(value) >= dateOf(from)) result.push(value); } return result;
+}
 export function assertRecurrenceOccurrence(rule: RecurrenceRule, occursOn: string): void { if (!getRecurrenceDates(rule, occursOn, occursOn).includes(occursOn)) throw new Error('Экземпляр не принадлежит серии повторения'); }
 export function findScheduleConflicts(candidate: ScheduleBlock, existing: readonly ScheduleBlock[]): ScheduleBlock[] { const start = new Date(candidate.startsAt).getTime(); const end = new Date(candidate.endsAt).getTime(); return existing.filter((block) => block.id !== candidate.id && start < new Date(block.endsAt).getTime() && new Date(block.startsAt).getTime() < end); }
 export function getDayLoadPercent(settings: AppSettings, blocks: readonly ScheduleBlock[], day: string): number { const capacity = minutes(settings.workdayEndsAt) - minutes(settings.workdayStartsAt); if (capacity <= 0) throw new Error('Конец рабочего диапазона должен быть позже начала'); const total = blocks.reduce((sum, block) => { const [start, end] = bounds(block, day); return sum + Math.max(0, Math.min(new Date(block.endsAt).getTime(), end) - Math.max(new Date(block.startsAt).getTime(), start)) / 60_000; }, 0); return total / capacity * 100; }

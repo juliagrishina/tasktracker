@@ -50,7 +50,7 @@ import {
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 import { convertReminderToTask } from './convert-reminder-to-task';
-import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getTaskPlanningSnapshot, moveRecurrenceOccurrence, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
+import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 
 interface BacklogActions {
@@ -72,12 +72,15 @@ interface PlanningActions {
   getTaskPlanningSnapshot(taskId: string): ReturnType<typeof getTaskPlanningSnapshot>;
   setRecurrenceOccurrenceState(seriesId: string, occursOn: string, state: 'completed' | 'cancelled'): Promise<void>;
   getPlanUntimedReminders(isoDate: string): ReturnType<typeof getPlanUntimedReminders>;
+  getPlanUntimedTasks(isoDate: string): ReturnType<typeof getPlanUntimedTasks>;
+  returnTaskToBacklog(input: { taskId: string; reason: string | null }): Promise<void>;
   syncReminderRecurrence(reminderId: string): Promise<void>;
   saveTaskPlanning(input: SaveTaskPlanningInput): Promise<SaveTaskPlanningResult>;
   saveTaskWithPlanning(input: SaveTaskWithPlanningInput): Promise<SaveTaskPlanningResult>;
   createTimedReminderTaskWithPlanning(input: CreateTimedReminderTaskWithPlanningInput): Promise<SaveTaskPlanningResult>;
   saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
   moveRecurrenceOccurrence(input: MoveRecurrenceOccurrenceInput): Promise<{ scope: MoveRecurrenceOccurrenceInput['scope'] }>;
+  removeRecurrenceOccurrence(input: { seriesId: string; occursOn: string; scope: 'occurrence' | 'series' }): Promise<void>;
 }
 
 interface AppServicesContextValue {
@@ -167,12 +170,15 @@ export function AppServicesProvider({
       getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),
       setRecurrenceOccurrenceState: (seriesId, occursOn, state) => setRecurrenceOccurrenceState(appSource, seriesId, occursOn, state),
       getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
+      getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
+      returnTaskToBacklog: (input) => runBacklogAction(() => returnTaskToBacklog(appSource, input)),
       syncReminderRecurrence: (reminderId) => syncReminderRecurrence(appSource, reminderId),
       saveTaskPlanning: (input) => saveTaskPlanning(appSource, input),
       saveTaskWithPlanning: (input) => runBacklogAction(() => saveTaskWithPlanning(appSource, input)),
       createTimedReminderTaskWithPlanning: (input) => runBacklogAction(() => createTimedReminderTaskWithPlanning(appSource, input)),
       saveOccurrenceException: (input) => saveOccurrenceException(appSource, input),
       moveRecurrenceOccurrence: (input) => moveRecurrenceOccurrence(appSource, input),
+      removeRecurrenceOccurrence: (input) => removeRecurrenceOccurrence(appSource, input),
     }),
     [appSource, runBacklogAction],
   );

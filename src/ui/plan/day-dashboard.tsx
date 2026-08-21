@@ -10,6 +10,7 @@ import { getDayLoadPercent, getPlanLoadTone } from '../../domain/planning';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { RecurrenceMoveDialog } from './recurrence-move-dialog';
+import { RecurrenceScopeDialog } from './recurrence-scope-dialog';
 
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
@@ -26,10 +27,15 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selecte
   const services = useOptionalAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
-  const [reminders, setReminders] = useState<readonly import('../../domain/entities').Reminder[]>([]);
+  const [reminders, setReminders] = useState<readonly import('../../application/planning-use-cases').PlanUntimedReminder[]>([]);
+  const [untimedTasks, setUntimedTasks] = useState<readonly import('../../domain/entities').TaskItem[]>([]);
+  const [selectedUntimedTaskId, setSelectedUntimedTaskId] = useState<string | null>(null);
   const [selectedOccurrence, setSelectedOccurrence] = useState<{ seriesId: string; occursOn: string } | null>(null);
   const [isMoveDialogVisible, setIsMoveDialogVisible] = useState(false);
-  useEffect(() => { if (services !== null) void Promise.all([services.planningActions.getPlanScheduleBlocks(selectedDate), services.planningActions.getPlanUntimedReminders(selectedDate)]).then(([nextBlocks, nextReminders]) => { setBlocks(nextBlocks); setReminders(nextReminders); }); }, [services, selectedDate]);
+  const [isRemoveDialogVisible, setIsRemoveDialogVisible] = useState(false);
+  const [selectedReminderOccurrence, setSelectedReminderOccurrence] = useState<{ seriesId: string; occursOn: string } | null>(null);
+  const [isReminderRemoveDialogVisible, setIsReminderRemoveDialogVisible] = useState(false);
+  useEffect(() => { if (services !== null) void Promise.all([services.planningActions.getPlanScheduleBlocks(selectedDate), services.planningActions.getPlanUntimedReminders(selectedDate), services.planningActions.getPlanUntimedTasks(selectedDate)]).then(([nextBlocks, nextReminders, nextUntimedTasks]) => { setBlocks(nextBlocks); setReminders(nextReminders); setUntimedTasks(nextUntimedTasks); }); }, [services, selectedDate]);
   const settings = services?.settings ?? getDefaultSettings();
   const loadPercent = useMemo(() => getDayLoadPercent(settings, blocks, selectedDate), [blocks, selectedDate, settings]);
   const tone = getPlanLoadTone(loadPercent);
@@ -90,12 +96,24 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selecte
         <View style={styles.list}>
           {services === null ? <PlanListRow onPress={() => undefined} title="Планёрка команды" time="10:00–10:30" /> : blocks.map((block) => <PlanListRow key={block.id} onPress={() => { const parts = block.occurrenceId?.split(':'); setSelectedOccurrence(parts?.[0] === 'virtual' && parts[1] !== undefined && parts[2] !== undefined ? { seriesId: parts[1], occursOn: parts[2] } : null); }} title={taskTitles.get(block.taskItemId) ?? 'Задача'} time={`${block.startsAt.slice(11, 16)}–${block.endsAt.slice(11, 16)}`} />)}
         </View>
-        <SectionHeader action={`${reminders.length}`} title="Без времени" />
-        <View style={styles.list}>{reminders.map((reminder) => <PlanListRow key={reminder.id} onPress={() => undefined} title={reminder.title} time="Без времени" />)}</View>
+        <SectionHeader action={`${reminders.length + untimedTasks.length}`} title="Без времени" />
+        <View style={styles.list}>
+          {untimedTasks.map((task) => <PlanListRow key={task.id} onPress={() => setSelectedUntimedTaskId(task.id)} title={task.title} time="Без времени" />)}
+          {reminders.map((reminder) => <PlanListRow key={reminder.id} onPress={() => setSelectedReminderOccurrence(reminder.seriesId === null || reminder.occursOn === null ? null : { seriesId: reminder.seriesId, occursOn: reminder.occursOn })} title={reminder.title} time="Без времени" />)}
+        </View>
+        {selectedUntimedTaskId === null ? null : <View style={styles.occurrenceActions}>
+          <Text style={styles.sectionTitle}>Запланированная задача</Text>
+          <Pressable accessibilityLabel="Вернуть задачу в Backlog" onPress={() => { if (services !== null) void services.planningActions.returnTaskToBacklog({ taskId: selectedUntimedTaskId, reason: null }).then(() => services.planningActions.getPlanUntimedTasks(selectedDate).then((nextTasks) => { setUntimedTasks(nextTasks); setSelectedUntimedTaskId(null); })); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Вернуть в Backlog</Text></Pressable>
+        </View>}
+        {selectedReminderOccurrence === null ? null : <View style={styles.occurrenceActions}>
+          <Text style={styles.sectionTitle}>Этот экземпляр напоминания</Text>
+          <Pressable accessibilityLabel="Завершить экземпляр напоминания" onPress={() => { if (services !== null) void services.planningActions.setRecurrenceOccurrenceState(selectedReminderOccurrence.seriesId, selectedReminderOccurrence.occursOn, 'completed').then(() => services.planningActions.getPlanUntimedReminders(selectedDate).then((nextReminders) => { setReminders(nextReminders); setSelectedReminderOccurrence(null); })); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Завершить</Text></Pressable>
+          <Pressable accessibilityLabel="Отменить повторение напоминания" onPress={() => setIsReminderRemoveDialogVisible(true)} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Отменить</Text></Pressable>
+        </View>}
         {selectedOccurrence === null ? null : <View style={styles.occurrenceActions}>
           <Text style={styles.sectionTitle}>Этот экземпляр</Text>
           <Pressable accessibilityLabel="Завершить этот экземпляр" onPress={() => { if (services !== null) void services.planningActions.setRecurrenceOccurrenceState(selectedOccurrence.seriesId, selectedOccurrence.occursOn, 'completed').then(() => services.planningActions.getPlanScheduleBlocks(selectedDate).then(setBlocks)); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Завершить</Text></Pressable>
-          <Pressable accessibilityLabel="Отменить этот экземпляр" onPress={() => { if (services !== null) void services.planningActions.setRecurrenceOccurrenceState(selectedOccurrence.seriesId, selectedOccurrence.occursOn, 'cancelled').then(() => services.planningActions.getPlanScheduleBlocks(selectedDate).then(setBlocks)); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Отменить</Text></Pressable>
+          <Pressable accessibilityLabel="Отменить повторение" onPress={() => setIsRemoveDialogVisible(true)} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Отменить</Text></Pressable>
           <Pressable accessibilityLabel="Перенести этот экземпляр" onPress={() => setIsMoveDialogVisible(true)} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Перенести</Text></Pressable>
         </View>}
 
@@ -117,6 +135,7 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selecte
       </Pressable>
       {selectedOccurrence === null ? null : (
         <RecurrenceMoveDialog
+          key={selectedOccurrence.occursOn}
           occursOn={selectedOccurrence.occursOn}
           onMove={async (targetDate, scope) => {
             if (services === null) return;
@@ -129,6 +148,8 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selecte
           visible={isMoveDialogVisible}
         />
       )}
+      {selectedOccurrence === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ ...selectedOccurrence, scope }); setBlocks(await services.planningActions.getPlanScheduleBlocks(selectedDate)); setSelectedOccurrence(null); setIsRemoveDialogVisible(false); }} onRequestClose={() => setIsRemoveDialogVisible(false)} visible={isRemoveDialogVisible} />}
+      {selectedReminderOccurrence === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение напоминания" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ ...selectedReminderOccurrence, scope }); setReminders(await services.planningActions.getPlanUntimedReminders(selectedDate)); setSelectedReminderOccurrence(null); setIsReminderRemoveDialogVisible(false); }} onRequestClose={() => setIsReminderRemoveDialogVisible(false)} visible={isReminderRemoveDialogVisible} />}
     </SafeAreaView>
   );
 }

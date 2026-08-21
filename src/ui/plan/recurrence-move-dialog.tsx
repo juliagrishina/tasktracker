@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
@@ -14,10 +14,6 @@ interface RecurrenceMoveDialogProps {
 export function RecurrenceMoveDialog({ occursOn, onMove, onRequestClose, visible }: RecurrenceMoveDialogProps) {
   const [targetDate, setTargetDate] = useState(occursOn);
   const [isMoving, setIsMoving] = useState(false);
-
-  useEffect(() => {
-    if (visible) setTargetDate(occursOn);
-  }, [occursOn, visible]);
 
   const move = async (scope: 'occurrence' | 'series') => {
     setIsMoving(true);
