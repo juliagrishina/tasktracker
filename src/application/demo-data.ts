@@ -141,6 +141,8 @@ const scheduleBlocks: readonly ScheduleBlock[] = [
   {
     id: 'demo-plan-week-draft-block',
     taskItemId: 'demo-plan-week-draft',
+    occurrenceId: null,
+    timeZoneId: 'UTC',
     startsAt: '2026-08-02T09:00:00.000Z',
     endsAt: '2026-08-02T09:30:00.000Z',
     createdAt,
@@ -150,6 +152,8 @@ const scheduleBlocks: readonly ScheduleBlock[] = [
   {
     id: 'demo-plan-team-call-block',
     taskItemId: 'demo-plan-team-call',
+    occurrenceId: null,
+    timeZoneId: 'UTC',
     startsAt: '2026-08-02T11:00:00.000Z',
     endsAt: '2026-08-02T11:45:00.000Z',
     createdAt,
@@ -161,7 +165,8 @@ const scheduleBlocks: readonly ScheduleBlock[] = [
 const recurrenceSeries: readonly RecurrenceSeries[] = [
   {
     id: 'demo-plan-week-draft-recurrence',
-    taskItemId: 'demo-plan-week-draft',
+    itemKind: 'task',
+    itemId: 'demo-plan-week-draft',
     frequency: 'weekly',
     interval: 1,
     startsOn: '2026-08-02',

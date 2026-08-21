@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppServices } from '../../application/app-services-provider';
+import type { CreateTimedReminderTaskWithPlanningInput, SaveTaskWithPlanningInput, ScheduleConflict } from '../../application/planning-types';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 import {
@@ -20,10 +21,20 @@ import {
   type TaskPlanningDraft,
   validateTaskPlanningDraft,
 } from './task-planning-fields';
+import { PlanningValuePicker } from './planning-value-picker';
+import { PlanningDatePicker } from './planning-date-picker';
+import { getInstantInTimeZone, getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
 type FormItem = Project | TaskItem | Reminder;
+type PendingConflict =
+  | { kind: 'task'; input: SaveTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] }
+  | { kind: 'timedReminder'; input: CreateTimedReminderTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] };
+const estimateOptions = [
+  { label: 'Без оценки', value: '' },
+  ...Array.from({ length: 96 }, (_, index) => ({ label: `${(index + 1) * 5} мин`, value: String((index + 1) * 5) })),
+];
 
 interface ItemFormSheetProps {
   visible: boolean;
@@ -34,6 +45,9 @@ interface ItemFormSheetProps {
   parentTaskId?: string;
   projectId?: string | null;
   onSaved?: () => void;
+  occurrenceEdit?: {
+    onSave: (input: { title: string; description: string; estimatedDurationMinutes: number | null }) => Promise<void>;
+  };
   planningContext?: {
     defaultDate: string;
     onPlanningDraftChange?: (draft: TaskPlanningDraft) => void;
@@ -75,7 +89,7 @@ function getInitialReminderValue(item: FormItem | undefined, key: 'remindsOn' | 
   return '';
 }
 
-function getInitialRepeatFrequency(item: FormItem | undefined): '' | 'daily' | 'weekly' | 'monthly' {
+function getInitialRepeatFrequency(item: FormItem | undefined): '' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays' {
   if (item !== undefined && 'repeatRule' in item && item.repeatRule !== null) {
     return item.repeatRule.frequency;
   }
@@ -89,6 +103,10 @@ function getInitialRepeatInterval(item: FormItem | undefined): string {
     : '1';
 }
 
+function getInitialRepeatWeekdays(item: FormItem | undefined): number[] {
+  return item !== undefined && 'repeatRule' in item && item.repeatRule?.weekdays !== undefined ? [...item.repeatRule.weekdays] : [];
+}
+
 export function ItemFormSheet({
   visible,
   mode,
@@ -98,9 +116,10 @@ export function ItemFormSheet({
   parentTaskId,
   projectId,
   onSaved,
+  occurrenceEdit,
   planningContext,
 }: ItemFormSheetProps) {
-  const { backlog, backlogActions } = useAppServices();
+  const { backlog, backlogActions, planningActions, settings } = useAppServices();
   const [title, setTitle] = useState(() => item?.title ?? '');
   const [description, setDescription] = useState(() => getInitialDescription(item));
   const [duration, setDuration] = useState(() => getInitialDuration(item));
@@ -109,16 +128,38 @@ export function ItemFormSheet({
   const [remindsOn, setRemindsOn] = useState(() => getInitialReminderValue(item, 'remindsOn'));
   const [periodStartOn, setPeriodStartOn] = useState(() => getInitialReminderValue(item, 'periodStartOn'));
   const [periodEndOn, setPeriodEndOn] = useState(() => getInitialReminderValue(item, 'periodEndOn'));
-  const [repeatFrequency, setRepeatFrequency] = useState<'' | 'daily' | 'weekly' | 'monthly'>(() => getInitialRepeatFrequency(item));
+  const [repeatFrequency, setRepeatFrequency] = useState<'' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays'>(() => getInitialRepeatFrequency(item));
   const [repeatInterval, setRepeatInterval] = useState(() => getInitialRepeatInterval(item));
+  const [repeatWeekdays, setRepeatWeekdays] = useState(() => getInitialRepeatWeekdays(item));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
+  const [persistedBlockIds, setPersistedBlockIds] = useState<readonly string[]>([]);
+  const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
+  const [reminderTimed, setReminderTimed] = useState(false);
+  const [reminderTime, setReminderTime] = useState('09:00');
   const defaultBlock = useMemo(
-    () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
-    [planningContext?.defaultDate],
+    () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date(), settings.timeZoneId),
+    [planningContext?.defaultDate, settings.timeZoneId],
   );
-  const isPlanTaskForm = type === 'task' && planningContext !== undefined;
+  const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
+  useEffect(() => {
+    if (!visible || !isPlanTaskForm || item === undefined || !('kind' in item)) return;
+    void planningActions.getTaskPlanningSnapshot(item.id).then(({ blocks, recurrence, placement }) => {
+      setPersistedBlockIds(blocks.map((block) => block.id));
+      setPlanningDraft({
+        ...createInitialTaskPlanningDraft(),
+        blocks: blocks.map((block) => ({ id: block.id, date: getDateInTimeZone(block.startsAt, settings.timeZoneId), startsAt: getTimeInTimeZone(block.startsAt, settings.timeZoneId), durationMinutes: String((new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000) })),
+        repeatFrequency: recurrence?.frequency ?? 'none',
+        repeatInterval: String(recurrence?.interval ?? 1),
+        repeatWeekdays: recurrence?.weekdays === undefined ? [] : [...recurrence.weekdays],
+        scheduledOn: placement.scheduledOn ?? recurrence?.startsOn ?? '',
+        periodStartOn: placement.periodStartOn ?? '',
+        periodEndOn: placement.periodEndOn ?? '',
+        scheduleMode: placement.scheduledOn !== null ? 'date' : placement.periodStartOn !== null ? 'period' : 'none',
+      });
+    });
+  }, [isPlanTaskForm, item, planningActions, settings.timeZoneId, visible]);
 
   const formTitle = useMemo(() => {
     const createTitle: Record<ItemFormType, string> = {
@@ -144,6 +185,71 @@ export function ItemFormSheet({
       }
       const estimatedDurationMinutes = duration.trim() === '' ? null : Number(duration);
       const now = new Date().toISOString();
+      if (occurrenceEdit !== undefined) {
+        await occurrenceEdit.onSave({ title, description, estimatedDurationMinutes });
+        onSaved?.();
+        onClose();
+        return;
+      }
+      if (isPlanTaskForm) {
+        const taskId = item?.id ?? createItemId(type);
+        const timeZoneId = settings.timeZoneId;
+        const blocks = planningDraft.blocks.map((block) => {
+          const startsAt = new Date(getInstantInTimeZone(block.date, block.startsAt, timeZoneId));
+          return {
+            id: block.id,
+            taskItemId: taskId,
+            occurrenceId: null,
+            timeZoneId,
+            startsAt: startsAt.toISOString(),
+            endsAt: new Date(startsAt.getTime() + Number(block.durationMinutes) * 60_000).toISOString(),
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          };
+        });
+        const recurrence = planningDraft.repeatFrequency === 'none' ? null : {
+          id: `series-${taskId}`,
+          frequency: planningDraft.repeatFrequency,
+          interval: Number(planningDraft.repeatInterval),
+          weekdays: planningDraft.repeatFrequency === 'weekly' && planningDraft.repeatWeekdays.length > 0 ? planningDraft.repeatWeekdays : undefined,
+          startsOn: planningDraft.blocks[0]?.date ?? planningDraft.scheduledOn ?? planningContext?.defaultDate ?? '',
+          createdAt: now,
+        };
+        const input: SaveTaskWithPlanningInput = {
+          task: {
+            mode,
+            kind: type === 'subtask' ? 'subtask' : 'task',
+            id: taskId,
+            title,
+            description,
+            estimatedDurationMinutes,
+            projectId: type === 'task' ? selectedProjectId : item !== undefined && 'projectId' in item ? item.projectId : null,
+            parentTaskId,
+            createdAt: now,
+          },
+          planning: {
+            taskId,
+            blocks,
+            deletedBlockIds: persistedBlockIds.filter((id) => !blocks.some((block) => block.id === id)),
+            recurrence,
+            placement: {
+              scheduledOn: planningDraft.scheduleMode === 'date' ? emptyToNull(planningDraft.scheduledOn) : null,
+              periodStartOn: planningDraft.scheduleMode === 'period' ? emptyToNull(planningDraft.periodStartOn) : null,
+              periodEndOn: planningDraft.scheduleMode === 'period' ? emptyToNull(planningDraft.periodEndOn) : null,
+            },
+          },
+        };
+        const result = await planningActions.saveTaskWithPlanning(input);
+        if (result.conflict !== null) {
+          setPendingConflict({ kind: 'task', input, conflicts: result.conflict });
+          setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
+          return;
+        }
+        onSaved?.();
+        onClose();
+        return;
+      }
 
       if (type === 'project') {
         if (mode === 'create') {
@@ -160,8 +266,9 @@ export function ItemFormSheet({
 
       if (type === 'task') {
         if (mode === 'create') {
+          const taskId = createItemId(type);
           await backlogActions.createTask({
-            id: createItemId(type),
+            id: taskId,
             title,
             description,
             projectId: selectedProjectId,
@@ -189,8 +296,9 @@ export function ItemFormSheet({
           if (parentTaskId === undefined) {
             throw new Error('Не выбрана задача-родитель');
           }
+          const subtaskId = createItemId(type);
           await backlogActions.createSubtask({
-            id: createItemId(type),
+            id: subtaskId,
             title,
             description,
             parentTaskId,
@@ -210,7 +318,7 @@ export function ItemFormSheet({
       if (type === 'reminder') {
         const repeatRule = repeatFrequency === ''
           ? null
-          : { frequency: repeatFrequency, interval: Number(repeatInterval) };
+          : { frequency: repeatFrequency, interval: Number(repeatInterval), weekdays: repeatFrequency === 'weekly' && repeatWeekdays.length > 0 ? repeatWeekdays : undefined };
         const reminderInput = {
           title,
           remindsOn: emptyToNull(remindsOn),
@@ -220,14 +328,43 @@ export function ItemFormSheet({
           estimatedDurationMinutes,
         };
 
+        if (reminderTimed) {
+            const reminderId = item?.id ?? createItemId(type);
+            const reminderDate = emptyToNull(remindsOn);
+            if (reminderDate === null) throw new Error('Укажите дату напоминания');
+            const taskId = `task-${reminderId}`;
+            const startsAt = new Date(getInstantInTimeZone(reminderDate, reminderTime, settings.timeZoneId));
+            const timedReminderInput: CreateTimedReminderTaskWithPlanningInput = {
+              reminder: { id: reminderId, ...reminderInput, createdAt: now },
+              taskId,
+              projectId: selectedProjectId,
+              planning: {
+                taskId,
+                recurrence: null,
+                blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: settings.timeZoneId, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
+              },
+            };
+            const result = await planningActions.createTimedReminderTaskWithPlanning(timedReminderInput);
+            if (result.conflict !== null) {
+              setPendingConflict({ kind: 'timedReminder', input: timedReminderInput, conflicts: result.conflict });
+              setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
+              return;
+            }
+            onSaved?.();
+            onClose();
+            return;
+        }
         if (mode === 'create') {
+          const reminderId = createItemId(type);
           await backlogActions.createReminder({
-            id: createItemId(type),
+            id: reminderId,
             ...reminderInput,
             createdAt: now,
           });
+          await planningActions.syncReminderRecurrence(reminderId);
         } else if (item !== undefined) {
           await backlogActions.updateReminder({ id: item.id, ...reminderInput });
+          await planningActions.syncReminderRecurrence(item.id);
         }
       }
 
@@ -276,7 +413,7 @@ export function ItemFormSheet({
               style={[styles.input, styles.multilineInput]}
               value={description}
             />
-            {type === 'task' ? (
+            {(type === 'task' && occurrenceEdit === undefined) || (type === 'reminder' && reminderTimed) ? (
               <View>
                 <Text style={styles.label}>Проект</Text>
                 <Pressable
@@ -306,15 +443,7 @@ export function ItemFormSheet({
             {type === 'task' || type === 'subtask' || type === 'reminder' ? (
               <View>
                 <Text style={styles.label}>Оценочная длительность, мин.</Text>
-                <TextInput
-                  accessibilityLabel="Оценочная длительность, мин."
-                  keyboardType="number-pad"
-                  onChangeText={setDuration}
-                  placeholder="Необязательно"
-                  placeholderTextColor={designTokens.color.text.tertiary}
-                  style={styles.input}
-                  value={duration}
-                />
+                <PlanningValuePicker accessibilityLabel="Оценочная длительность, мин." onChange={setDuration} options={estimateOptions} title="Оценочная длительность" value={duration} />
               </View>
             ) : null}
             {isPlanTaskForm ? (
@@ -330,11 +459,11 @@ export function ItemFormSheet({
             {type === 'reminder' ? (
               <View style={styles.reminderFields}>
                 <Text style={styles.label}>Дата</Text>
-                <TextInput accessibilityLabel="Дата" onChangeText={setRemindsOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={remindsOn} />
+                <PlanningDatePicker accessibilityLabel="Дата" onChange={setRemindsOn} value={remindsOn} />
                 <Text style={styles.label}>Начало периода</Text>
-                <TextInput accessibilityLabel="Начало периода" onChangeText={setPeriodStartOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={periodStartOn} />
+                <PlanningDatePicker accessibilityLabel="Начало периода" onChange={setPeriodStartOn} value={periodStartOn} />
                 <Text style={styles.label}>Конец периода</Text>
-                <TextInput accessibilityLabel="Конец периода" onChangeText={setPeriodEndOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={periodEndOn} />
+                <PlanningDatePicker accessibilityLabel="Конец периода" onChange={setPeriodEndOn} value={periodEndOn} />
                 <Text style={styles.label}>Повторение</Text>
                 <View style={styles.repeatOptions}>
                   {([
@@ -342,6 +471,8 @@ export function ItemFormSheet({
                     ['Каждый день', 'daily'],
                     ['Каждую неделю', 'weekly'],
                     ['Каждый месяц', 'monthly'],
+                    ['Каждый год', 'yearly'],
+                    ['Каждые N дней', 'intervalDays'],
                   ] as const).map(([label, value]) => (
                     <Pressable
                       key={label}
@@ -354,16 +485,20 @@ export function ItemFormSheet({
                 {repeatFrequency !== '' ? (
                   <TextInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" onChangeText={setRepeatInterval} placeholder="Интервал" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={repeatInterval} />
                 ) : null}
+                {repeatFrequency === 'weekly' ? <View><Text style={styles.label}>Дни недели</Text><View style={styles.repeatOptions}>{[['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]].map(([label, day]) => { const selected = repeatWeekdays.includes(day as number); return <Pressable accessibilityLabel={String(label)} key={String(label)} onPress={() => setRepeatWeekdays((current) => selected ? current.filter((entry) => entry !== day) : [...current, day as number])} style={[styles.repeatOption, selected && styles.repeatOptionSelected]}><Text style={[styles.repeatOptionText, selected && styles.repeatOptionTextSelected]}>{label}</Text></Pressable>; })}</View></View> : null}
+                <Pressable accessibilityLabel="Точное время напоминания" onPress={() => setReminderTimed((current) => !current)} style={styles.repeatOption}><Text style={styles.repeatOptionText}>{reminderTimed ? 'Точное время включено' : 'Добавить точное время'}</Text></Pressable>
+                {reminderTimed ? <PlanningValuePicker accessibilityLabel="Время напоминания" onChange={setReminderTime} options={Array.from({ length: 288 }, (_, index) => { const value = `${String(Math.floor(index / 12)).padStart(2, '0')}:${String((index % 12) * 5).padStart(2, '0')}`; return { label: value, value }; })} title="Время напоминания" value={reminderTime} /> : null}
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
+            {pendingConflict === null ? null : <View>{pendingConflict.conflicts.map((conflict) => <Text key={`${conflict.candidate.id}-${conflict.block.id}`} style={styles.error}>{`${conflict.itemTitle}: ${getTimeInTimeZone(conflict.startsAt, settings.timeZoneId)}–${getTimeInTimeZone(conflict.endsAt, settings.timeZoneId)}`}</Text>)}<Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable></View>}
           </ScrollView>
           <View style={styles.footer}>
             <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>
               <Text style={styles.secondaryActionText}>Отмена</Text>
             </Pressable>
             <Pressable accessibilityState={{ disabled: isSaving }} onPress={() => void submit()} style={[styles.action, styles.primaryAction, isSaving && styles.disabledAction]}>
-              <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? 'Создать' : 'Сохранить'}</Text>
+              <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? mode === 'create' ? 'Создать' : 'Сохранить' : 'Сохранить'}</Text>
             </Pressable>
           </View>
         </View>
@@ -483,6 +618,7 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.label,
     fontWeight: designTokens.typography.weight.semibold,
   },
+  conflictAction: { alignItems: 'center', backgroundColor: designTokens.color.primary, borderRadius: designTokens.radius.control, justifyContent: 'center', marginTop: designTokens.space[12], minHeight: designTokens.size.touchTargetMin },
   footer: {
     flexDirection: 'row',
     gap: designTokens.space[10],

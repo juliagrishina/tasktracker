@@ -14,6 +14,7 @@ interface ItemDetailActionsProps {
   confirmDelete?: () => Promise<boolean>;
   onEdit?: () => void;
   onAddSubtask?: () => void;
+  onPlan?: () => void;
   onCompleted?: () => void;
   onDeleted?: () => void;
 }
@@ -24,6 +25,7 @@ export function ItemDetailActions({
   confirmDelete = confirmBacklogDeletion,
   onEdit,
   onAddSubtask,
+  onPlan,
   onCompleted,
   onDeleted,
 }: ItemDetailActionsProps) {
@@ -65,11 +67,11 @@ export function ItemDetailActions({
       {kind === 'task' && onAddSubtask !== undefined ? (
         <ActionButton disabled={isBusy} label="Добавить подзадачу" onPress={onAddSubtask} tone="secondary" />
       ) : null}
-      {kind === 'task' || kind === 'subtask' ? (
+      {kind === 'task' || kind === 'subtask' || kind === 'reminder' ? (
         <ActionButton
           disabled={isBusy}
           label="Запланировать"
-          onPress={() => setMessage('Выбор даты и времени появится на следующем этапе планирования')}
+          onPress={onPlan ?? (() => undefined)}
           tone="soft"
         />
       ) : null}

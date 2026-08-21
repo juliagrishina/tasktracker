@@ -213,6 +213,114 @@ const schemaVersionSix = `
   END;
 `;
 
+const schemaVersionSeven = `
+  ALTER TABLE schedule_blocks ADD COLUMN occurrence_id TEXT;
+  ALTER TABLE schedule_blocks ADD COLUMN time_zone_id TEXT;
+
+  CREATE TABLE recurrence_series_v7 (
+    id TEXT PRIMARY KEY,
+    item_kind TEXT NOT NULL CHECK (item_kind IN ('task', 'reminder')),
+    item_id TEXT NOT NULL,
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+    interval INTEGER NOT NULL CHECK (interval > 0),
+    starts_on TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT
+  );
+
+  INSERT INTO recurrence_series_v7 (
+    id, item_kind, item_id, frequency, interval, starts_on, created_at, updated_at, deleted_at
+  )
+  SELECT id, 'task', task_item_id, frequency, interval, starts_on, created_at, updated_at, deleted_at
+  FROM recurrence_series;
+
+  DROP TABLE recurrence_series;
+  ALTER TABLE recurrence_series_v7 RENAME TO recurrence_series;
+  CREATE INDEX recurrence_series_live_owner ON recurrence_series (item_kind, item_id)
+    WHERE deleted_at IS NULL;
+
+  CREATE TABLE recurrence_occurrences (
+    id TEXT PRIMARY KEY,
+    series_id TEXT NOT NULL REFERENCES recurrence_series(id),
+    occurs_on TEXT NOT NULL,
+    cancelled_at TEXT,
+    completed_at TEXT,
+    blocks_overridden INTEGER NOT NULL DEFAULT 0 CHECK (blocks_overridden IN (0, 1)),
+    task_patch TEXT,
+    reminder_patch TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+  CREATE UNIQUE INDEX recurrence_occurrences_live_series_date
+    ON recurrence_occurrences (series_id, occurs_on)
+    WHERE deleted_at IS NULL;
+`;
+
+const schemaVersionEight = `
+  ALTER TABLE task_items ADD COLUMN scheduled_on TEXT;
+  ALTER TABLE task_items ADD COLUMN period_start_on TEXT;
+  ALTER TABLE task_items ADD COLUMN period_end_on TEXT;
+  CREATE TABLE transfer_history (
+    id TEXT PRIMARY KEY,
+    task_item_id TEXT NOT NULL REFERENCES task_items(id),
+    reason TEXT,
+    returned_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX transfer_history_task_item ON transfer_history (task_item_id, returned_at);
+`;
+
+const schemaVersionNine = `
+  CREATE TABLE reminders_v9 (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    reminds_on TEXT,
+    period_start_on TEXT,
+    period_end_on TEXT,
+    repeat_frequency TEXT CHECK (repeat_frequency IS NULL OR repeat_frequency IN ('daily', 'weekly', 'monthly', 'yearly', 'intervalDays')),
+    repeat_interval INTEGER CHECK (repeat_interval IS NULL OR repeat_interval > 0),
+    repeat_weekdays_json TEXT,
+    estimated_duration_minutes INTEGER CHECK (estimated_duration_minutes IS NULL OR estimated_duration_minutes > 0),
+    completed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT,
+    CHECK ((period_start_on IS NULL AND period_end_on IS NULL) OR (period_start_on IS NOT NULL AND period_end_on IS NOT NULL AND period_start_on <= period_end_on))
+  );
+  INSERT INTO reminders_v9 (id, title, reminds_on, period_start_on, period_end_on, repeat_frequency, repeat_interval, repeat_weekdays_json, estimated_duration_minutes, completed_at, created_at, updated_at, deleted_at)
+    SELECT id, title, reminds_on, period_start_on, period_end_on, repeat_frequency, repeat_interval, NULL, estimated_duration_minutes, completed_at, created_at, updated_at, deleted_at FROM reminders;
+  DROP TABLE reminders;
+  ALTER TABLE reminders_v9 RENAME TO reminders;
+
+  CREATE TABLE recurrence_series_v9 (
+    id TEXT PRIMARY KEY,
+    item_kind TEXT NOT NULL CHECK (item_kind IN ('task', 'reminder')),
+    item_id TEXT NOT NULL,
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly', 'yearly', 'intervalDays')),
+    interval INTEGER NOT NULL CHECK (interval > 0),
+    weekdays_json TEXT,
+    starts_on TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT
+  );
+  INSERT INTO recurrence_series_v9 (id, item_kind, item_id, frequency, interval, weekdays_json, starts_on, created_at, updated_at, deleted_at)
+    SELECT id, item_kind, item_id, frequency, interval, NULL, starts_on, created_at, updated_at, deleted_at FROM recurrence_series;
+  DROP TABLE recurrence_series;
+  ALTER TABLE recurrence_series_v9 RENAME TO recurrence_series;
+  CREATE INDEX recurrence_series_live_owner_v9 ON recurrence_series (item_kind, item_id) WHERE deleted_at IS NULL;
+`;
+
+const schemaVersionTen = `
+  UPDATE schedule_blocks SET time_zone_id = 'UTC' WHERE time_zone_id IS NULL;
+`;
+
+const schemaVersionEleven = `
+  ALTER TABLE settings ADD COLUMN time_zone_id TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -265,6 +373,37 @@ const migrations: readonly Migration[] = [
     version: 6,
     async apply(database) {
       await database.execAsync(schemaVersionSix);
+    },
+  },
+  {
+    version: 7,
+    async apply(database) {
+      await database.execAsync(schemaVersionSeven);
+    },
+  },
+  {
+    version: 8,
+    async apply(database) {
+      await database.execAsync(schemaVersionEight);
+    },
+  },
+  {
+    version: 9,
+    async apply(database) {
+      await database.execAsync(schemaVersionNine);
+    },
+  },
+  {
+    version: 10,
+    async apply(database) {
+      await database.execAsync(schemaVersionTen);
+    },
+  },
+  {
+    version: 11,
+    async apply(database) {
+      await database.execAsync(schemaVersionEleven);
+      await database.runAsync('UPDATE settings SET time_zone_id = ? WHERE id = 1', [getDefaultSettings().timeZoneId]);
     },
   },
 ];

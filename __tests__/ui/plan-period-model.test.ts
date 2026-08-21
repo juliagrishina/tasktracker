@@ -26,4 +26,19 @@ describe('plan period load model', () => {
     ]);
     expect(shiftPlanAnchor('2026-08-05', 'week', 1)).toBe('2026-08-12');
   });
+
+  test('uses the supplied real load values instead of presentation fixtures', () => {
+    expect(getWeekLoadDays('2026-08-05', (isoDate) => isoDate === '2026-08-05' ? 125 : 0)[2]).toMatchObject({
+      isoDate: '2026-08-05',
+      loadPercent: 125,
+      tone: 'high',
+    });
+  });
+
+  test('rounds a period load percentage for display without changing its tone', () => {
+    expect(getWeekLoadDays('2026-08-05', (isoDate) => isoDate === '2026-08-05' ? 14.285714285714285 : 0)[2]).toMatchObject({
+      loadPercent: 14,
+      tone: 'low',
+    });
+  });
 });

@@ -2,10 +2,12 @@ import type {
   AppSettings,
   EntityId,
   Project,
+  RecurrenceOccurrence,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
   TaskItem,
+  TransferHistory,
 } from '../domain/entities';
 
 export interface AppDataSource {
@@ -20,6 +22,8 @@ export interface AppDataSource {
   getTaskItem(id: EntityId): Promise<TaskItem | null>;
   listTaskItems(): Promise<readonly TaskItem[]>;
   deleteTaskItem(id: EntityId): Promise<void>;
+  saveTransferHistory(history: TransferHistory): Promise<void>;
+  listTransferHistories(taskItemId?: EntityId): Promise<readonly TransferHistory[]>;
   saveReminder(reminder: Reminder): Promise<void>;
   getReminder(id: EntityId): Promise<Reminder | null>;
   listReminders(): Promise<readonly Reminder[]>;
@@ -27,7 +31,15 @@ export interface AppDataSource {
   saveScheduleBlock(block: ScheduleBlock): Promise<void>;
   getScheduleBlock(id: EntityId): Promise<ScheduleBlock | null>;
   listScheduleBlocks(): Promise<readonly ScheduleBlock[]>;
+  listScheduleBlocksForTaskItem(taskItemId: EntityId): Promise<readonly ScheduleBlock[]>;
+  deleteScheduleBlock(id: EntityId): Promise<void>;
   saveRecurrenceSeries(series: RecurrenceSeries): Promise<void>;
   getRecurrenceSeries(id: EntityId): Promise<RecurrenceSeries | null>;
+  listRecurrenceSeries(): Promise<readonly RecurrenceSeries[]>;
+  deleteRecurrenceSeries(id: EntityId): Promise<void>;
+  saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void>;
+  getRecurrenceOccurrence(id: EntityId): Promise<RecurrenceOccurrence | null>;
+  listRecurrenceOccurrences(seriesId: EntityId): Promise<readonly RecurrenceOccurrence[]>;
+  deleteRecurrenceOccurrence(id: EntityId): Promise<void>;
   transaction<T>(operation: () => Promise<T>): Promise<T>;
 }

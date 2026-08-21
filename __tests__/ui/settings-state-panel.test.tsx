@@ -4,6 +4,19 @@ import { getDefaultSettings } from '../../src/data/default-settings';
 import { SettingsStatePanel } from '../../src/ui/settings/settings-state-panel';
 
 describe('SettingsStatePanel', () => {
+  test('saves the selected IANA timezone for all plan cards', async () => {
+    const onTimeZoneChange = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel onTimeZoneChange={onTimeZoneChange} settings={getDefaultSettings()} />);
+
+    fireEvent.press(view.getByLabelText('Часовой пояс'));
+    await waitFor(() => expect(view.getByLabelText('Часовой пояс IANA')).toBeOnTheScreen());
+    fireEvent.changeText(view.getByLabelText('Часовой пояс IANA'), 'Europe/Berlin');
+    await waitFor(() => expect(view.getByLabelText('Часовой пояс IANA').props.value).toBe('Europe/Berlin'));
+    fireEvent.press(view.getByRole('button', { name: 'Сохранить часовой пояс' }));
+
+    await waitFor(() => expect(onTimeZoneChange).toHaveBeenCalledWith('Europe/Berlin'));
+  });
+
   test('renders the approved Settings 2 state cards', async () => {
     const view = await render(<SettingsStatePanel settings={getDefaultSettings()} />);
 

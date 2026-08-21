@@ -7,6 +7,10 @@ import { supabase } from './supabase-client';
  * persisted by the Supabase client's AsyncStorage-backed session storage.
  */
 export async function ensureAnonymousSession(): Promise<void> {
+  if (supabase === null) {
+    return;
+  }
+
   const { data } = await supabase.auth.getSession();
 
   if (data.session !== null) {

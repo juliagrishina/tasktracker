@@ -2,13 +2,30 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { AppServicesProvider } from '../../src/application/app-services-provider';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import { createDefaultBlock } from '../../src/ui/backlog/task-planning-fields';
 import { PlanScreen } from '../../src/ui/plan/plan-screen';
 
 describe('Plan task creation sheet', () => {
+  test('moves the default block date forward when five-minute rounding crosses midnight', () => {
+    expect(createDefaultBlock('2026-08-03', new Date(2026, 7, 3, 23, 59))).toMatchObject({
+      date: '2026-08-04',
+      startsAt: '00:00',
+      durationMinutes: '60',
+    });
+  });
+
+  test('rounds a new block strictly into the future when the current minute is already on the grid', () => {
+    expect(createDefaultBlock('2026-08-03', new Date(2026, 7, 3, 10, 0, 30))).toMatchObject({
+      date: '2026-08-03',
+      startsAt: '10:05',
+      durationMinutes: '60',
+    });
+  });
+
   test('opens the approved planning states from the Plan FAB', async () => {
     const view = await render(
       <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
-        <PlanScreen />
+        <PlanScreen initialDate="2026-08-05" />
       </AppServicesProvider>,
     );
 
@@ -41,11 +58,11 @@ describe('Plan task creation sheet', () => {
     });
   });
 
-  test('saves only core task data and does not persist demo planning fields', async () => {
+  test('persists a planned block together with the new task', async () => {
     const source = createInMemoryDataSource();
     const view = await render(
       <AppServicesProvider source={source} seedDevelopmentData={false}>
-        <PlanScreen />
+        <PlanScreen initialDate="2026-08-05" />
       </AppServicesProvider>,
     );
 
@@ -60,11 +77,20 @@ describe('Plan task creation sheet', () => {
     await waitFor(() => {
       expect(view.getByLabelText('Название').props.value).toBe('Подготовить план релиза');
     });
+    fireEvent.press(view.getByLabelText('Добавить блок времени'));
+    await waitFor(() => {
+      expect(view.getByLabelText('Начало блока 1')).toBeOnTheScreen();
+    });
     fireEvent.press(view.getByText('Создать'));
 
     await waitFor(async () => {
       expect((await source.listTaskItems()).map((task) => task.title)).toContain('Подготовить план релиза');
     });
-    expect(await source.listScheduleBlocks()).toHaveLength(0);
+    await waitFor(async () => {
+      expect(await source.listScheduleBlocks()).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(view.getByText('7%')).toBeOnTheScreen();
+    });
   });
 });

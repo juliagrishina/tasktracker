@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { AppSettings, Project, Reminder, TaskItem } from '../domain/entities';
+import type { AppSettings, Project, RecurrenceOccurrence, Reminder, TaskItem } from '../domain/entities';
 import { ensureAnonymousSession } from '../data/auth-session';
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
@@ -49,6 +49,9 @@ import {
 } from './backlog-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
+import { convertReminderToTask } from './convert-reminder-to-task';
+import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
+import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -63,13 +66,39 @@ interface BacklogActions {
   deleteItem(input: DeleteBacklogItemInput): Promise<void>;
 }
 
+interface PlanningActions {
+  getTaskItem(taskId: string): Promise<TaskItem | null>;
+  getRecurrenceOccurrence(seriesId: string, occursOn: string): Promise<RecurrenceOccurrence | null>;
+  getRecurrenceOccurrenceById(id: string): Promise<RecurrenceOccurrence | null>;
+  convertReminderToTask(reminderId: string, taskId: string, createdAt: string): ReturnType<typeof convertReminderToTask>;
+  getPlanScheduleBlocks(isoDate: string): ReturnType<typeof getPlanScheduleBlocks>;
+  getTaskPlanningSnapshot(taskId: string): ReturnType<typeof getTaskPlanningSnapshot>;
+  setRecurrenceOccurrenceState(seriesId: string, occursOn: string, state: 'completed' | 'cancelled'): Promise<void>;
+  getPlanUntimedReminders(isoDate: string): ReturnType<typeof getPlanUntimedReminders>;
+  getPlanUntimedTasks(isoDate: string): ReturnType<typeof getPlanUntimedTasks>;
+  returnTaskToBacklog(input: { taskId: string; reason: string | null }): Promise<void>;
+  syncReminderRecurrence(reminderId: string): Promise<void>;
+  saveTaskPlanning(input: SaveTaskPlanningInput): Promise<SaveTaskPlanningResult>;
+  saveTaskWithPlanning(input: SaveTaskWithPlanningInput): Promise<SaveTaskPlanningResult>;
+  createTimedReminderTaskWithPlanning(input: CreateTimedReminderTaskWithPlanningInput): Promise<SaveTaskPlanningResult>;
+  saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
+  moveRecurrenceOccurrence(input: MoveRecurrenceOccurrenceInput): Promise<{ scope: MoveRecurrenceOccurrenceInput['scope'] }>;
+  removeRecurrenceOccurrence(input: { seriesId: string; occursOn: string; scope: 'occurrence' | 'series' }): Promise<void>;
+}
+
+interface SettingsActions {
+  updateTimeZone(timeZoneId: string): Promise<void>;
+}
+
 interface AppServicesContextValue {
   isReady: boolean;
   projects: ProjectRepository;
   settings: AppSettings;
+  settingsActions: SettingsActions;
   demoTasks: DemoTaskGroups;
   backlog: BacklogView;
   backlogActions: BacklogActions;
+  planningActions: PlanningActions;
   refreshBacklog(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
@@ -142,6 +171,43 @@ export function AppServicesProvider({
     }),
     [appSource, runBacklogAction],
   );
+  const planningActions = useMemo<PlanningActions>(
+    () => ({
+      getTaskItem: (taskId) => appSource.getTaskItem(taskId),
+      getRecurrenceOccurrence: async (seriesId, occursOn) => (await appSource.listRecurrenceOccurrences(seriesId)).find((occurrence) => occurrence.occursOn === occursOn) ?? null,
+      getRecurrenceOccurrenceById: (id) => appSource.getRecurrenceOccurrence(id),
+      convertReminderToTask: (reminderId, taskId, createdAt) => convertReminderToTask(appSource, { reminderId, taskId, createdAt }),
+      getPlanScheduleBlocks: (isoDate) => getPlanScheduleBlocks(appSource, isoDate),
+      getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),
+      setRecurrenceOccurrenceState: (seriesId, occursOn, state) => setRecurrenceOccurrenceState(appSource, seriesId, occursOn, state),
+      getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
+      getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
+      returnTaskToBacklog: (input) => runBacklogAction(() => returnTaskToBacklog(appSource, input)),
+      syncReminderRecurrence: (reminderId) => syncReminderRecurrence(appSource, reminderId),
+      saveTaskPlanning: (input) => saveTaskPlanning(appSource, input),
+      saveTaskWithPlanning: (input) => runBacklogAction(() => saveTaskWithPlanning(appSource, input)),
+      createTimedReminderTaskWithPlanning: (input) => runBacklogAction(() => createTimedReminderTaskWithPlanning(appSource, input)),
+      saveOccurrenceException: (input) => saveOccurrenceException(appSource, input),
+      moveRecurrenceOccurrence: (input) => moveRecurrenceOccurrence(appSource, input),
+      removeRecurrenceOccurrence: (input) => removeRecurrenceOccurrence(appSource, input),
+    }),
+    [appSource, runBacklogAction],
+  );
+  const settingsActions = useMemo<SettingsActions>(
+    () => ({
+      updateTimeZone: async (timeZoneId) => {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: timeZoneId });
+        } catch {
+          throw new Error('Укажите корректный часовой пояс IANA, например Europe/Berlin');
+        }
+        const updatedSettings = { ...settings, timeZoneId };
+        await appSource.saveSettings(updatedSettings);
+        setSettings(updatedSettings);
+      },
+    }),
+    [appSource, settings],
+  );
 
   useEffect(() => {
     // Устанавливаем облачную identity независимо от локальной инициализации:
@@ -196,9 +262,11 @@ export function AppServicesProvider({
         isReady,
         projects: repositories.projects,
         settings,
+        settingsActions,
         demoTasks,
         backlog,
         backlogActions,
+        planningActions,
         refreshBacklog,
         runBacklogAction,
         runStorageDiagnostic,
@@ -216,6 +284,10 @@ export function useAppServices(): AppServicesContextValue {
   }
 
   return services;
+}
+
+export function useOptionalAppServices(): AppServicesContextValue | null {
+  return useContext(AppServicesContext);
 }
 
 const styles = StyleSheet.create({

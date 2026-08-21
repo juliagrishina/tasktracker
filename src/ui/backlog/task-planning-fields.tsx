@@ -1,9 +1,12 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
+import { PlanningValuePicker, type PlanningValueOption } from './planning-value-picker';
+import { PlanningDatePicker } from './planning-date-picker';
+import { getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 
 export type TaskScheduleMode = 'none' | 'date' | 'period';
-export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly';
+export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays';
 
 export interface TaskPlanningBlock {
   date: string;
@@ -18,6 +21,7 @@ export interface TaskPlanningDraft {
   periodStartOn: string;
   repeatFrequency: TaskRepeatFrequency;
   repeatInterval: string;
+  repeatWeekdays: number[];
   scheduledOn: string;
   scheduleMode: TaskScheduleMode;
 }
@@ -39,7 +43,14 @@ const repeatOptions: { label: string; value: TaskRepeatFrequency }[] = [
   { label: 'Каждый день', value: 'daily' },
   { label: 'Каждую неделю', value: 'weekly' },
   { label: 'Каждый месяц', value: 'monthly' },
+  { label: 'Каждый год', value: 'yearly' },
+  { label: 'Каждые N дней', value: 'intervalDays' },
 ];
+const timeOptions: readonly PlanningValueOption[] = Array.from({ length: 288 }, (_, index) => {
+  const value = `${String(Math.floor(index / 12)).padStart(2, '0')}:${String((index % 12) * 5).padStart(2, '0')}`;
+  return { label: value, value };
+});
+const durationOptions: readonly PlanningValueOption[] = Array.from({ length: 96 }, (_, index) => ({ label: `${(index + 1) * 5} мин`, value: String((index + 1) * 5) }));
 
 export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
   return {
@@ -48,19 +59,26 @@ export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
     periodStartOn: '',
     repeatFrequency: 'none',
     repeatInterval: '1',
+    repeatWeekdays: [],
     scheduledOn: '',
     scheduleMode: 'none',
   };
 }
 
-export function createDefaultBlock(defaultDate: string, now = new Date()): TaskPlanningBlock {
-  const totalMinutes = now.getHours() * 60 + now.getMinutes();
-  const roundedMinutes = Math.ceil(totalMinutes / 5) * 5;
+export function createDefaultBlock(defaultDate: string, now = new Date(), timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC'): TaskPlanningBlock {
+  const [hours, minutes] = getTimeInTimeZone(now.toISOString(), timeZoneId).split(':').map(Number);
+  const totalMinutes = hours * 60 + minutes;
+  const roundedMinutes = (Math.floor(totalMinutes / 5) + 1) * 5;
+  const [year, month, day] = defaultDate.split('-').map(Number);
+  const date = Number.isInteger(year) && Number.isInteger(month) && Number.isInteger(day)
+    ? new Date(year, month - 1, day)
+    : new Date(`${getDateInTimeZone(now.toISOString(), timeZoneId)}T00:00:00`);
+  date.setDate(date.getDate() + Math.floor(roundedMinutes / (24 * 60)));
   const hour = Math.floor((roundedMinutes % (24 * 60)) / 60);
   const minute = roundedMinutes % 60;
 
   return {
-    date: defaultDate,
+    date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     durationMinutes: '60',
     id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     startsAt: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
@@ -117,12 +135,12 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
         })}
       </View>
       {value.scheduleMode === 'date' ? (
-        <PlanningInput accessibilityLabel="Дата задачи" label="Дата задачи" onChangeText={(scheduledOn) => update({ scheduledOn })} value={value.scheduledOn} />
+        <Field label="Дата задачи"><PlanningDatePicker accessibilityLabel="Дата задачи" onChange={(scheduledOn) => update({ scheduledOn })} value={value.scheduledOn} /></Field>
       ) : null}
       {value.scheduleMode === 'period' ? (
         <View>
-          <PlanningInput accessibilityLabel="Начало периода задачи" label="Начало периода" onChangeText={(periodStartOn) => update({ periodStartOn })} value={value.periodStartOn} />
-          <PlanningInput accessibilityLabel="Конец периода задачи" label="Конец периода" onChangeText={(periodEndOn) => update({ periodEndOn })} value={value.periodEndOn} />
+          <Field label="Начало периода"><PlanningDatePicker accessibilityLabel="Начало периода задачи" onChange={(periodStartOn) => update({ periodStartOn, periodEndOn: value.periodEndOn < periodStartOn ? periodStartOn : value.periodEndOn })} value={value.periodStartOn} /></Field>
+          <Field label="Конец периода"><PlanningDatePicker accessibilityLabel="Конец периода задачи" onChange={(periodEndOn) => update({ periodEndOn })} value={value.periodEndOn} /></Field>
         </View>
       ) : null}
       <Text style={styles.label}>Повторение</Text>
@@ -144,6 +162,7 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
       {value.repeatFrequency !== 'none' ? (
         <PlanningInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" label="Интервал" onChangeText={(repeatInterval) => update({ repeatInterval })} value={value.repeatInterval} />
       ) : null}
+      {value.repeatFrequency === 'weekly' ? <View><Text style={styles.label}>Дни недели</Text><View style={styles.chips}>{[['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]].map(([label, day]) => { const selected = value.repeatWeekdays.includes(day as number); return <Pressable accessibilityLabel={String(label)} key={String(label)} onPress={() => update({ repeatWeekdays: selected ? value.repeatWeekdays.filter((entry) => entry !== day) : [...value.repeatWeekdays, day as number] })} style={[styles.chip, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></Pressable>; })}</View></View> : null}
       <View style={styles.blockHeader}>
         <Text style={styles.label}>Временные блоки</Text>
         <Pressable
@@ -162,9 +181,11 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
               <Text style={styles.removeBlockText}>Удалить</Text>
             </Pressable>
           </View>
-          <PlanningInput accessibilityLabel={`Дата блока ${index + 1}`} label="Дата" onChangeText={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} />
-          <PlanningInput accessibilityLabel={`Начало блока ${index + 1}`} label="Начало" onChangeText={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} value={block.startsAt} />
-          <PlanningInput accessibilityLabel={`Длительность блока ${index + 1}`} keyboardType="number-pad" label="Длительность, мин." onChangeText={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} value={block.durationMinutes} />
+          <Field label="Дата"><PlanningDatePicker accessibilityLabel={`Дата блока ${index + 1}`} onChange={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} /></Field>
+          <Text style={styles.label}>Начало</Text>
+          <PlanningValuePicker accessibilityLabel={`Начало блока ${index + 1}`} onChange={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} options={timeOptions} title="Начало блока" value={block.startsAt} />
+          <Text style={styles.label}>Длительность</Text>
+          <PlanningValuePicker accessibilityLabel={`Длительность блока ${index + 1}`} onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} options={durationOptions} title="Длительность блока" value={block.durationMinutes} />
         </View>
       ))}
     </View>
@@ -176,6 +197,10 @@ function updateBlock(value: TaskPlanningDraft, id: string, patch: Partial<TaskPl
     ...value,
     blocks: value.blocks.map((block) => block.id === id ? { ...block, ...patch } : block),
   });
+}
+
+function Field({ label, children }: { label: string; children: import('react').ReactNode }) {
+  return <View><Text style={styles.label}>{label}</Text>{children}</View>;
 }
 
 function PlanningInput({

@@ -1,9 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
+import { useOptionalAppServices } from '../../application/app-services-provider';
+import type { RecurrenceOccurrence, TaskItem } from '../../domain/entities';
+import { getDefaultSettings } from '../../data/default-settings';
+import { getDayLoadPercent } from '../../domain/planning';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { ItemFormSheet } from '../backlog/item-form-sheet';
 import { DayDashboard } from './day-dashboard';
@@ -20,13 +24,57 @@ import { PlanViewControl, PlanViewMenu } from './plan-view-menu';
 import { MonthLoadGrid } from './month-load-grid';
 import { WeekLoadList } from './week-load-list';
 
-const demoSelectedDate = '2026-08-05';
+interface PlanScreenProps {
+  initialDate?: string;
+}
 
-export function PlanScreen() {
+interface RecurrenceTaskEditor {
+  occurrence: RecurrenceOccurrence | null;
+  occursOn: string;
+  seriesId: string;
+  task: TaskItem;
+}
+
+function getCurrentLocalDate(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function PlanScreen({ initialDate }: PlanScreenProps) {
+  const services = useOptionalAppServices();
   const [mode, setMode] = useState<PlanViewMode>('day');
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(demoSelectedDate);
+  const [selectedDate, setSelectedDate] = useState(() => initialDate ?? getCurrentLocalDate());
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
+  const [editingOccurrence, setEditingOccurrence] = useState<RecurrenceTaskEditor | null>(null);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [loadByDate, setLoadByDate] = useState<Readonly<Record<string, number>>>({});
+
+  useEffect(() => {
+    if (services === null) return;
+    let isCurrent = true;
+    void (async () => {
+      const dates = mode === 'week'
+        ? getWeekLoadDays(selectedDate).map((day) => day.isoDate)
+        : mode === 'month'
+          ? getMonthLoadDays(selectedDate).flat().filter((day): day is NonNullable<typeof day> => day !== null).map((day) => day.isoDate)
+          : [selectedDate];
+      const dayPlans = await Promise.all(dates.map(async (date) => {
+        const [blocks, reminders, tasks] = await Promise.all([
+          services.planningActions.getPlanScheduleBlocks(date),
+          services.planningActions.getPlanUntimedReminders(date),
+          services.planningActions.getPlanUntimedTasks(date),
+        ]);
+        const estimatedMinutes = [...reminders, ...tasks].reduce((total, item) => total + (item.estimatedDurationMinutes ?? 0), 0);
+        return getDayLoadPercent(services.settings ?? getDefaultSettings(), blocks, date, estimatedMinutes);
+      }));
+      if (isCurrent) setLoadByDate(Object.fromEntries(dates.map((date, index) => [date, dayPlans[index]])));
+    })();
+    return () => { isCurrent = false; };
+  }, [mode, refreshToken, selectedDate, services]);
 
   const selectDate = (isoDate: string) => {
     setSelectedDate(isoDate);
@@ -39,6 +87,13 @@ export function PlanScreen() {
         <DayDashboard
           mode={mode}
           onCreateTask={() => setIsTaskSheetVisible(true)}
+          onEditTask={setEditingTask}
+          onEditRecurrence={(task, seriesId, occursOn) => {
+            if (services === null) return;
+            void services.planningActions.getRecurrenceOccurrence(seriesId, occursOn).then((occurrence) => setEditingOccurrence({ task, seriesId, occursOn, occurrence }));
+          }}
+          onRefresh={() => { setRefreshToken((value) => value + 1); }}
+          refreshToken={refreshToken}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
         />
@@ -50,6 +105,7 @@ export function PlanScreen() {
           onSelectDate={selectDate}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
+          getLoadPercent={(date) => loadByDate[date] ?? 0}
         />
       )}
       <PlanViewMenu
@@ -63,7 +119,56 @@ export function PlanScreen() {
           mode="create"
           onClose={() => setIsTaskSheetVisible(false)}
           planningContext={{ defaultDate: selectedDate }}
+          onSaved={() => setRefreshToken((value) => value + 1)}
           type="task"
+          visible
+        />
+      ) : null}
+      {editingTask !== null ? (
+        <ItemFormSheet
+          item={editingTask}
+          mode="edit"
+          onClose={() => setEditingTask(null)}
+          planningContext={{ defaultDate: selectedDate }}
+          onSaved={() => { setEditingTask(null); setRefreshToken((value) => value + 1); }}
+          type={editingTask.kind}
+          visible
+        />
+      ) : null}
+      {editingOccurrence !== null ? (
+        <ItemFormSheet
+          item={{ ...editingOccurrence.task, ...editingOccurrence.occurrence?.taskPatch }}
+          mode="edit"
+          occurrenceEdit={{
+            onSave: async ({ title, description, estimatedDurationMinutes }) => {
+              if (services === null) return;
+              const now = new Date().toISOString();
+              const existing = editingOccurrence.occurrence;
+              await services.planningActions.saveOccurrenceException({
+                occurrence: {
+                  id: existing?.id ?? `occurrence-${editingOccurrence.seriesId}-${editingOccurrence.occursOn}`,
+                  seriesId: editingOccurrence.seriesId,
+                  occursOn: editingOccurrence.occursOn,
+                  cancelledAt: existing?.cancelledAt ?? null,
+                  completedAt: existing?.completedAt ?? null,
+                  blocksOverridden: existing?.blocksOverridden ?? false,
+                  taskPatch: {
+                    ...existing?.taskPatch,
+                    title,
+                    description: description.trim() === '' ? null : description,
+                    estimatedDurationMinutes,
+                  },
+                  reminderPatch: null,
+                  createdAt: existing?.createdAt ?? now,
+                  updatedAt: now,
+                  deletedAt: existing?.deletedAt ?? null,
+                },
+              });
+            },
+          }}
+          onClose={() => setEditingOccurrence(null)}
+          onSaved={() => { setEditingOccurrence(null); setRefreshToken((value) => value + 1); }}
+          type={editingOccurrence.task.kind}
           visible
         />
       ) : null}
@@ -78,6 +183,7 @@ function PeriodPlanView({
   onSelectDate,
   onSelectMode,
   selectedDate,
+  getLoadPercent,
 }: {
   mode: Exclude<PlanViewMode, 'day'>;
   onChangeAnchor: (amount: number) => void;
@@ -85,6 +191,7 @@ function PeriodPlanView({
   onSelectDate: (isoDate: string) => void;
   onSelectMode: () => void;
   selectedDate: string;
+  getLoadPercent: (isoDate: string) => number;
 }) {
   const isWeek = mode === 'week';
   const periodLabel = isWeek ? formatPlanWeekRange(selectedDate) : formatPlanMonth(selectedDate);
@@ -113,9 +220,9 @@ function PeriodPlanView({
         />
         <View style={styles.periodContent}>
           {isWeek ? (
-            <WeekLoadList days={getWeekLoadDays(selectedDate)} onSelectDate={onSelectDate} selectedDate={selectedDate} />
+            <WeekLoadList days={getWeekLoadDays(selectedDate, getLoadPercent)} onSelectDate={onSelectDate} selectedDate={selectedDate} />
           ) : (
-            <MonthLoadGrid onSelectDate={onSelectDate} selectedDate={selectedDate} weeks={getMonthLoadDays(selectedDate)} />
+            <MonthLoadGrid onSelectDate={onSelectDate} selectedDate={selectedDate} weeks={getMonthLoadDays(selectedDate, getLoadPercent)} />
           )}
         </View>
       </ScrollView>

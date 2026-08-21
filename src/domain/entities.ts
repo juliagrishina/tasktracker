@@ -1,8 +1,9 @@
 export type EntityId = string;
 
 export interface BacklogRepeatRule {
-  frequency: 'daily' | 'weekly' | 'monthly';
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays';
   interval: number;
+  weekdays?: readonly number[];
 }
 
 export interface Project {
@@ -24,6 +25,9 @@ export type TaskItem =
       title: string;
       description: string | null;
       estimatedDurationMinutes: number | null;
+      scheduledOn?: string | null;
+      periodStartOn?: string | null;
+      periodEndOn?: string | null;
       completedAt: string | null;
       createdAt: string;
       updatedAt: string;
@@ -37,6 +41,9 @@ export type TaskItem =
       title: string;
       description: string | null;
       estimatedDurationMinutes: number | null;
+      scheduledOn?: string | null;
+      periodStartOn?: string | null;
+      periodEndOn?: string | null;
       completedAt: string | null;
       createdAt: string;
       updatedAt: string;
@@ -60,6 +67,8 @@ export interface Reminder {
 export interface ScheduleBlock {
   id: EntityId;
   taskItemId: EntityId;
+  occurrenceId: EntityId | null;
+  timeZoneId: string;
   startsAt: string;
   endsAt: string;
   createdAt: string;
@@ -69,16 +78,41 @@ export interface ScheduleBlock {
 
 export interface RecurrenceSeries {
   id: EntityId;
-  taskItemId: EntityId;
-  frequency: 'daily' | 'weekly' | 'monthly';
+  itemKind: 'task' | 'reminder';
+  itemId: EntityId;
+  frequency: BacklogRepeatRule['frequency'];
   interval: number;
+  weekdays?: readonly number[];
   startsOn: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
 }
 
+export interface RecurrenceOccurrence {
+  id: EntityId;
+  seriesId: EntityId;
+  occursOn: string;
+  cancelledAt: string | null;
+  completedAt: string | null;
+  blocksOverridden: boolean;
+  taskPatch: Partial<Pick<TaskItem, 'title' | 'description' | 'estimatedDurationMinutes' | 'scheduledOn'>> | null;
+  reminderPatch: Partial<Pick<Reminder, 'title' | 'estimatedDurationMinutes' | 'remindsOn'>> | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface TransferHistory {
+  id: EntityId;
+  taskItemId: EntityId;
+  reason: string | null;
+  returnedAt: string;
+  createdAt: string;
+}
+
 export interface AppSettings {
+  timeZoneId: string;
   workdayStartsAt: string;
   workdayEndsAt: string;
   eveningReviewAt: string;

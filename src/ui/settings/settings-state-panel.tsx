@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { AppSettings } from '../../domain/entities';
@@ -13,16 +13,29 @@ import { temporaryWebContentStyle } from '../screen-shell';
 import { settingsDemoState } from './settings-demo-state';
 
 interface SettingsStatePanelProps {
+  onTimeZoneChange?: (timeZoneId: string) => Promise<void>;
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ onTimeZoneChange, settings }: SettingsStatePanelProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [syncLabel, setSyncLabel] = useState<string>(settingsDemoState.initialSyncLabel);
+  const [isTimeZoneEditorVisible, setIsTimeZoneEditorVisible] = useState(false);
+  const [timeZoneId, setTimeZoneId] = useState(settings.timeZoneId);
 
   const refreshDemoStatus = () => {
     setSyncLabel('синхр. только что');
     setFeedback('Статус обновлён в демо-режиме');
+  };
+  const saveTimeZone = async () => {
+    if (onTimeZoneChange === undefined) return;
+    try {
+      await onTimeZoneChange(timeZoneId.trim());
+      setIsTimeZoneEditorVisible(false);
+      setFeedback('Часовой пояс плана обновлён');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Не удалось обновить часовой пояс');
+    }
   };
 
   return (
@@ -60,6 +73,8 @@ export function SettingsStatePanel({ settings }: SettingsStatePanelProps) {
           <CardTitle action="Изменить" onAction={() => setFeedback('Параметры плана доступны для просмотра в демо-режиме')} title="План дня" />
           <SettingsRow description="Знаменатель загрузки" label="Рабочий диапазон" value={`${settings.workdayStartsAt}–${settings.workdayEndsAt}`} />
           <SettingsRow description="Дела без времени" label="Вечерняя проверка" value={settings.eveningReviewAt} />
+          <SettingsRow description="Карточки показывают тот же момент времени в этом поясе" label="Часовой пояс" onPress={() => setIsTimeZoneEditorVisible(true)} value={settings.timeZoneId} />
+          {isTimeZoneEditorVisible ? <View style={styles.timeZoneEditor}><Text style={styles.settingDescription}>Формат IANA, например Europe/Berlin</Text><TextInput accessibilityLabel="Часовой пояс IANA" autoCapitalize="none" autoCorrect={false} onChangeText={setTimeZoneId} style={styles.timeZoneInput} value={timeZoneId} /><Pressable accessibilityRole="button" onPress={() => void saveTimeZone()} style={styles.timeZoneSave}><Text style={styles.timeZoneSaveText}>Сохранить часовой пояс</Text></Pressable></View> : null}
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
@@ -81,7 +96,7 @@ export function SettingsStatePanel({ settings }: SettingsStatePanelProps) {
           />
         </SurfaceCard>
 
-        <Text style={styles.footer}>{settingsDemoState.version} · Часовой пояс определяется устройством</Text>
+        <Text style={styles.footer}>{settingsDemoState.version} · Часовой пояс плана: {settings.timeZoneId}</Text>
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
     </SafeAreaView>
@@ -288,6 +303,10 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.meta,
     lineHeight: designTokens.typography.lineHeight.meta,
   },
+  timeZoneEditor: { gap: designTokens.space[8], marginTop: designTokens.space[12] },
+  timeZoneInput: { backgroundColor: designTokens.color.surface.raised, borderColor: designTokens.color.border.subtle, borderRadius: designTokens.radius.control, borderWidth: 1, color: designTokens.color.text.primary, minHeight: designTokens.size.touchTargetMin, paddingHorizontal: designTokens.space[12] },
+  timeZoneSave: { alignItems: 'center', backgroundColor: designTokens.color.primary, borderRadius: designTokens.radius.control, justifyContent: 'center', minHeight: designTokens.size.touchTargetMin },
+  timeZoneSaveText: { color: designTokens.color.text.inverse, fontWeight: designTokens.typography.weight.bold },
   dangerText: {
     color: designTokens.color.feedback.danger.foreground,
   },

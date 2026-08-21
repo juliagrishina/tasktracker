@@ -10,6 +10,7 @@ import { ItemFormSheet, type ItemFormType } from '../../../../ui/backlog/item-fo
 import { designTokens } from '../../../../ui/design/tokens';
 import { SurfaceCard } from '../../../../ui/primitives/surface-card';
 import { ScreenShell } from '../../../../ui/screen-shell';
+import { getDateInTimeZone } from '../../../../domain/planning';
 
 type BacklogDetailItem = Project | Reminder | TaskItem;
 
@@ -55,9 +56,10 @@ function detailLines(item: BacklogDetailItem): readonly string[] {
 export default function ItemRoute() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string | string[]; kind?: string | string[] }>();
-  const { backlog } = useAppServices();
+  const { backlog, settings } = useAppServices();
   const [editing, setEditing] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const kind = firstValue(params.kind) as BacklogItemKind | undefined;
   const taskItems = [
     ...backlog.unassignedTasks.flatMap(({ task, subtasks }) => [task, ...subtasks]),
@@ -88,6 +90,7 @@ export default function ItemRoute() {
         onCompleted={() => router.back()}
         onDeleted={() => router.back()}
         onEdit={() => setEditing(true)}
+        onPlan={kind === 'task' || kind === 'subtask' || kind === 'reminder' ? () => setPlanning(true) : undefined}
       />
       {editing ? (
         <ItemFormSheet
@@ -109,6 +112,16 @@ export default function ItemRoute() {
           />
         ) : null
       )}
+      {planning && (kind === 'task' || kind === 'subtask' || kind === 'reminder') ? (
+        <ItemFormSheet
+          item={item}
+          mode="edit"
+          onClose={() => setPlanning(false)}
+          planningContext={{ defaultDate: getDateInTimeZone(new Date().toISOString(), settings.timeZoneId) }}
+          type={formType}
+          visible
+        />
+      ) : null}
     </ScreenShell>
   );
 }
