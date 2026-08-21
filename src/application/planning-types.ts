@@ -4,6 +4,7 @@ export interface PlanningRecurrenceInput {
   id: EntityId;
   frequency: RecurrenceSeries['frequency'];
   interval: number;
+  weekdays?: readonly number[];
   startsOn: string;
   createdAt: string;
 }

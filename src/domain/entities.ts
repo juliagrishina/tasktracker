@@ -68,7 +68,7 @@ export interface ScheduleBlock {
   id: EntityId;
   taskItemId: EntityId;
   occurrenceId: EntityId | null;
-  timeZoneId: string | null;
+  timeZoneId: string;
   startsAt: string;
   endsAt: string;
   createdAt: string;
@@ -96,8 +96,8 @@ export interface RecurrenceOccurrence {
   cancelledAt: string | null;
   completedAt: string | null;
   blocksOverridden: boolean;
-  taskPatch: Partial<Pick<TaskItem, 'title' | 'description' | 'estimatedDurationMinutes'>> | null;
-  reminderPatch: Partial<Pick<Reminder, 'title' | 'estimatedDurationMinutes'>> | null;
+  taskPatch: Partial<Pick<TaskItem, 'title' | 'description' | 'estimatedDurationMinutes' | 'scheduledOn'>> | null;
+  reminderPatch: Partial<Pick<Reminder, 'title' | 'estimatedDurationMinutes' | 'remindsOn'>> | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

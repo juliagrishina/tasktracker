@@ -182,7 +182,7 @@ export function ItemFormSheet({
       const now = new Date().toISOString();
       if (isPlanTaskForm) {
         const taskId = item?.id ?? createItemId(type);
-        const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+        const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
         const blocks = planningDraft.blocks.map((block) => {
           const startsAt = new Date(`${block.date}T${block.startsAt}:00`);
           return {
@@ -317,9 +317,8 @@ export function ItemFormSheet({
           estimatedDurationMinutes,
         };
 
-        if (mode === 'create') {
-          const reminderId = createItemId(type);
-          if (reminderTimed) {
+        if (reminderTimed) {
+            const reminderId = item?.id ?? createItemId(type);
             const reminderDate = emptyToNull(remindsOn);
             if (reminderDate === null) throw new Error('Укажите дату напоминания');
             const taskId = `task-${reminderId}`;
@@ -331,7 +330,7 @@ export function ItemFormSheet({
               planning: {
                 taskId,
                 recurrence: null,
-                blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone ?? null, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
+                blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
               },
             };
             const result = await planningActions.createTimedReminderTaskWithPlanning(timedReminderInput);
@@ -343,7 +342,9 @@ export function ItemFormSheet({
             onSaved?.();
             onClose();
             return;
-          }
+        }
+        if (mode === 'create') {
+          const reminderId = createItemId(type);
           await backlogActions.createReminder({
             id: reminderId,
             ...reminderInput,

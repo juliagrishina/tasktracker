@@ -2,9 +2,18 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { AppServicesProvider } from '../../src/application/app-services-provider';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import { createDefaultBlock } from '../../src/ui/backlog/task-planning-fields';
 import { PlanScreen } from '../../src/ui/plan/plan-screen';
 
 describe('Plan task creation sheet', () => {
+  test('moves the default block date forward when five-minute rounding crosses midnight', () => {
+    expect(createDefaultBlock('2026-08-03', new Date(2026, 7, 3, 23, 59))).toMatchObject({
+      date: '2026-08-04',
+      startsAt: '00:00',
+      durationMinutes: '60',
+    });
+  });
+
   test('opens the approved planning states from the Plan FAB', async () => {
     const view = await render(
       <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
@@ -71,6 +80,9 @@ describe('Plan task creation sheet', () => {
     });
     await waitFor(async () => {
       expect(await source.listScheduleBlocks()).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(view.getByText('7%')).toBeOnTheScreen();
     });
   });
 });

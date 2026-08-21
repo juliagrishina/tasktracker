@@ -53,6 +53,10 @@ export function assertScheduleBlockShape(
     throw new Error('Блок времени должен относиться к указанной задаче');
   }
 
+  if (block.timeZoneId.trim() === '') {
+    throw new Error('У блока времени должна быть указана временная зона');
+  }
+
   const startsAt = new Date(block.startsAt);
   const endsAt = new Date(block.endsAt);
 

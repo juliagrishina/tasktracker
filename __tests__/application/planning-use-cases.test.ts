@@ -143,12 +143,66 @@ describe('planning use cases', () => {
     await expect(getPlanScheduleBlocks(source, '2026-08-18')).resolves.toMatchObject([{ startsAt: '2026-08-18T09:00:00+03:00' }]);
   });
 
+  test('moves one date-only recurring task without changing sibling occurrences', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem({ ...task, id: 'untimed-move-task', scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null } as TaskItem);
+    await saveTaskPlanning(source, { taskId: 'untimed-move-task', blocks: [], placement: { scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null }, recurrence: { id: 'untimed-move-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt } });
+
+    await moveRecurrenceOccurrence(source, { seriesId: 'untimed-move-series', occursOn: '2026-08-10', targetDate: '2026-08-11', scope: 'occurrence' });
+
+    const api = planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> };
+    await expect(api.getPlanUntimedTasks(source, '2026-08-10')).resolves.toEqual([]);
+    await expect(api.getPlanUntimedTasks(source, '2026-08-11')).resolves.toMatchObject([{ id: 'untimed-move-task' }]);
+    await expect(api.getPlanUntimedTasks(source, '2026-08-17')).resolves.toMatchObject([{ id: 'untimed-move-task' }]);
+  });
+
+  test('moves one recurring reminder without changing sibling occurrences', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder({ id: 'untimed-move-reminder', title: 'Проверить отчёт', remindsOn: '2026-08-03', periodStartOn: null, periodEndOn: null, repeatRule: { frequency: 'weekly', interval: 1 }, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await syncReminderRecurrence(source, 'untimed-move-reminder');
+    const series = (await source.listRecurrenceSeries()).find((candidate) => candidate.itemId === 'untimed-move-reminder');
+    if (series === undefined) throw new Error('Серия напоминания не создана');
+
+    await moveRecurrenceOccurrence(source, { seriesId: series.id, occursOn: '2026-08-10', targetDate: '2026-08-11', scope: 'occurrence' });
+
+    await expect(getPlanUntimedReminders(source, '2026-08-10')).resolves.toEqual([]);
+    await expect(getPlanUntimedReminders(source, '2026-08-11')).resolves.toMatchObject([{ id: 'untimed-move-reminder' }]);
+    await expect(getPlanUntimedReminders(source, '2026-08-17')).resolves.toMatchObject([{ id: 'untimed-move-reminder' }]);
+  });
+
   test('shows date-only recurring reminders without adding them to exact load', async () => {
     const source = createInMemoryDataSource();
     await source.saveReminder({ id: 'reminder-1', title: 'Оплатить', remindsOn: '2026-08-03', periodStartOn: null, periodEndOn: null, repeatRule: { frequency: 'weekly', interval: 1 }, estimatedDurationMinutes: 30, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await syncReminderRecurrence(source, 'reminder-1');
     await expect(getPlanUntimedReminders(source, '2026-08-10')).resolves.toMatchObject([{ title: 'Оплатить' }]);
     await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(0);
+  });
+
+  test('preserves selected weekdays in a recurring reminder series', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder({ id: 'weekday-reminder', title: 'Тренировка', remindsOn: '2026-08-03', periodStartOn: null, periodEndOn: null, repeatRule: { frequency: 'weekly', interval: 1, weekdays: [1, 3] }, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    await syncReminderRecurrence(source, 'weekday-reminder');
+
+    await expect(getPlanUntimedReminders(source, '2026-08-05')).resolves.toMatchObject([{ id: 'weekday-reminder' }]);
+    await expect(getPlanUntimedReminders(source, '2026-08-04')).resolves.toEqual([]);
+    await expect(source.listRecurrenceSeries()).resolves.toMatchObject([expect.objectContaining({ itemId: 'weekday-reminder', weekdays: [1, 3] })]);
+  });
+
+  test('converts an existing recurring reminder into a recurring task with exact time', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder({ id: 'existing-reminder', title: 'Оплатить счёт', remindsOn: '2026-08-03', periodStartOn: null, periodEndOn: null, repeatRule: { frequency: 'weekly', interval: 1, weekdays: [1, 3] }, estimatedDurationMinutes: 30, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    await expect(createTimedReminderTaskWithPlanning(source, {
+      reminder: { id: 'existing-reminder', title: 'Оплатить счёт', remindsOn: '2026-08-03', periodStartOn: null, periodEndOn: null, repeatRule: { frequency: 'weekly', interval: 1, weekdays: [1, 3] }, estimatedDurationMinutes: 30, createdAt },
+      taskId: 'task-existing-reminder',
+      projectId: null,
+      planning: { taskId: 'task-existing-reminder', blocks: [{ ...block, id: 'existing-reminder-block', taskItemId: 'task-existing-reminder' }], recurrence: null },
+    })).resolves.toEqual({ conflict: null });
+
+    await expect(source.getReminder('existing-reminder')).resolves.toBeNull();
+    await expect(source.getTaskItem('task-existing-reminder')).resolves.toMatchObject({ title: 'Оплатить счёт' });
+    await expect(source.listRecurrenceSeries()).resolves.toMatchObject([expect.objectContaining({ itemKind: 'task', itemId: 'task-existing-reminder', frequency: 'weekly', weekdays: [1, 3] })]);
   });
 
   test('keeps a reminder occurrence independent and allows deleting only one occurrence', async () => {

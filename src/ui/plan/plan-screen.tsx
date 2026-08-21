@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
+import { useOptionalAppServices } from '../../application/app-services-provider';
+import { getDefaultSettings } from '../../data/default-settings';
+import { getDayLoadPercent } from '../../domain/planning';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { ItemFormSheet } from '../backlog/item-form-sheet';
 import { DayDashboard } from './day-dashboard';
@@ -23,10 +26,28 @@ import { WeekLoadList } from './week-load-list';
 const demoSelectedDate = '2026-08-05';
 
 export function PlanScreen() {
+  const services = useOptionalAppServices();
   const [mode, setMode] = useState<PlanViewMode>('day');
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState(demoSelectedDate);
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [loadByDate, setLoadByDate] = useState<Readonly<Record<string, number>>>({});
+
+  useEffect(() => {
+    if (services === null) return;
+    let isCurrent = true;
+    void (async () => {
+      const dates = mode === 'week'
+        ? getWeekLoadDays(selectedDate).map((day) => day.isoDate)
+        : mode === 'month'
+          ? getMonthLoadDays(selectedDate).flat().filter((day): day is NonNullable<typeof day> => day !== null).map((day) => day.isoDate)
+          : [selectedDate];
+      const blocks = await Promise.all(dates.map((date) => services.planningActions.getPlanScheduleBlocks(date)));
+      if (isCurrent) setLoadByDate(Object.fromEntries(dates.map((date, index) => [date, getDayLoadPercent(services.settings ?? getDefaultSettings(), blocks[index], date)])));
+    })();
+    return () => { isCurrent = false; };
+  }, [mode, refreshToken, selectedDate, services]);
 
   const selectDate = (isoDate: string) => {
     setSelectedDate(isoDate);
@@ -39,6 +60,8 @@ export function PlanScreen() {
         <DayDashboard
           mode={mode}
           onCreateTask={() => setIsTaskSheetVisible(true)}
+          onRefresh={() => { setRefreshToken((value) => value + 1); }}
+          refreshToken={refreshToken}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
         />
@@ -50,6 +73,7 @@ export function PlanScreen() {
           onSelectDate={selectDate}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
+          getLoadPercent={(date) => loadByDate[date] ?? 0}
         />
       )}
       <PlanViewMenu
@@ -63,6 +87,7 @@ export function PlanScreen() {
           mode="create"
           onClose={() => setIsTaskSheetVisible(false)}
           planningContext={{ defaultDate: selectedDate }}
+          onSaved={() => setRefreshToken((value) => value + 1)}
           type="task"
           visible
         />
@@ -78,6 +103,7 @@ function PeriodPlanView({
   onSelectDate,
   onSelectMode,
   selectedDate,
+  getLoadPercent,
 }: {
   mode: Exclude<PlanViewMode, 'day'>;
   onChangeAnchor: (amount: number) => void;
@@ -85,6 +111,7 @@ function PeriodPlanView({
   onSelectDate: (isoDate: string) => void;
   onSelectMode: () => void;
   selectedDate: string;
+  getLoadPercent: (isoDate: string) => number;
 }) {
   const isWeek = mode === 'week';
   const periodLabel = isWeek ? formatPlanWeekRange(selectedDate) : formatPlanMonth(selectedDate);
@@ -113,9 +140,9 @@ function PeriodPlanView({
         />
         <View style={styles.periodContent}>
           {isWeek ? (
-            <WeekLoadList days={getWeekLoadDays(selectedDate)} onSelectDate={onSelectDate} selectedDate={selectedDate} />
+            <WeekLoadList days={getWeekLoadDays(selectedDate, getLoadPercent)} onSelectDate={onSelectDate} selectedDate={selectedDate} />
           ) : (
-            <MonthLoadGrid onSelectDate={onSelectDate} selectedDate={selectedDate} weeks={getMonthLoadDays(selectedDate)} />
+            <MonthLoadGrid onSelectDate={onSelectDate} selectedDate={selectedDate} weeks={getMonthLoadDays(selectedDate, getLoadPercent)} />
           )}
         </View>
       </ScrollView>

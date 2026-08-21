@@ -51,18 +51,6 @@ const monthTitleLabels = [
   'Декабрь',
 ] as const;
 
-const fallbackLoadPercentages = [35, 63, 104, 48, 72, 16, 52, 44, 68, 30, 82, 57, 25, 90, 41, 66, 53, 18, 75, 38, 61, 29, 87, 46, 70, 34, 95, 55, 22, 79, 43] as const;
-
-const demoLoadByIsoDate: Readonly<Record<string, number>> = {
-  '2026-08-03': 35,
-  '2026-08-04': 63,
-  '2026-08-05': 104,
-  '2026-08-06': 48,
-  '2026-08-07': 72,
-  '2026-08-08': 16,
-  '2026-08-09': 52,
-};
-
 function parseLocalDate(isoDate: string): Date {
   const [year, month, day] = isoDate.split('-').map(Number);
   return new Date(year, month - 1, day);
@@ -88,12 +76,7 @@ function startOfWeek(isoDate: string): string {
   return toIsoDate(date);
 }
 
-function getLoadPercent(isoDate: string): number {
-  const date = parseLocalDate(isoDate);
-  return demoLoadByIsoDate[isoDate] ?? fallbackLoadPercentages[date.getDate() - 1];
-}
-
-function toPlanLoadDay(isoDate: string): PlanLoadDay {
+function toPlanLoadDay(isoDate: string, getLoadPercent: (isoDate: string) => number): PlanLoadDay {
   const date = parseLocalDate(isoDate);
   const loadPercent = getLoadPercent(isoDate);
 
@@ -112,9 +95,9 @@ export function getPlanLoadTone(loadPercent: number): PlanLoadTone {
   return 'high';
 }
 
-export function getWeekLoadDays(selectedDate: string): PlanLoadDay[] {
+export function getWeekLoadDays(selectedDate: string, getLoadPercent: (isoDate: string) => number = () => 0): PlanLoadDay[] {
   const weekStart = startOfWeek(selectedDate);
-  return Array.from({ length: 7 }, (_, index) => toPlanLoadDay(addDays(weekStart, index)));
+  return Array.from({ length: 7 }, (_, index) => toPlanLoadDay(addDays(weekStart, index), getLoadPercent));
 }
 
 export function formatPlanDate(isoDate: string): string {
@@ -139,7 +122,7 @@ export function formatPlanWeekRange(selectedDate: string): string {
   return `${formatPlanDate(days[0].isoDate)} – ${formatPlanDate(days[6].isoDate)}`;
 }
 
-export function getMonthLoadDays(selectedDate: string): PlanMonthLoadWeeks {
+export function getMonthLoadDays(selectedDate: string, getLoadPercent: (isoDate: string) => number = () => 0): PlanMonthLoadWeeks {
   const selected = parseLocalDate(selectedDate);
   const year = selected.getFullYear();
   const month = selected.getMonth();
@@ -149,7 +132,7 @@ export function getMonthLoadDays(selectedDate: string): PlanMonthLoadWeeks {
   const cells: (PlanLoadDay | null)[] = Array.from({ length: leadingBlankCells }, () => null);
 
   for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push(toPlanLoadDay(toIsoDate(new Date(year, month, day))));
+    cells.push(toPlanLoadDay(toIsoDate(new Date(year, month, day)), getLoadPercent));
   }
 
   while (cells.length % 7 !== 0) {

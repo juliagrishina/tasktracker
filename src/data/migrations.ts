@@ -313,6 +313,10 @@ const schemaVersionNine = `
   CREATE INDEX recurrence_series_live_owner_v9 ON recurrence_series (item_kind, item_id) WHERE deleted_at IS NULL;
 `;
 
+const schemaVersionTen = `
+  UPDATE schedule_blocks SET time_zone_id = 'UTC' WHERE time_zone_id IS NULL;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -383,6 +387,12 @@ const migrations: readonly Migration[] = [
     version: 9,
     async apply(database) {
       await database.execAsync(schemaVersionNine);
+    },
+  },
+  {
+    version: 10,
+    async apply(database) {
+      await database.execAsync(schemaVersionTen);
     },
   },
 ];

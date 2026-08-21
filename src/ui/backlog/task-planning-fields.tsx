@@ -67,11 +67,16 @@ export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
 export function createDefaultBlock(defaultDate: string, now = new Date()): TaskPlanningBlock {
   const totalMinutes = now.getHours() * 60 + now.getMinutes();
   const roundedMinutes = Math.ceil(totalMinutes / 5) * 5;
+  const [year, month, day] = defaultDate.split('-').map(Number);
+  const date = Number.isInteger(year) && Number.isInteger(month) && Number.isInteger(day)
+    ? new Date(year, month - 1, day)
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  date.setDate(date.getDate() + Math.floor(roundedMinutes / (24 * 60)));
   const hour = Math.floor((roundedMinutes % (24 * 60)) / 60);
   const minute = roundedMinutes % 60;
 
   return {
-    date: defaultDate,
+    date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     durationMinutes: '60',
     id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     startsAt: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,

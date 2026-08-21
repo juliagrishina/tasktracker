@@ -67,7 +67,7 @@ const scheduleBlock: ScheduleBlock = {
   id: 'block-1',
   taskItemId: task.id,
   occurrenceId: null,
-  timeZoneId: null,
+  timeZoneId: 'UTC',
   startsAt: '2026-08-02T09:00:00.000Z',
   endsAt: '2026-08-02T09:30:00.000Z',
   createdAt,

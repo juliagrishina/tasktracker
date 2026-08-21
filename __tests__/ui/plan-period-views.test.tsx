@@ -1,6 +1,8 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { PlanScreen } from '../../src/ui/plan/plan-screen';
+import { AppServicesProvider } from '../../src/application/app-services-provider';
+import { createInMemoryDataSource } from '../../src/data/data-source.web';
 
 describe('PlanScreen view mode control', () => {
   test('switches from Day to Week through the approved three-option menu', async () => {
@@ -50,7 +52,7 @@ describe('PlanScreen period views', () => {
     await waitFor(() => {
       expect(view.getAllByText('3–9 августа')).toHaveLength(2);
       expect(view.getAllByLabelText(/загрузка/)).toHaveLength(7);
-      expect(view.getByLabelText('Среда, 5 августа: загрузка 104%')).toBeOnTheScreen();
+      expect(view.getByLabelText('Среда, 5 августа: загрузка 0%')).toBeOnTheScreen();
     });
     expect(view.queryByText('Собрать прототип')).toBeNull();
 
@@ -64,7 +66,7 @@ describe('PlanScreen period views', () => {
       expect(view.getAllByText('3–9 августа')).toHaveLength(2);
     });
 
-    fireEvent.press(view.getByLabelText('Среда, 5 августа: загрузка 104%'));
+    fireEvent.press(view.getByLabelText('Среда, 5 августа: загрузка 0%'));
     await waitFor(() => {
       expect(view.getByLabelText('Режим просмотра: День')).toBeOnTheScreen();
     });
@@ -81,7 +83,7 @@ describe('PlanScreen period views', () => {
 
     await waitFor(() => {
       expect(view.getAllByText('Август 2026')).toHaveLength(2);
-      expect(view.getByLabelText('5 августа: загрузка 104%')).toBeOnTheScreen();
+      expect(view.getByLabelText('5 августа: загрузка 0%')).toBeOnTheScreen();
     });
     expect(view.queryByText('Планёрка команды')).toBeNull();
 
@@ -89,5 +91,23 @@ describe('PlanScreen period views', () => {
     await waitFor(() => {
       expect(view.getAllByText('Сентябрь 2026')).toHaveLength(2);
     });
+  });
+
+  test('derives Week and Month load from stored schedule blocks', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'load-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Нагрузка', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'load-block', taskItemId: 'load-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen /></AppServicesProvider>);
+
+    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await waitFor(() => expect(view.getByLabelText('Неделя')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Неделя'));
+    await waitFor(() => expect(view.getByLabelText(/Среда, 5 августа: загрузка 7\.142/)).toBeOnTheScreen());
+
+    fireEvent.press(view.getByLabelText('Режим просмотра: Неделя'));
+    await waitFor(() => expect(view.getByLabelText('Месяц')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Месяц'));
+    await waitFor(() => expect(view.getByLabelText(/5 августа: загрузка 7\.142/)).toBeOnTheScreen());
   });
 });
