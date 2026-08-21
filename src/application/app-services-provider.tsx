@@ -83,10 +83,15 @@ interface PlanningActions {
   removeRecurrenceOccurrence(input: { seriesId: string; occursOn: string; scope: 'occurrence' | 'series' }): Promise<void>;
 }
 
+interface SettingsActions {
+  updateTimeZone(timeZoneId: string): Promise<void>;
+}
+
 interface AppServicesContextValue {
   isReady: boolean;
   projects: ProjectRepository;
   settings: AppSettings;
+  settingsActions: SettingsActions;
   demoTasks: DemoTaskGroups;
   backlog: BacklogView;
   backlogActions: BacklogActions;
@@ -182,6 +187,21 @@ export function AppServicesProvider({
     }),
     [appSource, runBacklogAction],
   );
+  const settingsActions = useMemo<SettingsActions>(
+    () => ({
+      updateTimeZone: async (timeZoneId) => {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: timeZoneId });
+        } catch {
+          throw new Error('Укажите корректный часовой пояс IANA, например Europe/Berlin');
+        }
+        const updatedSettings = { ...settings, timeZoneId };
+        await appSource.saveSettings(updatedSettings);
+        setSettings(updatedSettings);
+      },
+    }),
+    [appSource, settings],
+  );
 
   useEffect(() => {
     // Устанавливаем облачную identity независимо от локальной инициализации:
@@ -236,6 +256,7 @@ export function AppServicesProvider({
         isReady,
         projects: repositories.projects,
         settings,
+        settingsActions,
         demoTasks,
         backlog,
         backlogActions,

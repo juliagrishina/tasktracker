@@ -10,6 +10,7 @@ import { ItemFormSheet, type ItemFormType } from '../../../../ui/backlog/item-fo
 import { designTokens } from '../../../../ui/design/tokens';
 import { SurfaceCard } from '../../../../ui/primitives/surface-card';
 import { ScreenShell } from '../../../../ui/screen-shell';
+import { getDateInTimeZone } from '../../../../domain/planning';
 
 type BacklogDetailItem = Project | Reminder | TaskItem;
 
@@ -55,7 +56,7 @@ function detailLines(item: BacklogDetailItem): readonly string[] {
 export default function ItemRoute() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string | string[]; kind?: string | string[] }>();
-  const { backlog } = useAppServices();
+  const { backlog, settings } = useAppServices();
   const [editing, setEditing] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [planning, setPlanning] = useState(false);
@@ -116,7 +117,7 @@ export default function ItemRoute() {
           item={item}
           mode="edit"
           onClose={() => setPlanning(false)}
-          planningContext={{ defaultDate: new Date().toISOString().slice(0, 10) }}
+          planningContext={{ defaultDate: getDateInTimeZone(new Date().toISOString(), settings.timeZoneId) }}
           type={formType}
           visible
         />

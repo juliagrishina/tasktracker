@@ -2,6 +2,9 @@ import type { AppSettings, ScheduleBlock } from '../../src/domain/entities';
 import {
   assertRecurrenceOccurrence,
   createDefaultScheduleBlock,
+  getDateInTimeZone,
+  getInstantInTimeZone,
+  getTimeInTimeZone,
   findScheduleConflicts,
   getDayLoadPercent,
   getPlanLoadTone,
@@ -10,6 +13,7 @@ import {
 } from '../../src/domain/planning';
 
 const settings: AppSettings = {
+  timeZoneId: 'Europe/Moscow',
   workdayStartsAt: '09:00',
   workdayEndsAt: '17:00',
   eveningReviewAt: '17:15',
@@ -23,6 +27,15 @@ const block: ScheduleBlock = {
 };
 
 describe('planning domain', () => {
+  test('projects stored instants into the selected planning timezone', () => {
+    expect(getDateInTimeZone('2026-08-03T22:30:00.000Z', 'Europe/Moscow')).toBe('2026-08-04');
+    expect(getTimeInTimeZone('2026-08-03T07:00:00.000Z', 'Europe/Berlin')).toBe('09:00');
+  });
+
+  test('turns a wall-clock form value into an instant in the selected planning timezone', () => {
+    expect(getInstantInTimeZone('2026-08-03', '10:00', 'Europe/Moscow')).toBe('2026-08-03T07:00:00.000Z');
+  });
+
   test('uses only exact scheduled blocks for day load and retains >100 percent', () => {
     expect(getDayLoadPercent(settings, [block], '2026-08-03')).toBe(12.5);
     expect(getPlanLoadTone(getDayLoadPercent(settings, [{ ...block, endsAt: '2026-08-04T02:00:00+03:00' }], '2026-08-03'))).toBe('high');

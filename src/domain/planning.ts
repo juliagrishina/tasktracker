@@ -21,6 +21,14 @@ function zoneParts(instant: Date, timeZone: string): { year: number; month: numb
   const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
   return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour'), minute: get('minute'), second: get('second') };
 }
+export function getDateInTimeZone(instant: string, timeZone: string): string {
+  const parts = zoneParts(new Date(instant), timeZone);
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+}
+export function getTimeInTimeZone(instant: string, timeZone: string): string {
+  const parts = zoneParts(new Date(instant), timeZone);
+  return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
+}
 function zoned(value: string, timeZone: string): Date {
   const [year, month, day] = value.split('-').map(Number); const guessed = Date.UTC(year, month - 1, day);
   let instant = guessed;
@@ -32,6 +40,13 @@ function zonedDateTime(value: string, time: { hour: number; minute: number; seco
   for (let step = 0; step < 2; step += 1) { const parts = zoneParts(new Date(instant), timeZone); instant = wanted - (Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - instant); }
   const offsetMinutes = Math.round((Date.UTC(zoneParts(new Date(instant), timeZone).year, zoneParts(new Date(instant), timeZone).month - 1, zoneParts(new Date(instant), timeZone).day, zoneParts(new Date(instant), timeZone).hour, zoneParts(new Date(instant), timeZone).minute, zoneParts(new Date(instant), timeZone).second) - instant) / 60_000); const sign = offsetMinutes >= 0 ? '+' : '-';
   return `${value}T${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}:${String(time.second).padStart(2, '0')}${sign}${String(Math.floor(Math.abs(offsetMinutes) / 60)).padStart(2, '0')}:${String(Math.abs(offsetMinutes) % 60).padStart(2, '0')}`;
+}
+export function getInstantInTimeZone(date: string, time: string, timeZone: string): string {
+  const [hour, minute] = time.split(':').map(Number);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    throw new Error('Время должно иметь формат ЧЧ:ММ');
+  }
+  return new Date(zonedDateTime(date, { hour, minute, second: 0 }, timeZone)).toISOString();
 }
 function bounds(block: ScheduleBlock, day: string): [number, number] { return [zoned(day, block.timeZoneId).getTime(), zoned(addDays(day, 1), block.timeZoneId).getTime()]; }
 

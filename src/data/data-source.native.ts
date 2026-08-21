@@ -21,6 +21,7 @@ import type { AppDataSource } from './contracts';
 import { migrateDatabase } from './migrations';
 
 interface SettingsRow {
+  time_zone_id: string | null;
   workday_starts_at: string;
   workday_ends_at: string;
   evening_review_at: string;
@@ -128,6 +129,7 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<SettingsRow>(
       `SELECT
+        time_zone_id,
         workday_starts_at,
         workday_ends_at,
         evening_review_at,
@@ -141,6 +143,7 @@ class NativeDataSource implements AppDataSource {
     }
 
     return {
+      timeZoneId: row.time_zone_id ?? 'UTC',
       workdayStartsAt: row.workday_starts_at,
       workdayEndsAt: row.workday_ends_at,
       eveningReviewAt: row.evening_review_at,
@@ -153,12 +156,14 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     await database.runAsync(
       `UPDATE settings
-      SET workday_starts_at = ?,
+      SET time_zone_id = ?,
+          workday_starts_at = ?,
           workday_ends_at = ?,
           evening_review_at = ?,
           notification_lead_minutes = ?
       WHERE id = 1`,
       [
+        settings.timeZoneId,
         settings.workdayStartsAt,
         settings.workdayEndsAt,
         settings.eveningReviewAt,

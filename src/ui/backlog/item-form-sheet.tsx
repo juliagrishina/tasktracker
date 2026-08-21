@@ -23,6 +23,7 @@ import {
 } from './task-planning-fields';
 import { PlanningValuePicker } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
+import { getInstantInTimeZone, getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
@@ -114,7 +115,7 @@ export function ItemFormSheet({
   onSaved,
   planningContext,
 }: ItemFormSheetProps) {
-  const { backlog, backlogActions, planningActions } = useAppServices();
+  const { backlog, backlogActions, planningActions, settings } = useAppServices();
   const [title, setTitle] = useState(() => item?.title ?? '');
   const [description, setDescription] = useState(() => getInitialDescription(item));
   const [duration, setDuration] = useState(() => getInitialDuration(item));
@@ -134,8 +135,8 @@ export function ItemFormSheet({
   const [reminderTimed, setReminderTimed] = useState(false);
   const [reminderTime, setReminderTime] = useState('09:00');
   const defaultBlock = useMemo(
-    () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
-    [planningContext?.defaultDate],
+    () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date(), settings.timeZoneId),
+    [planningContext?.defaultDate, settings.timeZoneId],
   );
   const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
   useEffect(() => {
@@ -144,7 +145,7 @@ export function ItemFormSheet({
       setPersistedBlockIds(blocks.map((block) => block.id));
       setPlanningDraft({
         ...createInitialTaskPlanningDraft(),
-        blocks: blocks.map((block) => ({ id: block.id, date: block.startsAt.slice(0, 10), startsAt: block.startsAt.slice(11, 16), durationMinutes: String((new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000) })),
+        blocks: blocks.map((block) => ({ id: block.id, date: getDateInTimeZone(block.startsAt, settings.timeZoneId), startsAt: getTimeInTimeZone(block.startsAt, settings.timeZoneId), durationMinutes: String((new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000) })),
         repeatFrequency: recurrence?.frequency ?? 'none',
         repeatInterval: String(recurrence?.interval ?? 1),
         repeatWeekdays: recurrence?.weekdays === undefined ? [] : [...recurrence.weekdays],
@@ -154,7 +155,7 @@ export function ItemFormSheet({
         scheduleMode: placement.scheduledOn !== null ? 'date' : placement.periodStartOn !== null ? 'period' : 'none',
       });
     });
-  }, [isPlanTaskForm, item, planningActions, visible]);
+  }, [isPlanTaskForm, item, planningActions, settings.timeZoneId, visible]);
 
   const formTitle = useMemo(() => {
     const createTitle: Record<ItemFormType, string> = {
@@ -182,9 +183,9 @@ export function ItemFormSheet({
       const now = new Date().toISOString();
       if (isPlanTaskForm) {
         const taskId = item?.id ?? createItemId(type);
-        const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+        const timeZoneId = settings.timeZoneId;
         const blocks = planningDraft.blocks.map((block) => {
-          const startsAt = new Date(`${block.date}T${block.startsAt}:00`);
+          const startsAt = new Date(getInstantInTimeZone(block.date, block.startsAt, timeZoneId));
           return {
             id: block.id,
             taskItemId: taskId,
@@ -322,7 +323,7 @@ export function ItemFormSheet({
             const reminderDate = emptyToNull(remindsOn);
             if (reminderDate === null) throw new Error('Укажите дату напоминания');
             const taskId = `task-${reminderId}`;
-            const startsAt = new Date(`${reminderDate}T${reminderTime}:00`);
+            const startsAt = new Date(getInstantInTimeZone(reminderDate, reminderTime, settings.timeZoneId));
             const timedReminderInput: CreateTimedReminderTaskWithPlanningInput = {
               reminder: { id: reminderId, ...reminderInput, createdAt: now },
               taskId,
@@ -330,7 +331,7 @@ export function ItemFormSheet({
               planning: {
                 taskId,
                 recurrence: null,
-                blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
+                blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: settings.timeZoneId, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
               },
             };
             const result = await planningActions.createTimedReminderTaskWithPlanning(timedReminderInput);
@@ -480,7 +481,7 @@ export function ItemFormSheet({
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
-            {pendingConflict === null ? null : <View>{pendingConflict.conflicts.map((conflict) => <Text key={`${conflict.candidate.id}-${conflict.block.id}`} style={styles.error}>{`${conflict.itemTitle}: ${conflict.startsAt.slice(11, 16)}–${conflict.endsAt.slice(11, 16)}`}</Text>)}<Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable></View>}
+            {pendingConflict === null ? null : <View>{pendingConflict.conflicts.map((conflict) => <Text key={`${conflict.candidate.id}-${conflict.block.id}`} style={styles.error}>{`${conflict.itemTitle}: ${getTimeInTimeZone(conflict.startsAt, settings.timeZoneId)}–${getTimeInTimeZone(conflict.endsAt, settings.timeZoneId)}`}</Text>)}<Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable></View>}
           </ScrollView>
           <View style={styles.footer}>
             <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>

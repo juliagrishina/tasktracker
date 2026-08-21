@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { designTokens } from '../design/tokens';
 import { useOptionalAppServices } from '../../application/app-services-provider';
 import { getDefaultSettings } from '../../data/default-settings';
-import { getDayLoadPercent, getPlanLoadTone } from '../../domain/planning';
+import { getDayLoadPercent, getPlanLoadTone, getTimeInTimeZone } from '../../domain/planning';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { RecurrenceMoveDialog } from './recurrence-move-dialog';
@@ -92,14 +92,14 @@ export function DayDashboard({ mode = 'day', onCreateTask, onRefresh, onSelectMo
             </View>
           </View>
           {blocks[0] === undefined ? null : <SurfaceCard style={styles.nextEvent}>
-            <Text style={styles.nextDetail}>{blocks[0].startsAt.slice(11, 16)}–{blocks[0].endsAt.slice(11, 16)}</Text>
+            <Text style={styles.nextDetail}>{formatBlockTime(blocks[0], settings.timeZoneId)}</Text>
             <Text style={styles.nextTitle}>Ближайший временной блок</Text>
           </SurfaceCard>}
         </SurfaceCard>
 
         <SectionHeader action={`${blocks.length} ${blocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
         <View style={styles.list}>
-          {services === null ? <PlanListRow onPress={() => undefined} title="Планёрка команды" time="10:00–10:30" /> : blocks.map((block) => <PlanListRow key={block.id} onPress={() => { const parts = block.occurrenceId?.split(':'); setSelectedOccurrence(parts?.[0] === 'virtual' && parts[1] !== undefined && parts[2] !== undefined ? { seriesId: parts[1], occursOn: parts[2] } : null); }} title={taskTitles.get(block.taskItemId) ?? 'Задача'} time={`${block.startsAt.slice(11, 16)}–${block.endsAt.slice(11, 16)}`} />)}
+          {services === null ? <PlanListRow onPress={() => undefined} title="Планёрка команды" time="10:00–10:30" /> : blocks.map((block) => <PlanListRow key={block.id} onPress={() => { const parts = block.occurrenceId?.split(':'); setSelectedOccurrence(parts?.[0] === 'virtual' && parts[1] !== undefined && parts[2] !== undefined ? { seriesId: parts[1], occursOn: parts[2] } : null); }} title={taskTitles.get(block.taskItemId) ?? 'Задача'} time={formatBlockTime(block, settings.timeZoneId)} />)}
         </View>
         <SectionHeader action={`${reminders.length + untimedTasks.length}`} title="Без времени" />
         <View style={styles.list}>
@@ -161,6 +161,10 @@ export function DayDashboard({ mode = 'day', onCreateTask, onRefresh, onSelectMo
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); setSelectedUntimedTask(null); setIsUntimedRemoveDialogVisible(false); }} onRequestClose={() => setIsUntimedRemoveDialogVisible(false)} visible={isUntimedRemoveDialogVisible} />}
     </SafeAreaView>
   );
+}
+
+function formatBlockTime(block: import('../../domain/entities').ScheduleBlock, timeZoneId: string): string {
+  return `${getTimeInTimeZone(block.startsAt, timeZoneId)}–${getTimeInTimeZone(block.endsAt, timeZoneId)}`;
 }
 
 function SectionHeader({ action, title }: { action: string; title: string }) {

@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { designTokens } from '../design/tokens';
 import { PlanningValuePicker, type PlanningValueOption } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
+import { getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 
 export type TaskScheduleMode = 'none' | 'date' | 'period';
 export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays';
@@ -64,13 +65,14 @@ export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
   };
 }
 
-export function createDefaultBlock(defaultDate: string, now = new Date()): TaskPlanningBlock {
-  const totalMinutes = now.getHours() * 60 + now.getMinutes();
-  const roundedMinutes = Math.ceil(totalMinutes / 5) * 5;
+export function createDefaultBlock(defaultDate: string, now = new Date(), timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC'): TaskPlanningBlock {
+  const [hours, minutes] = getTimeInTimeZone(now.toISOString(), timeZoneId).split(':').map(Number);
+  const totalMinutes = hours * 60 + minutes;
+  const roundedMinutes = (Math.floor(totalMinutes / 5) + 1) * 5;
   const [year, month, day] = defaultDate.split('-').map(Number);
   const date = Number.isInteger(year) && Number.isInteger(month) && Number.isInteger(day)
     ? new Date(year, month - 1, day)
-    : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    : new Date(`${getDateInTimeZone(now.toISOString(), timeZoneId)}T00:00:00`);
   date.setDate(date.getDate() + Math.floor(roundedMinutes / (24 * 60)));
   const hour = Math.floor((roundedMinutes % (24 * 60)) / 60);
   const minute = roundedMinutes % 60;

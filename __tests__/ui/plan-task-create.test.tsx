@@ -14,6 +14,14 @@ describe('Plan task creation sheet', () => {
     });
   });
 
+  test('rounds a new block strictly into the future when the current minute is already on the grid', () => {
+    expect(createDefaultBlock('2026-08-03', new Date(2026, 7, 3, 10, 0, 30))).toMatchObject({
+      date: '2026-08-03',
+      startsAt: '10:05',
+      durationMinutes: '60',
+    });
+  });
+
   test('opens the approved planning states from the Plan FAB', async () => {
     const view = await render(
       <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>

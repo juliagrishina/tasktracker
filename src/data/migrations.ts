@@ -317,6 +317,10 @@ const schemaVersionTen = `
   UPDATE schedule_blocks SET time_zone_id = 'UTC' WHERE time_zone_id IS NULL;
 `;
 
+const schemaVersionEleven = `
+  ALTER TABLE settings ADD COLUMN time_zone_id TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -393,6 +397,13 @@ const migrations: readonly Migration[] = [
     version: 10,
     async apply(database) {
       await database.execAsync(schemaVersionTen);
+    },
+  },
+  {
+    version: 11,
+    async apply(database) {
+      await database.execAsync(schemaVersionEleven);
+      await database.runAsync('UPDATE settings SET time_zone_id = ? WHERE id = 1', [getDefaultSettings().timeZoneId]);
     },
   },
 ];
