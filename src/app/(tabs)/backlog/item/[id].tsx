@@ -58,6 +58,7 @@ export default function ItemRoute() {
   const { backlog } = useAppServices();
   const [editing, setEditing] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const kind = firstValue(params.kind) as BacklogItemKind | undefined;
   const taskItems = [
     ...backlog.unassignedTasks.flatMap(({ task, subtasks }) => [task, ...subtasks]),
@@ -88,6 +89,7 @@ export default function ItemRoute() {
         onCompleted={() => router.back()}
         onDeleted={() => router.back()}
         onEdit={() => setEditing(true)}
+        onPlan={kind === 'task' || kind === 'subtask' ? () => setPlanning(true) : undefined}
       />
       {editing ? (
         <ItemFormSheet
@@ -109,6 +111,16 @@ export default function ItemRoute() {
           />
         ) : null
       )}
+      {planning && (kind === 'task' || kind === 'subtask') ? (
+        <ItemFormSheet
+          item={item}
+          mode="edit"
+          onClose={() => setPlanning(false)}
+          planningContext={{ defaultDate: new Date().toISOString().slice(0, 10) }}
+          type={formType}
+          visible
+        />
+      ) : null}
     </ScreenShell>
   );
 }

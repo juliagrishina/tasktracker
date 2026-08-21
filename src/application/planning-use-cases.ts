@@ -4,6 +4,13 @@ import { assertRecurrenceOccurrence, assertRecurrenceRule, doesScheduleBlockOver
 import { assertScheduleBlockShape } from '../domain/invariants';
 import type { SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, ScheduleConflict } from './planning-types';
 
+export async function getTaskPlanningSnapshot(source: AppDataSource, taskId: EntityId): Promise<{ blocks: readonly ScheduleBlock[]; recurrence: RecurrenceSeries | null }> {
+  const task = await source.getTaskItem(taskId);
+  if (task === null) throw new Error('Задача для планирования не найдена');
+  const [blocks, series] = await Promise.all([source.listScheduleBlocksForTaskItem(taskId), source.listRecurrenceSeries()]);
+  return { blocks: blocks.filter((block) => block.occurrenceId === null), recurrence: series.find((candidate) => candidate.itemKind === 'task' && candidate.itemId === taskId) ?? null };
+}
+
 function conflictList(candidates: readonly ScheduleBlock[], existing: readonly ScheduleBlock[], ignored: readonly EntityId[]): readonly ScheduleConflict[] {
   const ignoredIds = new Set([...ignored, ...candidates.map((block) => block.id)]);
   const result: ScheduleConflict[] = [];

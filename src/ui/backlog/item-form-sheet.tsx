@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -114,11 +114,25 @@ export function ItemFormSheet({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
+  const [persistedBlockIds, setPersistedBlockIds] = useState<readonly string[]>([]);
   const defaultBlock = useMemo(
     () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
     [planningContext?.defaultDate],
   );
   const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
+  useEffect(() => {
+    if (!visible || !isPlanTaskForm || item === undefined || !('kind' in item)) return;
+    void planningActions.getTaskPlanningSnapshot(item.id).then(({ blocks, recurrence }) => {
+      setPersistedBlockIds(blocks.map((block) => block.id));
+      setPlanningDraft({
+        ...createInitialTaskPlanningDraft(),
+        blocks: blocks.map((block) => ({ id: block.id, date: block.startsAt.slice(0, 10), startsAt: block.startsAt.slice(11, 16), durationMinutes: String((new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000) })),
+        repeatFrequency: recurrence?.frequency ?? 'none',
+        repeatInterval: String(recurrence?.interval ?? 1),
+        scheduledOn: recurrence?.startsOn ?? '',
+      });
+    });
+  }, [isPlanTaskForm, item, planningActions, visible]);
 
   const formTitle = useMemo(() => {
     const createTitle: Record<ItemFormType, string> = {
@@ -168,7 +182,7 @@ export function ItemFormSheet({
           startsOn: planningDraft.blocks[0]?.date ?? planningDraft.scheduledOn ?? planningContext?.defaultDate ?? '',
           createdAt: now,
         };
-        const result = await planningActions.saveTaskPlanning({ taskId, blocks, recurrence });
+        const result = await planningActions.saveTaskPlanning({ taskId, blocks, deletedBlockIds: persistedBlockIds.filter((id) => !blocks.some((block) => block.id === id)), recurrence });
         if (result.conflict !== null) throw new Error('Выбранное время пересекается с другим блоком. Измените интервал и сохраните снова.');
       };
 

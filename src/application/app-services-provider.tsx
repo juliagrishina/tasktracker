@@ -49,7 +49,7 @@ import {
 } from './backlog-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
-import { getPlanScheduleBlocks, saveOccurrenceException, saveTaskPlanning } from './planning-use-cases';
+import { getPlanScheduleBlocks, getTaskPlanningSnapshot, saveOccurrenceException, saveTaskPlanning } from './planning-use-cases';
 import type { SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult } from './planning-types';
 
 interface BacklogActions {
@@ -67,6 +67,7 @@ interface BacklogActions {
 
 interface PlanningActions {
   getPlanScheduleBlocks(isoDate: string): ReturnType<typeof getPlanScheduleBlocks>;
+  getTaskPlanningSnapshot(taskId: string): ReturnType<typeof getTaskPlanningSnapshot>;
   saveTaskPlanning(input: SaveTaskPlanningInput): Promise<SaveTaskPlanningResult>;
   saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
 }
@@ -154,6 +155,7 @@ export function AppServicesProvider({
   const planningActions = useMemo<PlanningActions>(
     () => ({
       getPlanScheduleBlocks: (isoDate) => getPlanScheduleBlocks(appSource, isoDate),
+      getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),
       saveTaskPlanning: (input) => saveTaskPlanning(appSource, input),
       saveOccurrenceException: (input) => saveOccurrenceException(appSource, input),
     }),
