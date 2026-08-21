@@ -49,6 +49,7 @@ import {
 } from './backlog-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
+import { convertReminderToTask } from './convert-reminder-to-task';
 import { getPlanScheduleBlocks, getPlanUntimedReminders, getTaskPlanningSnapshot, saveOccurrenceException, saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
 import type { SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult } from './planning-types';
 
@@ -66,6 +67,7 @@ interface BacklogActions {
 }
 
 interface PlanningActions {
+  convertReminderToTask(reminderId: string, taskId: string, createdAt: string): ReturnType<typeof convertReminderToTask>;
   getPlanScheduleBlocks(isoDate: string): ReturnType<typeof getPlanScheduleBlocks>;
   getTaskPlanningSnapshot(taskId: string): ReturnType<typeof getTaskPlanningSnapshot>;
   setRecurrenceOccurrenceState(seriesId: string, occursOn: string, state: 'completed' | 'cancelled'): Promise<void>;
@@ -157,6 +159,7 @@ export function AppServicesProvider({
   );
   const planningActions = useMemo<PlanningActions>(
     () => ({
+      convertReminderToTask: (reminderId, taskId, createdAt) => convertReminderToTask(appSource, { reminderId, taskId, createdAt }),
       getPlanScheduleBlocks: (isoDate) => getPlanScheduleBlocks(appSource, isoDate),
       getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),
       setRecurrenceOccurrenceState: (seriesId, occursOn, state) => setRecurrenceOccurrenceState(appSource, seriesId, occursOn, state),

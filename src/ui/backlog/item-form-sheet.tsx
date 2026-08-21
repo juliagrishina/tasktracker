@@ -123,6 +123,8 @@ export function ItemFormSheet({
   const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
   const [persistedBlockIds, setPersistedBlockIds] = useState<readonly string[]>([]);
   const [pendingConflict, setPendingConflict] = useState<SaveTaskPlanningInput | null>(null);
+  const [reminderTimed, setReminderTimed] = useState(false);
+  const [reminderTime, setReminderTime] = useState('09:00');
   const defaultBlock = useMemo(
     () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
     [planningContext?.defaultDate],
@@ -284,6 +286,13 @@ export function ItemFormSheet({
             createdAt: now,
           });
           await planningActions.syncReminderRecurrence(reminderId);
+          if (reminderTimed) {
+            const taskId = `task-${reminderId}`;
+            await planningActions.convertReminderToTask(reminderId, taskId, now);
+            await backlogActions.moveTaskToProject({ taskId, projectId: selectedProjectId });
+            const startsAt = new Date(`${remindsOn}T${reminderTime}:00`);
+            await planningActions.saveTaskPlanning({ taskId, recurrence: null, blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone ?? null, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }] });
+          }
         } else if (item !== undefined) {
           await backlogActions.updateReminder({ id: item.id, ...reminderInput });
           await planningActions.syncReminderRecurrence(item.id);
@@ -335,7 +344,7 @@ export function ItemFormSheet({
               style={[styles.input, styles.multilineInput]}
               value={description}
             />
-            {type === 'task' ? (
+            {type === 'task' || (type === 'reminder' && reminderTimed) ? (
               <View>
                 <Text style={styles.label}>Проект</Text>
                 <Pressable
@@ -405,6 +414,8 @@ export function ItemFormSheet({
                 {repeatFrequency !== '' ? (
                   <TextInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" onChangeText={setRepeatInterval} placeholder="Интервал" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={repeatInterval} />
                 ) : null}
+                <Pressable accessibilityLabel="Точное время напоминания" onPress={() => setReminderTimed((current) => !current)} style={styles.repeatOption}><Text style={styles.repeatOptionText}>{reminderTimed ? 'Точное время включено' : 'Добавить точное время'}</Text></Pressable>
+                {reminderTimed ? <PlanningValuePicker accessibilityLabel="Время напоминания" onChange={setReminderTime} options={Array.from({ length: 288 }, (_, index) => { const value = `${String(Math.floor(index / 12)).padStart(2, '0')}:${String((index % 12) * 5).padStart(2, '0')}`; return { label: value, value }; })} title="Время напоминания" value={reminderTime} /> : null}
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
