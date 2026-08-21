@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
+import { PlanningValuePicker, type PlanningValueOption } from './planning-value-picker';
 
 export type TaskScheduleMode = 'none' | 'date' | 'period';
 export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly';
@@ -40,6 +41,11 @@ const repeatOptions: { label: string; value: TaskRepeatFrequency }[] = [
   { label: 'Каждую неделю', value: 'weekly' },
   { label: 'Каждый месяц', value: 'monthly' },
 ];
+const timeOptions: readonly PlanningValueOption[] = Array.from({ length: 288 }, (_, index) => {
+  const value = `${String(Math.floor(index / 12)).padStart(2, '0')}:${String((index % 12) * 5).padStart(2, '0')}`;
+  return { label: value, value };
+});
+const durationOptions: readonly PlanningValueOption[] = Array.from({ length: 96 }, (_, index) => ({ label: `${(index + 1) * 5} мин`, value: String((index + 1) * 5) }));
 
 export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
   return {
@@ -163,8 +169,10 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
             </Pressable>
           </View>
           <PlanningInput accessibilityLabel={`Дата блока ${index + 1}`} label="Дата" onChangeText={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} />
-          <PlanningInput accessibilityLabel={`Начало блока ${index + 1}`} label="Начало" onChangeText={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} value={block.startsAt} />
-          <PlanningInput accessibilityLabel={`Длительность блока ${index + 1}`} keyboardType="number-pad" label="Длительность, мин." onChangeText={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} value={block.durationMinutes} />
+          <Text style={styles.label}>Начало</Text>
+          <PlanningValuePicker accessibilityLabel={`Начало блока ${index + 1}`} onChange={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} options={timeOptions} title="Начало блока" value={block.startsAt} />
+          <Text style={styles.label}>Длительность</Text>
+          <PlanningValuePicker accessibilityLabel={`Длительность блока ${index + 1}`} onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} options={durationOptions} title="Длительность блока" value={block.durationMinutes} />
         </View>
       ))}
     </View>

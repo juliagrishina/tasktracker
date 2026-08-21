@@ -20,10 +20,15 @@ import {
   type TaskPlanningDraft,
   validateTaskPlanningDraft,
 } from './task-planning-fields';
+import { PlanningValuePicker } from './planning-value-picker';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
 type FormItem = Project | TaskItem | Reminder;
+const estimateOptions = [
+  { label: 'Без оценки', value: '' },
+  ...Array.from({ length: 96 }, (_, index) => ({ label: `${(index + 1) * 5} мин`, value: String((index + 1) * 5) })),
+];
 
 interface ItemFormSheetProps {
   visible: boolean;
@@ -353,15 +358,7 @@ export function ItemFormSheet({
             {type === 'task' || type === 'subtask' || type === 'reminder' ? (
               <View>
                 <Text style={styles.label}>Оценочная длительность, мин.</Text>
-                <TextInput
-                  accessibilityLabel="Оценочная длительность, мин."
-                  keyboardType="number-pad"
-                  onChangeText={setDuration}
-                  placeholder="Необязательно"
-                  placeholderTextColor={designTokens.color.text.tertiary}
-                  style={styles.input}
-                  value={duration}
-                />
+                <PlanningValuePicker accessibilityLabel="Оценочная длительность, мин." onChange={setDuration} options={estimateOptions} title="Оценочная длительность" value={duration} />
               </View>
             ) : null}
             {isPlanTaskForm ? (
