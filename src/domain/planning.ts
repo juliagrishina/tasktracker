@@ -1,0 +1,45 @@
+import type { AppSettings, EntityId, ScheduleBlock } from './entities';
+
+export type PlanLoadTone = 'low' | 'medium' | 'high';
+export interface RecurrenceRule { frequency: 'daily' | 'weekly' | 'monthly'; interval: number; startsOn: string; }
+export interface PlanningDateRange { singleDate: string | null; periodStartOn: string | null; periodEndOn: string | null; }
+
+function dateOf(value: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Дата планирования должна иметь формат ГГГГ-ММ-ДД');
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) throw new Error('Дата планирования некорректна');
+  return date;
+}
+function iso(date: Date): string { return date.toISOString().slice(0, 10); }
+function addDays(value: string, amount: number): string { const date = dateOf(value); date.setUTCDate(date.getUTCDate() + amount); return iso(date); }
+function addMonths(value: string, amount: number): string { const source = dateOf(value); const month = source.getUTCMonth() + amount; const year = source.getUTCFullYear() + Math.floor(month / 12); const targetMonth = (month % 12 + 12) % 12; return iso(new Date(Date.UTC(year, targetMonth, Math.min(source.getUTCDate(), new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate())))); }
+function minutes(value: string): number { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new Error('Время должно иметь формат ЧЧ:ММ'); const [hours, mins] = value.split(':').map(Number); return hours * 60 + mins; }
+function zoneParts(instant: Date, timeZone: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(instant);
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
+  return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour'), minute: get('minute'), second: get('second') };
+}
+function zoned(value: string, timeZone: string): Date {
+  const [year, month, day] = value.split('-').map(Number); const guessed = Date.UTC(year, month - 1, day);
+  let instant = guessed;
+  for (let step = 0; step < 2; step += 1) { const parts = zoneParts(new Date(instant), timeZone); instant = guessed - (Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - instant); }
+  return new Date(instant);
+}
+function bounds(block: ScheduleBlock, day: string): [number, number] {
+  if (block.timeZoneId !== null) return [zoned(day, block.timeZoneId).getTime(), zoned(addDays(day, 1), block.timeZoneId).getTime()];
+  const offset = /(Z|[+-]\d{2}:\d{2})$/.exec(block.startsAt)?.[1];
+  if (offset === undefined) throw new Error('Блок времени должен содержать часовой пояс');
+  return [new Date(`${day}T00:00:00${offset}`).getTime(), new Date(`${addDays(day, 1)}T00:00:00${offset}`).getTime()];
+}
+
+export function assertPlanningDateRange(value: PlanningDateRange): void { if (value.singleDate !== null) dateOf(value.singleDate); if (value.periodStartOn === null && value.periodEndOn === null) return; if (value.periodStartOn === null || value.periodEndOn === null || dateOf(value.periodStartOn) > dateOf(value.periodEndOn)) throw new Error('Начало и конец периода нужно указать вместе и в правильном порядке'); }
+export function assertRecurrenceRule(rule: RecurrenceRule): void { dateOf(rule.startsOn); if (!Number.isInteger(rule.interval) || rule.interval <= 0) throw new Error('Интервал повторения должен быть положительным целым числом'); }
+export function getRecurrenceDates(rule: RecurrenceRule, from: string, to: string): string[] { assertRecurrenceRule(rule); if (dateOf(from) > dateOf(to)) throw new Error('Начало диапазона позже конца'); const result: string[] = []; for (let index = 0; ; index += 1) { const value = rule.frequency === 'daily' ? addDays(rule.startsOn, index * rule.interval) : rule.frequency === 'weekly' ? addDays(rule.startsOn, index * rule.interval * 7) : addMonths(rule.startsOn, index * rule.interval); if (dateOf(value) > dateOf(to)) break; if (dateOf(value) >= dateOf(from)) result.push(value); } return result; }
+export function assertRecurrenceOccurrence(rule: RecurrenceRule, occursOn: string): void { if (!getRecurrenceDates(rule, occursOn, occursOn).includes(occursOn)) throw new Error('Экземпляр не принадлежит серии повторения'); }
+export function findScheduleConflicts(candidate: ScheduleBlock, existing: readonly ScheduleBlock[]): ScheduleBlock[] { const start = new Date(candidate.startsAt).getTime(); const end = new Date(candidate.endsAt).getTime(); return existing.filter((block) => block.id !== candidate.id && start < new Date(block.endsAt).getTime() && new Date(block.startsAt).getTime() < end); }
+export function getDayLoadPercent(settings: AppSettings, blocks: readonly ScheduleBlock[], day: string): number { const capacity = minutes(settings.workdayEndsAt) - minutes(settings.workdayStartsAt); if (capacity <= 0) throw new Error('Конец рабочего диапазона должен быть позже начала'); const total = blocks.reduce((sum, block) => { const [start, end] = bounds(block, day); return sum + Math.max(0, Math.min(new Date(block.endsAt).getTime(), end) - Math.max(new Date(block.startsAt).getTime(), start)) / 60_000; }, 0); return total / capacity * 100; }
+export function getPlanLoadTone(value: number): PlanLoadTone { return value <= 50 ? 'low' : value <= 70 ? 'medium' : 'high'; }
+export function createDefaultScheduleBlock(input: { id: EntityId; taskItemId: EntityId; now: Date; createdAt: string; }): ScheduleBlock { const start = new Date(input.now); start.setUTCSeconds(0, 0); start.setUTCMinutes(Math.ceil(start.getUTCMinutes() / 5) * 5); if (start <= input.now) start.setUTCMinutes(start.getUTCMinutes() + 5); return { id: input.id, taskItemId: input.taskItemId, occurrenceId: null, timeZoneId: null, startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 3_600_000).toISOString(), createdAt: input.createdAt, updatedAt: input.createdAt, deletedAt: null }; }
+export function doesScheduleBlockOverlapDate(block: ScheduleBlock, day: string): boolean { const [start, end] = bounds(block, day); return new Date(block.startsAt).getTime() < end && start < new Date(block.endsAt).getTime(); }
+export function shiftScheduleBlockToDate(block: ScheduleBlock, target: string, source = block.startsAt.slice(0, 10)): ScheduleBlock { const shift = Math.round((dateOf(target).getTime() - dateOf(source).getTime()) / 86_400_000); const local = (value: string) => `${addDays(value.slice(0, 10), shift)}${value.slice(10)}`; return { ...block, startsAt: local(block.startsAt), endsAt: local(block.endsAt) }; }
