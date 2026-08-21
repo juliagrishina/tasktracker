@@ -99,6 +99,10 @@ function getInitialRepeatInterval(item: FormItem | undefined): string {
     : '1';
 }
 
+function getInitialRepeatWeekdays(item: FormItem | undefined): number[] {
+  return item !== undefined && 'repeatRule' in item && item.repeatRule?.weekdays !== undefined ? [...item.repeatRule.weekdays] : [];
+}
+
 export function ItemFormSheet({
   visible,
   mode,
@@ -121,6 +125,7 @@ export function ItemFormSheet({
   const [periodEndOn, setPeriodEndOn] = useState(() => getInitialReminderValue(item, 'periodEndOn'));
   const [repeatFrequency, setRepeatFrequency] = useState<'' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays'>(() => getInitialRepeatFrequency(item));
   const [repeatInterval, setRepeatInterval] = useState(() => getInitialRepeatInterval(item));
+  const [repeatWeekdays, setRepeatWeekdays] = useState(() => getInitialRepeatWeekdays(item));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
@@ -302,7 +307,7 @@ export function ItemFormSheet({
       if (type === 'reminder') {
         const repeatRule = repeatFrequency === ''
           ? null
-          : { frequency: repeatFrequency, interval: Number(repeatInterval) };
+          : { frequency: repeatFrequency, interval: Number(repeatInterval), weekdays: repeatFrequency === 'weekly' && repeatWeekdays.length > 0 ? repeatWeekdays : undefined };
         const reminderInput = {
           title,
           remindsOn: emptyToNull(remindsOn),
@@ -468,6 +473,7 @@ export function ItemFormSheet({
                 {repeatFrequency !== '' ? (
                   <TextInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" onChangeText={setRepeatInterval} placeholder="Интервал" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={repeatInterval} />
                 ) : null}
+                {repeatFrequency === 'weekly' ? <View><Text style={styles.label}>Дни недели</Text><View style={styles.repeatOptions}>{[['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]].map(([label, day]) => { const selected = repeatWeekdays.includes(day as number); return <Pressable accessibilityLabel={String(label)} key={String(label)} onPress={() => setRepeatWeekdays((current) => selected ? current.filter((entry) => entry !== day) : [...current, day as number])} style={[styles.repeatOption, selected && styles.repeatOptionSelected]}><Text style={[styles.repeatOptionText, selected && styles.repeatOptionTextSelected]}>{label}</Text></Pressable>; })}</View></View> : null}
                 <Pressable accessibilityLabel="Точное время напоминания" onPress={() => setReminderTimed((current) => !current)} style={styles.repeatOption}><Text style={styles.repeatOptionText}>{reminderTimed ? 'Точное время включено' : 'Добавить точное время'}</Text></Pressable>
                 {reminderTimed ? <PlanningValuePicker accessibilityLabel="Время напоминания" onChange={setReminderTime} options={Array.from({ length: 288 }, (_, index) => { const value = `${String(Math.floor(index / 12)).padStart(2, '0')}:${String((index % 12) * 5).padStart(2, '0')}`; return { label: value, value }; })} title="Время напоминания" value={reminderTime} /> : null}
               </View>
