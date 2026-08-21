@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
 import { useOptionalAppServices } from '../../application/app-services-provider';
+import type { RecurrenceOccurrence, TaskItem } from '../../domain/entities';
 import { getDefaultSettings } from '../../data/default-settings';
 import { getDayLoadPercent } from '../../domain/planning';
 import { temporaryWebContentStyle } from '../screen-shell';
@@ -27,6 +28,13 @@ interface PlanScreenProps {
   initialDate?: string;
 }
 
+interface RecurrenceTaskEditor {
+  occurrence: RecurrenceOccurrence | null;
+  occursOn: string;
+  seriesId: string;
+  task: TaskItem;
+}
+
 function getCurrentLocalDate(now = new Date()): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -40,6 +48,8 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => initialDate ?? getCurrentLocalDate());
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
+  const [editingOccurrence, setEditingOccurrence] = useState<RecurrenceTaskEditor | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [loadByDate, setLoadByDate] = useState<Readonly<Record<string, number>>>({});
 
@@ -52,8 +62,16 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         : mode === 'month'
           ? getMonthLoadDays(selectedDate).flat().filter((day): day is NonNullable<typeof day> => day !== null).map((day) => day.isoDate)
           : [selectedDate];
-      const blocks = await Promise.all(dates.map((date) => services.planningActions.getPlanScheduleBlocks(date)));
-      if (isCurrent) setLoadByDate(Object.fromEntries(dates.map((date, index) => [date, getDayLoadPercent(services.settings ?? getDefaultSettings(), blocks[index], date)])));
+      const dayPlans = await Promise.all(dates.map(async (date) => {
+        const [blocks, reminders, tasks] = await Promise.all([
+          services.planningActions.getPlanScheduleBlocks(date),
+          services.planningActions.getPlanUntimedReminders(date),
+          services.planningActions.getPlanUntimedTasks(date),
+        ]);
+        const estimatedMinutes = [...reminders, ...tasks].reduce((total, item) => total + (item.estimatedDurationMinutes ?? 0), 0);
+        return getDayLoadPercent(services.settings ?? getDefaultSettings(), blocks, date, estimatedMinutes);
+      }));
+      if (isCurrent) setLoadByDate(Object.fromEntries(dates.map((date, index) => [date, dayPlans[index]])));
     })();
     return () => { isCurrent = false; };
   }, [mode, refreshToken, selectedDate, services]);
@@ -69,6 +87,11 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         <DayDashboard
           mode={mode}
           onCreateTask={() => setIsTaskSheetVisible(true)}
+          onEditTask={setEditingTask}
+          onEditRecurrence={(task, seriesId, occursOn) => {
+            if (services === null) return;
+            void services.planningActions.getRecurrenceOccurrence(seriesId, occursOn).then((occurrence) => setEditingOccurrence({ task, seriesId, occursOn, occurrence }));
+          }}
           onRefresh={() => { setRefreshToken((value) => value + 1); }}
           refreshToken={refreshToken}
           onSelectMode={() => setIsModeMenuVisible(true)}
@@ -98,6 +121,54 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           planningContext={{ defaultDate: selectedDate }}
           onSaved={() => setRefreshToken((value) => value + 1)}
           type="task"
+          visible
+        />
+      ) : null}
+      {editingTask !== null ? (
+        <ItemFormSheet
+          item={editingTask}
+          mode="edit"
+          onClose={() => setEditingTask(null)}
+          planningContext={{ defaultDate: selectedDate }}
+          onSaved={() => { setEditingTask(null); setRefreshToken((value) => value + 1); }}
+          type={editingTask.kind}
+          visible
+        />
+      ) : null}
+      {editingOccurrence !== null ? (
+        <ItemFormSheet
+          item={{ ...editingOccurrence.task, ...editingOccurrence.occurrence?.taskPatch }}
+          mode="edit"
+          occurrenceEdit={{
+            onSave: async ({ title, description, estimatedDurationMinutes }) => {
+              if (services === null) return;
+              const now = new Date().toISOString();
+              const existing = editingOccurrence.occurrence;
+              await services.planningActions.saveOccurrenceException({
+                occurrence: {
+                  id: existing?.id ?? `occurrence-${editingOccurrence.seriesId}-${editingOccurrence.occursOn}`,
+                  seriesId: editingOccurrence.seriesId,
+                  occursOn: editingOccurrence.occursOn,
+                  cancelledAt: existing?.cancelledAt ?? null,
+                  completedAt: existing?.completedAt ?? null,
+                  blocksOverridden: existing?.blocksOverridden ?? false,
+                  taskPatch: {
+                    ...existing?.taskPatch,
+                    title,
+                    description: description.trim() === '' ? null : description,
+                    estimatedDurationMinutes,
+                  },
+                  reminderPatch: null,
+                  createdAt: existing?.createdAt ?? now,
+                  updatedAt: now,
+                  deletedAt: existing?.deletedAt ?? null,
+                },
+              });
+            },
+          }}
+          onClose={() => setEditingOccurrence(null)}
+          onSaved={() => { setEditingOccurrence(null); setRefreshToken((value) => value + 1); }}
+          type={editingOccurrence.task.kind}
           visible
         />
       ) : null}

@@ -17,8 +17,8 @@ describe('recurrence move', () => {
     });
 
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
-    await waitFor(() => expect(view.getByText('Задача')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Задача'));
+    await waitFor(() => expect(view.getByText('Повторяемая задача')).toBeOnTheScreen());
+    fireEvent.press(view.getByText('Повторяемая задача'));
     await waitFor(() => expect(view.getByLabelText('Перенести этот экземпляр')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Перенести этот экземпляр'));
 

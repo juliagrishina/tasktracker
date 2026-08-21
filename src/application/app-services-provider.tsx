@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { AppSettings, Project, Reminder, TaskItem } from '../domain/entities';
+import type { AppSettings, Project, RecurrenceOccurrence, Reminder, TaskItem } from '../domain/entities';
 import { ensureAnonymousSession } from '../data/auth-session';
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
@@ -67,6 +67,9 @@ interface BacklogActions {
 }
 
 interface PlanningActions {
+  getTaskItem(taskId: string): Promise<TaskItem | null>;
+  getRecurrenceOccurrence(seriesId: string, occursOn: string): Promise<RecurrenceOccurrence | null>;
+  getRecurrenceOccurrenceById(id: string): Promise<RecurrenceOccurrence | null>;
   convertReminderToTask(reminderId: string, taskId: string, createdAt: string): ReturnType<typeof convertReminderToTask>;
   getPlanScheduleBlocks(isoDate: string): ReturnType<typeof getPlanScheduleBlocks>;
   getTaskPlanningSnapshot(taskId: string): ReturnType<typeof getTaskPlanningSnapshot>;
@@ -170,6 +173,9 @@ export function AppServicesProvider({
   );
   const planningActions = useMemo<PlanningActions>(
     () => ({
+      getTaskItem: (taskId) => appSource.getTaskItem(taskId),
+      getRecurrenceOccurrence: async (seriesId, occursOn) => (await appSource.listRecurrenceOccurrences(seriesId)).find((occurrence) => occurrence.occursOn === occursOn) ?? null,
+      getRecurrenceOccurrenceById: (id) => appSource.getRecurrenceOccurrence(id),
       convertReminderToTask: (reminderId, taskId, createdAt) => convertReminderToTask(appSource, { reminderId, taskId, createdAt }),
       getPlanScheduleBlocks: (isoDate) => getPlanScheduleBlocks(appSource, isoDate),
       getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),

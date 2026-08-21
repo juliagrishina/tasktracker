@@ -78,14 +78,14 @@ function startOfWeek(isoDate: string): string {
 
 function toPlanLoadDay(isoDate: string, getLoadPercent: (isoDate: string) => number): PlanLoadDay {
   const date = parseLocalDate(isoDate);
-  const loadPercent = getLoadPercent(isoDate);
+  const rawLoadPercent = getLoadPercent(isoDate);
 
   return {
     isoDate,
     dayOfMonth: date.getDate(),
     weekdayLabel: weekdayLabels[date.getDay()],
-    loadPercent,
-    tone: getPlanLoadTone(loadPercent),
+    loadPercent: Math.round(rawLoadPercent),
+    tone: getPlanLoadTone(rawLoadPercent),
   };
 }
 

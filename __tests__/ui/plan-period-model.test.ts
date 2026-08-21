@@ -34,4 +34,11 @@ describe('plan period load model', () => {
       tone: 'high',
     });
   });
+
+  test('rounds a period load percentage for display without changing its tone', () => {
+    expect(getWeekLoadDays('2026-08-05', (isoDate) => isoDate === '2026-08-05' ? 14.285714285714285 : 0)[2]).toMatchObject({
+      loadPercent: 14,
+      tone: 'low',
+    });
+  });
 });

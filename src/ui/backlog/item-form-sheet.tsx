@@ -45,6 +45,9 @@ interface ItemFormSheetProps {
   parentTaskId?: string;
   projectId?: string | null;
   onSaved?: () => void;
+  occurrenceEdit?: {
+    onSave: (input: { title: string; description: string; estimatedDurationMinutes: number | null }) => Promise<void>;
+  };
   planningContext?: {
     defaultDate: string;
     onPlanningDraftChange?: (draft: TaskPlanningDraft) => void;
@@ -113,6 +116,7 @@ export function ItemFormSheet({
   parentTaskId,
   projectId,
   onSaved,
+  occurrenceEdit,
   planningContext,
 }: ItemFormSheetProps) {
   const { backlog, backlogActions, planningActions, settings } = useAppServices();
@@ -181,6 +185,12 @@ export function ItemFormSheet({
       }
       const estimatedDurationMinutes = duration.trim() === '' ? null : Number(duration);
       const now = new Date().toISOString();
+      if (occurrenceEdit !== undefined) {
+        await occurrenceEdit.onSave({ title, description, estimatedDurationMinutes });
+        onSaved?.();
+        onClose();
+        return;
+      }
       if (isPlanTaskForm) {
         const taskId = item?.id ?? createItemId(type);
         const timeZoneId = settings.timeZoneId;
@@ -403,7 +413,7 @@ export function ItemFormSheet({
               style={[styles.input, styles.multilineInput]}
               value={description}
             />
-            {type === 'task' || (type === 'reminder' && reminderTimed) ? (
+            {(type === 'task' && occurrenceEdit === undefined) || (type === 'reminder' && reminderTimed) ? (
               <View>
                 <Text style={styles.label}>Проект</Text>
                 <Pressable

@@ -41,6 +41,10 @@ describe('planning domain', () => {
     expect(getPlanLoadTone(getDayLoadPercent(settings, [{ ...block, endsAt: '2026-08-04T02:00:00+03:00' }], '2026-08-03'))).toBe('high');
   });
 
+  test('adds estimated minutes for items without an exact time block to day load', () => {
+    expect(getDayLoadPercent(settings, [block], '2026-08-03', 120)).toBe(37.5);
+  });
+
   test('projects calendar recurrences and rejects an exception before its series', () => {
     expect(getRecurrenceDates({ frequency: 'weekly', interval: 2, startsOn: '2026-08-03' }, '2026-08-01', '2026-09-01'))
       .toEqual(['2026-08-03', '2026-08-17', '2026-08-31']);
