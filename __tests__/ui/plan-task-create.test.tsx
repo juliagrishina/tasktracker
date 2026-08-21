@@ -17,7 +17,7 @@ describe('Plan task creation sheet', () => {
   test('opens the approved planning states from the Plan FAB', async () => {
     const view = await render(
       <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
-        <PlanScreen />
+        <PlanScreen initialDate="2026-08-05" />
       </AppServicesProvider>,
     );
 
@@ -54,7 +54,7 @@ describe('Plan task creation sheet', () => {
     const source = createInMemoryDataSource();
     const view = await render(
       <AppServicesProvider source={source} seedDevelopmentData={false}>
-        <PlanScreen />
+        <PlanScreen initialDate="2026-08-05" />
       </AppServicesProvider>,
     );
 

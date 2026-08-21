@@ -23,13 +23,22 @@ import { PlanViewControl, PlanViewMenu } from './plan-view-menu';
 import { MonthLoadGrid } from './month-load-grid';
 import { WeekLoadList } from './week-load-list';
 
-const demoSelectedDate = '2026-08-05';
+interface PlanScreenProps {
+  initialDate?: string;
+}
 
-export function PlanScreen() {
+function getCurrentLocalDate(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function PlanScreen({ initialDate }: PlanScreenProps) {
   const services = useOptionalAppServices();
   const [mode, setMode] = useState<PlanViewMode>('day');
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(demoSelectedDate);
+  const [selectedDate, setSelectedDate] = useState(() => initialDate ?? getCurrentLocalDate());
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [loadByDate, setLoadByDate] = useState<Readonly<Record<string, number>>>({});
