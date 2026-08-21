@@ -50,8 +50,8 @@ import {
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 import { convertReminderToTask } from './convert-reminder-to-task';
-import { getPlanScheduleBlocks, getPlanUntimedReminders, getTaskPlanningSnapshot, saveOccurrenceException, saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
-import type { SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult } from './planning-types';
+import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getTaskPlanningSnapshot, moveRecurrenceOccurrence, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
+import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -74,7 +74,10 @@ interface PlanningActions {
   getPlanUntimedReminders(isoDate: string): ReturnType<typeof getPlanUntimedReminders>;
   syncReminderRecurrence(reminderId: string): Promise<void>;
   saveTaskPlanning(input: SaveTaskPlanningInput): Promise<SaveTaskPlanningResult>;
+  saveTaskWithPlanning(input: SaveTaskWithPlanningInput): Promise<SaveTaskPlanningResult>;
+  createTimedReminderTaskWithPlanning(input: CreateTimedReminderTaskWithPlanningInput): Promise<SaveTaskPlanningResult>;
   saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
+  moveRecurrenceOccurrence(input: MoveRecurrenceOccurrenceInput): Promise<{ scope: MoveRecurrenceOccurrenceInput['scope'] }>;
 }
 
 interface AppServicesContextValue {
@@ -166,9 +169,12 @@ export function AppServicesProvider({
       getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
       syncReminderRecurrence: (reminderId) => syncReminderRecurrence(appSource, reminderId),
       saveTaskPlanning: (input) => saveTaskPlanning(appSource, input),
+      saveTaskWithPlanning: (input) => runBacklogAction(() => saveTaskWithPlanning(appSource, input)),
+      createTimedReminderTaskWithPlanning: (input) => runBacklogAction(() => createTimedReminderTaskWithPlanning(appSource, input)),
       saveOccurrenceException: (input) => saveOccurrenceException(appSource, input),
+      moveRecurrenceOccurrence: (input) => moveRecurrenceOccurrence(appSource, input),
     }),
-    [appSource],
+    [appSource, runBacklogAction],
   );
 
   useEffect(() => {

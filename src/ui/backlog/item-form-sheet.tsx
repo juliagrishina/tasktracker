@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppServices } from '../../application/app-services-provider';
-import type { SaveTaskPlanningInput } from '../../application/planning-types';
+import type { CreateTimedReminderTaskWithPlanningInput, SaveTaskWithPlanningInput } from '../../application/planning-types';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 import {
@@ -27,6 +27,9 @@ import { PlanningDatePicker } from './planning-date-picker';
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
 type FormItem = Project | TaskItem | Reminder;
+type PendingConflict =
+  | { kind: 'task'; input: SaveTaskWithPlanningInput }
+  | { kind: 'timedReminder'; input: CreateTimedReminderTaskWithPlanningInput };
 const estimateOptions = [
   { label: 'Без оценки', value: '' },
   ...Array.from({ length: 96 }, (_, index) => ({ label: `${(index + 1) * 5} мин`, value: String((index + 1) * 5) })),
@@ -122,7 +125,7 @@ export function ItemFormSheet({
   const [isSaving, setIsSaving] = useState(false);
   const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
   const [persistedBlockIds, setPersistedBlockIds] = useState<readonly string[]>([]);
-  const [pendingConflict, setPendingConflict] = useState<SaveTaskPlanningInput | null>(null);
+  const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
   const [reminderTimed, setReminderTimed] = useState(false);
   const [reminderTime, setReminderTime] = useState('09:00');
   const defaultBlock = useMemo(
@@ -168,8 +171,8 @@ export function ItemFormSheet({
       }
       const estimatedDurationMinutes = duration.trim() === '' ? null : Number(duration);
       const now = new Date().toISOString();
-      const persistPlanning = async (taskId: string) => {
-        if (!isPlanTaskForm) return;
+      if (isPlanTaskForm) {
+        const taskId = item?.id ?? createItemId(type);
         const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
         const blocks = planningDraft.blocks.map((block) => {
           const startsAt = new Date(`${block.date}T${block.startsAt}:00`);
@@ -192,10 +195,30 @@ export function ItemFormSheet({
           startsOn: planningDraft.blocks[0]?.date ?? planningDraft.scheduledOn ?? planningContext?.defaultDate ?? '',
           createdAt: now,
         };
-        const input = { taskId, blocks, deletedBlockIds: persistedBlockIds.filter((id) => !blocks.some((block) => block.id === id)), recurrence };
-        const result = await planningActions.saveTaskPlanning(input);
-        if (result.conflict !== null) { setPendingConflict(input); throw new Error('Выбранное время пересекается с другим блоком. Сохранить с пересечением?'); }
-      };
+        const input: SaveTaskWithPlanningInput = {
+          task: {
+            mode,
+            kind: type === 'subtask' ? 'subtask' : 'task',
+            id: taskId,
+            title,
+            description,
+            estimatedDurationMinutes,
+            projectId: type === 'task' ? selectedProjectId : item !== undefined && 'projectId' in item ? item.projectId : null,
+            parentTaskId,
+            createdAt: now,
+          },
+          planning: { taskId, blocks, deletedBlockIds: persistedBlockIds.filter((id) => !blocks.some((block) => block.id === id)), recurrence },
+        };
+        const result = await planningActions.saveTaskWithPlanning(input);
+        if (result.conflict !== null) {
+          setPendingConflict({ kind: 'task', input });
+          setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
+          return;
+        }
+        onSaved?.();
+        onClose();
+        return;
+      }
 
       if (type === 'project') {
         if (mode === 'create') {
@@ -221,7 +244,6 @@ export function ItemFormSheet({
             estimatedDurationMinutes,
             createdAt: now,
           });
-          await persistPlanning(taskId);
         } else if (item !== undefined && 'kind' in item && item.kind === 'task') {
           await backlogActions.updateTaskItem({
             id: item.id,
@@ -235,7 +257,6 @@ export function ItemFormSheet({
               projectId: selectedProjectId,
             });
           }
-          await persistPlanning(item.id);
         }
       }
 
@@ -253,7 +274,6 @@ export function ItemFormSheet({
             estimatedDurationMinutes,
             createdAt: now,
           });
-          await persistPlanning(subtaskId);
         } else if (item !== undefined && 'kind' in item && item.kind === 'subtask') {
           await backlogActions.updateTaskItem({
             id: item.id,
@@ -261,7 +281,6 @@ export function ItemFormSheet({
             description,
             estimatedDurationMinutes,
           });
-          await persistPlanning(item.id);
         }
       }
 
@@ -280,19 +299,37 @@ export function ItemFormSheet({
 
         if (mode === 'create') {
           const reminderId = createItemId(type);
+          if (reminderTimed) {
+            const reminderDate = emptyToNull(remindsOn);
+            if (reminderDate === null) throw new Error('Укажите дату напоминания');
+            const taskId = `task-${reminderId}`;
+            const startsAt = new Date(`${reminderDate}T${reminderTime}:00`);
+            const timedReminderInput: CreateTimedReminderTaskWithPlanningInput = {
+              reminder: { id: reminderId, ...reminderInput, createdAt: now },
+              taskId,
+              projectId: selectedProjectId,
+              planning: {
+                taskId,
+                recurrence: null,
+                blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone ?? null, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
+              },
+            };
+            const result = await planningActions.createTimedReminderTaskWithPlanning(timedReminderInput);
+            if (result.conflict !== null) {
+              setPendingConflict({ kind: 'timedReminder', input: timedReminderInput });
+              setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
+              return;
+            }
+            onSaved?.();
+            onClose();
+            return;
+          }
           await backlogActions.createReminder({
             id: reminderId,
             ...reminderInput,
             createdAt: now,
           });
           await planningActions.syncReminderRecurrence(reminderId);
-          if (reminderTimed) {
-            const taskId = `task-${reminderId}`;
-            await planningActions.convertReminderToTask(reminderId, taskId, now);
-            await backlogActions.moveTaskToProject({ taskId, projectId: selectedProjectId });
-            const startsAt = new Date(`${remindsOn}T${reminderTime}:00`);
-            await planningActions.saveTaskPlanning({ taskId, recurrence: null, blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: Intl.DateTimeFormat().resolvedOptions().timeZone ?? null, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }] });
-          }
         } else if (item !== undefined) {
           await backlogActions.updateReminder({ id: item.id, ...reminderInput });
           await planningActions.syncReminderRecurrence(item.id);
@@ -419,14 +456,14 @@ export function ItemFormSheet({
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
-            {pendingConflict === null ? null : <Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void planningActions.saveTaskPlanning({ ...pendingConflict, forceConflicts: true }).then(() => { setPendingConflict(null); onClose(); })} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable>}
+            {pendingConflict === null ? null : <Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable>}
           </ScrollView>
           <View style={styles.footer}>
             <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>
               <Text style={styles.secondaryActionText}>Отмена</Text>
             </Pressable>
             <Pressable accessibilityState={{ disabled: isSaving }} onPress={() => void submit()} style={[styles.action, styles.primaryAction, isSaving && styles.disabledAction]}>
-              <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? 'Создать' : 'Сохранить'}</Text>
+              <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? mode === 'create' ? 'Создать' : 'Сохранить' : 'Сохранить'}</Text>
             </Pressable>
           </View>
         </View>

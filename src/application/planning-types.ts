@@ -1,4 +1,4 @@
-import type { EntityId, RecurrenceOccurrence, RecurrenceSeries, ScheduleBlock } from '../domain/entities';
+import type { EntityId, RecurrenceOccurrence, RecurrenceSeries, Reminder, ScheduleBlock } from '../domain/entities';
 
 export interface PlanningRecurrenceInput {
   id: EntityId;
@@ -19,5 +19,43 @@ export interface SaveTaskPlanningInput {
 export interface SaveOccurrenceExceptionInput {
   occurrence: RecurrenceOccurrence;
   blocks?: readonly ScheduleBlock[];
+}
+
+export interface SaveTaskWithPlanningInput {
+  task: {
+    mode: 'create' | 'edit';
+    kind: 'task' | 'subtask';
+    id: EntityId;
+    title: string;
+    description: string;
+    estimatedDurationMinutes: number | null;
+    projectId: EntityId | null;
+    parentTaskId?: EntityId;
+    createdAt: string;
+  };
+  planning: SaveTaskPlanningInput;
+}
+
+export interface MoveRecurrenceOccurrenceInput {
+  seriesId: EntityId;
+  occursOn: string;
+  targetDate: string;
+  scope: 'occurrence' | 'series';
+}
+
+export interface CreateTimedReminderTaskWithPlanningInput {
+  reminder: {
+    id: EntityId;
+    title: string;
+    remindsOn: string | null;
+    periodStartOn: string | null;
+    periodEndOn: string | null;
+    repeatRule: Reminder['repeatRule'];
+    estimatedDurationMinutes: number | null;
+    createdAt: string;
+  };
+  taskId: EntityId;
+  projectId: EntityId | null;
+  planning: SaveTaskPlanningInput;
 }
 export type SaveTaskPlanningResult = { conflict: null } | { conflict: readonly ScheduleConflict[] };

@@ -9,6 +9,7 @@ import { getDefaultSettings } from '../../data/default-settings';
 import { getDayLoadPercent, getPlanLoadTone } from '../../domain/planning';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
+import { RecurrenceMoveDialog } from './recurrence-move-dialog';
 
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
@@ -27,6 +28,7 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selecte
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
   const [reminders, setReminders] = useState<readonly import('../../domain/entities').Reminder[]>([]);
   const [selectedOccurrence, setSelectedOccurrence] = useState<{ seriesId: string; occursOn: string } | null>(null);
+  const [isMoveDialogVisible, setIsMoveDialogVisible] = useState(false);
   useEffect(() => { if (services !== null) void Promise.all([services.planningActions.getPlanScheduleBlocks(selectedDate), services.planningActions.getPlanUntimedReminders(selectedDate)]).then(([nextBlocks, nextReminders]) => { setBlocks(nextBlocks); setReminders(nextReminders); }); }, [services, selectedDate]);
   const settings = services?.settings ?? getDefaultSettings();
   const loadPercent = useMemo(() => getDayLoadPercent(settings, blocks, selectedDate), [blocks, selectedDate, settings]);
@@ -94,6 +96,7 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selecte
           <Text style={styles.sectionTitle}>Этот экземпляр</Text>
           <Pressable accessibilityLabel="Завершить этот экземпляр" onPress={() => { if (services !== null) void services.planningActions.setRecurrenceOccurrenceState(selectedOccurrence.seriesId, selectedOccurrence.occursOn, 'completed').then(() => services.planningActions.getPlanScheduleBlocks(selectedDate).then(setBlocks)); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Завершить</Text></Pressable>
           <Pressable accessibilityLabel="Отменить этот экземпляр" onPress={() => { if (services !== null) void services.planningActions.setRecurrenceOccurrenceState(selectedOccurrence.seriesId, selectedOccurrence.occursOn, 'cancelled').then(() => services.planningActions.getPlanScheduleBlocks(selectedDate).then(setBlocks)); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Отменить</Text></Pressable>
+          <Pressable accessibilityLabel="Перенести этот экземпляр" onPress={() => setIsMoveDialogVisible(true)} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Перенести</Text></Pressable>
         </View>}
 
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
@@ -112,6 +115,20 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selecte
         style={({ pressed }) => [styles.floatingAction, pressed && styles.pressed]}>
         <Ionicons color={designTokens.color.text.inverse} name="add" size={28} />
       </Pressable>
+      {selectedOccurrence === null ? null : (
+        <RecurrenceMoveDialog
+          occursOn={selectedOccurrence.occursOn}
+          onMove={async (targetDate, scope) => {
+            if (services === null) return;
+            await services.planningActions.moveRecurrenceOccurrence({ ...selectedOccurrence, targetDate, scope });
+            setBlocks(await services.planningActions.getPlanScheduleBlocks(selectedDate));
+            setSelectedOccurrence(null);
+            setIsMoveDialogVisible(false);
+          }}
+          onRequestClose={() => setIsMoveDialogVisible(false)}
+          visible={isMoveDialogVisible}
+        />
+      )}
     </SafeAreaView>
   );
 }

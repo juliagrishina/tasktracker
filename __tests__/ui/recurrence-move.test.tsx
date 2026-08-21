@@ -1,0 +1,43 @@
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+
+import { AppServicesProvider } from '../../src/application/app-services-provider';
+import { saveTaskPlanning } from '../../src/application/planning-use-cases';
+import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import { DayDashboard } from '../../src/ui/plan/day-dashboard';
+
+describe('recurrence move', () => {
+  test('asks whether to move only the selected instance or the full series', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'task-1', kind: 'task', projectId: null, parentTaskId: null, title: 'Повторяемая задача', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await saveTaskPlanning(source, {
+      taskId: 'task-1',
+      blocks: [{ id: 'block-1', taskItemId: 'task-1', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-03T09:00:00+03:00', endsAt: '2026-08-03T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null }],
+      recurrence: { id: 'series-1', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
+    });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
+    await waitFor(() => expect(view.getByText('Задача')).toBeOnTheScreen());
+    fireEvent.press(view.getByText('Задача'));
+    await waitFor(() => expect(view.getByLabelText('Перенести этот экземпляр')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Перенести этот экземпляр'));
+
+    await waitFor(() => {
+      expect(view.getByText('Только этот экземпляр')).toBeOnTheScreen();
+      expect(view.getByText('Всю серию')).toBeOnTheScreen();
+    });
+    fireEvent.press(view.getByLabelText('Дата переноса'));
+    await waitFor(() => expect(view.getByLabelText('11 Август 2026')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('11 Август 2026'));
+    await waitFor(() => expect(view.getByText('11.08.2026')).toBeOnTheScreen());
+    await act(async () => {
+      fireEvent.press(view.getByText('Только этот экземпляр'));
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    });
+
+    await waitFor(() => expect(source.debugRowExists('occurrence-series-1-2026-08-10-block-1')).toBe(true));
+    await expect(source.listScheduleBlocks()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ occurrenceId: 'occurrence-series-1-2026-08-10', startsAt: '2026-08-11T09:00:00+03:00' }),
+    ]));
+  });
+});
