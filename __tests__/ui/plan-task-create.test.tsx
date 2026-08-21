@@ -41,7 +41,7 @@ describe('Plan task creation sheet', () => {
     });
   });
 
-  test('saves only core task data and does not persist demo planning fields', async () => {
+  test('persists a planned block together with the new task', async () => {
     const source = createInMemoryDataSource();
     const view = await render(
       <AppServicesProvider source={source} seedDevelopmentData={false}>
@@ -60,11 +60,17 @@ describe('Plan task creation sheet', () => {
     await waitFor(() => {
       expect(view.getByLabelText('Название').props.value).toBe('Подготовить план релиза');
     });
+    fireEvent.press(view.getByLabelText('Добавить блок времени'));
+    await waitFor(() => {
+      expect(view.getByLabelText('Начало блока 1')).toBeOnTheScreen();
+    });
     fireEvent.press(view.getByText('Создать'));
 
     await waitFor(async () => {
       expect((await source.listTaskItems()).map((task) => task.title)).toContain('Подготовить план релиза');
     });
-    expect(await source.listScheduleBlocks()).toHaveLength(0);
+    await waitFor(async () => {
+      expect(await source.listScheduleBlocks()).toHaveLength(1);
+    });
   });
 });

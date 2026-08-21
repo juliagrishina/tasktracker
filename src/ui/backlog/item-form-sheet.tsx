@@ -100,7 +100,7 @@ export function ItemFormSheet({
   onSaved,
   planningContext,
 }: ItemFormSheetProps) {
-  const { backlog, backlogActions } = useAppServices();
+  const { backlog, backlogActions, planningActions } = useAppServices();
   const [title, setTitle] = useState(() => item?.title ?? '');
   const [description, setDescription] = useState(() => getInitialDescription(item));
   const [duration, setDuration] = useState(() => getInitialDuration(item));
@@ -118,7 +118,7 @@ export function ItemFormSheet({
     () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
     [planningContext?.defaultDate],
   );
-  const isPlanTaskForm = type === 'task' && planningContext !== undefined;
+  const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
 
   const formTitle = useMemo(() => {
     const createTitle: Record<ItemFormType, string> = {
@@ -144,6 +144,33 @@ export function ItemFormSheet({
       }
       const estimatedDurationMinutes = duration.trim() === '' ? null : Number(duration);
       const now = new Date().toISOString();
+      const persistPlanning = async (taskId: string) => {
+        if (!isPlanTaskForm) return;
+        const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+        const blocks = planningDraft.blocks.map((block) => {
+          const startsAt = new Date(`${block.date}T${block.startsAt}:00`);
+          return {
+            id: block.id,
+            taskItemId: taskId,
+            occurrenceId: null,
+            timeZoneId,
+            startsAt: startsAt.toISOString(),
+            endsAt: new Date(startsAt.getTime() + Number(block.durationMinutes) * 60_000).toISOString(),
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: null,
+          };
+        });
+        const recurrence = planningDraft.repeatFrequency === 'none' ? null : {
+          id: `series-${taskId}`,
+          frequency: planningDraft.repeatFrequency,
+          interval: Number(planningDraft.repeatInterval),
+          startsOn: planningDraft.blocks[0]?.date ?? planningDraft.scheduledOn ?? planningContext?.defaultDate ?? '',
+          createdAt: now,
+        };
+        const result = await planningActions.saveTaskPlanning({ taskId, blocks, recurrence });
+        if (result.conflict !== null) throw new Error('Выбранное время пересекается с другим блоком. Измените интервал и сохраните снова.');
+      };
 
       if (type === 'project') {
         if (mode === 'create') {
@@ -160,14 +187,16 @@ export function ItemFormSheet({
 
       if (type === 'task') {
         if (mode === 'create') {
+          const taskId = createItemId(type);
           await backlogActions.createTask({
-            id: createItemId(type),
+            id: taskId,
             title,
             description,
             projectId: selectedProjectId,
             estimatedDurationMinutes,
             createdAt: now,
           });
+          await persistPlanning(taskId);
         } else if (item !== undefined && 'kind' in item && item.kind === 'task') {
           await backlogActions.updateTaskItem({
             id: item.id,
@@ -181,6 +210,7 @@ export function ItemFormSheet({
               projectId: selectedProjectId,
             });
           }
+          await persistPlanning(item.id);
         }
       }
 
@@ -189,14 +219,16 @@ export function ItemFormSheet({
           if (parentTaskId === undefined) {
             throw new Error('Не выбрана задача-родитель');
           }
+          const subtaskId = createItemId(type);
           await backlogActions.createSubtask({
-            id: createItemId(type),
+            id: subtaskId,
             title,
             description,
             parentTaskId,
             estimatedDurationMinutes,
             createdAt: now,
           });
+          await persistPlanning(subtaskId);
         } else if (item !== undefined && 'kind' in item && item.kind === 'subtask') {
           await backlogActions.updateTaskItem({
             id: item.id,
@@ -204,6 +236,7 @@ export function ItemFormSheet({
             description,
             estimatedDurationMinutes,
           });
+          await persistPlanning(item.id);
         }
       }
 

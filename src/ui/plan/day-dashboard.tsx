@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
+import { useAppServices } from '../../application/app-services-provider';
+import { getDayLoadPercent, getPlanLoadTone } from '../../domain/planning';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 
-import { planDemoModel, type PlanDemoListItem } from './plan-demo-model';
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
 import type { PlanViewMode } from './plan-period-model';
@@ -19,8 +20,17 @@ interface DayDashboardProps {
   selectedDate?: string;
 }
 
-export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode }: DayDashboardProps) {
+export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selectedDate = new Date().toISOString().slice(0, 10) }: DayDashboardProps) {
+  const { backlog, planningActions, settings } = useAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
+  useEffect(() => { void planningActions.getPlanScheduleBlocks(selectedDate).then(setBlocks); }, [planningActions, selectedDate]);
+  const loadPercent = useMemo(() => getDayLoadPercent(settings, blocks, selectedDate), [blocks, selectedDate, settings]);
+  const tone = getPlanLoadTone(loadPercent);
+  const taskTitles = useMemo(() => new Map([
+    ...backlog.unassignedTasks,
+    ...backlog.projects.flatMap((project) => project.tasks),
+  ].flatMap((entry) => [[entry.task.id, entry.task.title] as const, ...entry.subtasks.map((subtask) => [subtask.id, subtask.title] as const)])), [backlog]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -28,7 +38,7 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode }: DayDa
         <View style={[styles.headerContent, temporaryWebContentStyle()]}>
           <View>
             <Text style={styles.screenTitle}>Сегодня</Text>
-            <Text style={styles.date}>{planDemoModel.date}</Text>
+            <Text style={styles.date}>{selectedDate}</Text>
           </View>
           <View style={styles.headerActions}>
             <PlanViewControl
@@ -55,33 +65,24 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode }: DayDa
       <ScrollView contentContainerStyle={[styles.scrollContent, temporaryWebContentStyle()]}>
         <SurfaceCard style={styles.hero} tone="info">
           <View style={styles.heroRow}>
-            <ProgressRing label={`${planDemoModel.completion}%`} value={planDemoModel.completion} />
+            <ProgressRing label={`${Math.round(loadPercent)}%`} value={Math.min(100, loadPercent)} />
             <View style={styles.heroCopy}>
-              <Text style={styles.heroTitle}>План в норме</Text>
-              <Text style={styles.heroDetail}>{planDemoModel.planned} · {planDemoModel.energy}</Text>
+              <Text style={styles.heroTitle}>{tone === 'high' ? 'Высокая загрузка' : tone === 'medium' ? 'Средняя загрузка' : 'План в норме'}</Text>
+              <Text style={styles.heroDetail}>{Math.round(loadPercent)}% · {blocks.length} {blocks.length === 1 ? 'блок' : 'блоков'}</Text>
               <View style={styles.loadTrack}>
-                <View style={styles.loadValue} />
+                <View style={[styles.loadValue, { width: `${Math.min(100, loadPercent)}%` }]} />
               </View>
             </View>
           </View>
-          <SurfaceCard style={styles.nextEvent}>
-            <Text style={styles.nextDetail}>{planDemoModel.nextEvent.detail}</Text>
-            <Text style={styles.nextTitle}>{planDemoModel.nextEvent.title}</Text>
-          </SurfaceCard>
+          {blocks[0] === undefined ? null : <SurfaceCard style={styles.nextEvent}>
+            <Text style={styles.nextDetail}>{blocks[0].startsAt.slice(11, 16)}–{blocks[0].endsAt.slice(11, 16)}</Text>
+            <Text style={styles.nextTitle}>Ближайший временной блок</Text>
+          </SurfaceCard>}
         </SurfaceCard>
 
-        <SectionHeader action="2 дела" title="Без времени" />
+        <SectionHeader action={`${blocks.length} ${blocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
         <View style={styles.list}>
-          {planDemoModel.untimed.map((item) => (
-            <PlanListRow item={item} key={item.title} />
-          ))}
-        </View>
-
-        <SectionHeader action="Открыть день" title="Расписание" />
-        <View style={styles.list}>
-          {planDemoModel.schedule.map((item) => (
-            <PlanListRow item={item} key={item.title} time={item.time} />
-          ))}
+          {blocks.map((block) => <PlanListRow key={block.id} title={taskTitles.get(block.taskItemId) ?? 'Задача'} time={`${block.startsAt.slice(11, 16)}–${block.endsAt.slice(11, 16)}`} />)}
         </View>
 
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
@@ -113,14 +114,14 @@ function SectionHeader({ action, title }: { action: string; title: string }) {
   );
 }
 
-function PlanListRow({ item, time }: { item: PlanDemoListItem; time?: string }) {
+function PlanListRow({ title, time }: { title: string; time: string }) {
   return (
     <SurfaceCard style={styles.listRow}>
-      {time === undefined ? null : <Text style={styles.time}>{time}</Text>}
-      <View style={[styles.dot, item.tone === 'meeting' && styles.meetingDot]} />
+      <Text style={styles.time}>{time}</Text>
+      <View style={styles.dot} />
       <View style={styles.listCopy}>
-        <Text numberOfLines={1} style={styles.listTitle}>{item.title}</Text>
-        <Text numberOfLines={1} style={styles.listDetail}>{item.detail}</Text>
+        <Text numberOfLines={1} style={styles.listTitle}>{title}</Text>
+        <Text numberOfLines={1} style={styles.listDetail}>Точно запланировано</Text>
       </View>
     </SurfaceCard>
   );

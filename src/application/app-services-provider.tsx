@@ -49,6 +49,8 @@ import {
 } from './backlog-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
+import { getPlanScheduleBlocks, saveOccurrenceException, saveTaskPlanning } from './planning-use-cases';
+import type { SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult } from './planning-types';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -63,6 +65,12 @@ interface BacklogActions {
   deleteItem(input: DeleteBacklogItemInput): Promise<void>;
 }
 
+interface PlanningActions {
+  getPlanScheduleBlocks(isoDate: string): ReturnType<typeof getPlanScheduleBlocks>;
+  saveTaskPlanning(input: SaveTaskPlanningInput): Promise<SaveTaskPlanningResult>;
+  saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
+}
+
 interface AppServicesContextValue {
   isReady: boolean;
   projects: ProjectRepository;
@@ -70,6 +78,7 @@ interface AppServicesContextValue {
   demoTasks: DemoTaskGroups;
   backlog: BacklogView;
   backlogActions: BacklogActions;
+  planningActions: PlanningActions;
   refreshBacklog(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
@@ -142,6 +151,14 @@ export function AppServicesProvider({
     }),
     [appSource, runBacklogAction],
   );
+  const planningActions = useMemo<PlanningActions>(
+    () => ({
+      getPlanScheduleBlocks: (isoDate) => getPlanScheduleBlocks(appSource, isoDate),
+      saveTaskPlanning: (input) => saveTaskPlanning(appSource, input),
+      saveOccurrenceException: (input) => saveOccurrenceException(appSource, input),
+    }),
+    [appSource],
+  );
 
   useEffect(() => {
     // Устанавливаем облачную identity независимо от локальной инициализации:
@@ -199,6 +216,7 @@ export function AppServicesProvider({
         demoTasks,
         backlog,
         backlogActions,
+        planningActions,
         refreshBacklog,
         runBacklogAction,
         runStorageDiagnostic,
