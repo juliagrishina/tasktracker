@@ -213,6 +213,51 @@ const schemaVersionSix = `
   END;
 `;
 
+const schemaVersionSeven = `
+  ALTER TABLE schedule_blocks ADD COLUMN occurrence_id TEXT;
+  ALTER TABLE schedule_blocks ADD COLUMN time_zone_id TEXT;
+
+  CREATE TABLE recurrence_series_v7 (
+    id TEXT PRIMARY KEY,
+    item_kind TEXT NOT NULL CHECK (item_kind IN ('task', 'reminder')),
+    item_id TEXT NOT NULL,
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+    interval INTEGER NOT NULL CHECK (interval > 0),
+    starts_on TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT
+  );
+
+  INSERT INTO recurrence_series_v7 (
+    id, item_kind, item_id, frequency, interval, starts_on, created_at, updated_at, deleted_at
+  )
+  SELECT id, 'task', task_item_id, frequency, interval, starts_on, created_at, updated_at, deleted_at
+  FROM recurrence_series;
+
+  DROP TABLE recurrence_series;
+  ALTER TABLE recurrence_series_v7 RENAME TO recurrence_series;
+  CREATE INDEX recurrence_series_live_owner ON recurrence_series (item_kind, item_id)
+    WHERE deleted_at IS NULL;
+
+  CREATE TABLE recurrence_occurrences (
+    id TEXT PRIMARY KEY,
+    series_id TEXT NOT NULL REFERENCES recurrence_series(id),
+    occurs_on TEXT NOT NULL,
+    cancelled_at TEXT,
+    completed_at TEXT,
+    blocks_overridden INTEGER NOT NULL DEFAULT 0 CHECK (blocks_overridden IN (0, 1)),
+    task_patch TEXT,
+    reminder_patch TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+  CREATE UNIQUE INDEX recurrence_occurrences_live_series_date
+    ON recurrence_occurrences (series_id, occurs_on)
+    WHERE deleted_at IS NULL;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -265,6 +310,12 @@ const migrations: readonly Migration[] = [
     version: 6,
     async apply(database) {
       await database.execAsync(schemaVersionSix);
+    },
+  },
+  {
+    version: 7,
+    async apply(database) {
+      await database.execAsync(schemaVersionSeven);
     },
   },
 ];

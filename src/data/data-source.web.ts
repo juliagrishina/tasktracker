@@ -2,6 +2,7 @@ import type {
   AppSettings,
   EntityId,
   Project,
+  RecurrenceOccurrence,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
@@ -42,6 +43,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   private readonly reminders = new Map<EntityId, Reminder>();
   private readonly scheduleBlocks = new Map<EntityId, ScheduleBlock>();
   private readonly recurrenceSeries = new Map<EntityId, RecurrenceSeries>();
+  private readonly recurrenceOccurrences = new Map<EntityId, RecurrenceOccurrence>();
 
   async initialize(): Promise<void> {
     if (this.settings === null) {
@@ -157,6 +159,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     const reminder = this.reminders.get(id);
     if (reminder !== undefined) {
       const deletedAt = new Date().toISOString();
+      this.deleteRecurrenceRelatedRows('reminder', id, deletedAt);
       this.reminders.set(id, { ...reminder, deletedAt, updatedAt: deletedAt });
     }
   }
@@ -186,12 +189,32 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       .sort(compareByCreatedAt);
   }
 
+  async listScheduleBlocksForTaskItem(taskItemId: EntityId): Promise<readonly ScheduleBlock[]> {
+    const blocks = await this.listScheduleBlocks();
+    return blocks.filter((block) => block.taskItemId === taskItemId);
+  }
+
+  async deleteScheduleBlock(id: EntityId): Promise<void> {
+    await this.initialize();
+    const block = this.scheduleBlocks.get(id);
+    if (block !== undefined) {
+      const deletedAt = new Date().toISOString();
+      this.scheduleBlocks.set(id, { ...block, deletedAt, updatedAt: deletedAt });
+    }
+  }
+
   async saveRecurrenceSeries(series: RecurrenceSeries): Promise<void> {
     await this.initialize();
-    const task = await this.getTaskItem(series.taskItemId);
-
-    if (task === null) {
-      throw new Error('Задача для серии повторения не найдена');
+    if (series.itemKind === 'task') {
+      const task = await this.getTaskItem(series.itemId);
+      if (task === null) {
+        throw new Error('Задача для серии повторения не найдена');
+      }
+    } else {
+      const reminder = await this.getReminder(series.itemId);
+      if (reminder === null) {
+        throw new Error('Напоминание для серии повторения не найдено');
+      }
     }
 
     this.recurrenceSeries.set(series.id, { ...series, updatedAt: new Date().toISOString() });
@@ -203,6 +226,69 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     return series === null || series.deletedAt !== null ? null : series;
   }
 
+  async listRecurrenceSeries(): Promise<readonly RecurrenceSeries[]> {
+    await this.initialize();
+    return [...this.recurrenceSeries.values()]
+      .filter((series) => series.deletedAt === null)
+      .sort(compareByCreatedAt);
+  }
+
+  async deleteRecurrenceSeries(id: EntityId): Promise<void> {
+    await this.initialize();
+    const series = this.recurrenceSeries.get(id);
+    if (series !== undefined) {
+      const deletedAt = new Date().toISOString();
+      this.recurrenceSeries.set(id, { ...series, deletedAt, updatedAt: deletedAt });
+      this.deleteRecurrenceOccurrencesForSeries(id, deletedAt);
+    }
+  }
+
+  async saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void> {
+    await this.initialize();
+    const series = await this.getRecurrenceSeries(occurrence.seriesId);
+    if (series === null) {
+      throw new Error('Серия повторения для экземпляра не найдена');
+    }
+
+    const duplicate = [...this.recurrenceOccurrences.values()].find((candidate) =>
+      candidate.id !== occurrence.id &&
+      candidate.seriesId === occurrence.seriesId &&
+      candidate.occursOn === occurrence.occursOn &&
+      candidate.deletedAt === null,
+    );
+    if (duplicate !== undefined) {
+      throw new Error('Экземпляр серии на эту дату уже существует');
+    }
+
+    this.recurrenceOccurrences.set(occurrence.id, {
+      ...occurrence,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async getRecurrenceOccurrence(id: EntityId): Promise<RecurrenceOccurrence | null> {
+    await this.initialize();
+    const occurrence = this.recurrenceOccurrences.get(id) ?? null;
+    return occurrence === null || occurrence.deletedAt !== null ? null : occurrence;
+  }
+
+  async listRecurrenceOccurrences(seriesId: EntityId): Promise<readonly RecurrenceOccurrence[]> {
+    await this.initialize();
+    return [...this.recurrenceOccurrences.values()]
+      .filter((occurrence) => occurrence.seriesId === seriesId && occurrence.deletedAt === null)
+      .sort(compareByCreatedAt);
+  }
+
+  async deleteRecurrenceOccurrence(id: EntityId): Promise<void> {
+    await this.initialize();
+    const occurrence = this.recurrenceOccurrences.get(id);
+    if (occurrence !== undefined) {
+      const deletedAt = new Date().toISOString();
+      this.recurrenceOccurrences.set(id, { ...occurrence, deletedAt, updatedAt: deletedAt });
+      this.deleteOccurrenceBlocks(id, deletedAt);
+    }
+  }
+
   async transaction<T>(operation: () => Promise<T>): Promise<T> {
     await this.initialize();
     const snapshot = {
@@ -212,6 +298,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       reminders: new Map(this.reminders),
       scheduleBlocks: new Map(this.scheduleBlocks),
       recurrenceSeries: new Map(this.recurrenceSeries),
+      recurrenceOccurrences: new Map(this.recurrenceOccurrences),
     };
 
     try {
@@ -223,6 +310,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       replaceMap(this.reminders, snapshot.reminders);
       replaceMap(this.scheduleBlocks, snapshot.scheduleBlocks);
       replaceMap(this.recurrenceSeries, snapshot.recurrenceSeries);
+      replaceMap(this.recurrenceOccurrences, snapshot.recurrenceOccurrences);
       throw error;
     }
   }
@@ -238,6 +326,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       this.reminders.has(id) ||
       this.scheduleBlocks.has(id) ||
       this.recurrenceSeries.has(id)
+      || this.recurrenceOccurrences.has(id)
     );
   }
 
@@ -248,8 +337,39 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       }
     }
     for (const [id, series] of this.recurrenceSeries) {
-      if (series.taskItemId === taskItemId) {
+      if (series.itemKind === 'task' && series.itemId === taskItemId) {
         this.recurrenceSeries.set(id, { ...series, deletedAt, updatedAt: deletedAt });
+        this.deleteRecurrenceOccurrencesForSeries(id, deletedAt);
+      }
+    }
+  }
+
+  private deleteRecurrenceRelatedRows(
+    itemKind: RecurrenceSeries['itemKind'],
+    itemId: EntityId,
+    deletedAt: string,
+  ): void {
+    for (const [id, series] of this.recurrenceSeries) {
+      if (series.itemKind === itemKind && series.itemId === itemId) {
+        this.recurrenceSeries.set(id, { ...series, deletedAt, updatedAt: deletedAt });
+        this.deleteRecurrenceOccurrencesForSeries(id, deletedAt);
+      }
+    }
+  }
+
+  private deleteRecurrenceOccurrencesForSeries(seriesId: EntityId, deletedAt: string): void {
+    for (const [id, occurrence] of this.recurrenceOccurrences) {
+      if (occurrence.seriesId === seriesId) {
+        this.recurrenceOccurrences.set(id, { ...occurrence, deletedAt, updatedAt: deletedAt });
+        this.deleteOccurrenceBlocks(id, deletedAt);
+      }
+    }
+  }
+
+  private deleteOccurrenceBlocks(occurrenceId: EntityId, deletedAt: string): void {
+    for (const [id, block] of this.scheduleBlocks) {
+      if (block.occurrenceId === occurrenceId) {
+        this.scheduleBlocks.set(id, { ...block, deletedAt, updatedAt: deletedAt });
       }
     }
   }

@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   Project,
+  RecurrenceOccurrence,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
@@ -65,6 +66,8 @@ const reminder: Reminder = {
 const scheduleBlock: ScheduleBlock = {
   id: 'block-1',
   taskItemId: task.id,
+  occurrenceId: null,
+  timeZoneId: null,
   startsAt: '2026-08-02T09:00:00.000Z',
   endsAt: '2026-08-02T09:30:00.000Z',
   createdAt,
@@ -74,10 +77,37 @@ const scheduleBlock: ScheduleBlock = {
 
 const recurrenceSeries: RecurrenceSeries = {
   id: 'recurrence-1',
-  taskItemId: task.id,
+  itemKind: 'task',
+  itemId: task.id,
   frequency: 'weekly',
   interval: 1,
   startsOn: '2026-08-02',
+  createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
+};
+
+const reminderRecurrenceSeries: RecurrenceSeries = {
+  id: 'reminder-recurrence-1',
+  itemKind: 'reminder',
+  itemId: reminder.id,
+  frequency: 'weekly',
+  interval: 1,
+  startsOn: '2026-08-02',
+  createdAt,
+  updatedAt: createdAt,
+  deletedAt: null,
+};
+
+const recurrenceOccurrence: RecurrenceOccurrence = {
+  id: 'occurrence-1',
+  seriesId: recurrenceSeries.id,
+  occursOn: '2026-08-09',
+  cancelledAt: null,
+  completedAt: null,
+  blocksOverridden: false,
+  taskPatch: null,
+  reminderPatch: null,
   createdAt,
   updatedAt: createdAt,
   deletedAt: null,
@@ -221,5 +251,85 @@ describe('in-memory data source', () => {
     await expect(source.saveRecurrenceSeries(recurrenceSeries)).rejects.toThrow(
       'Задача для серии повторения не найдена',
     );
+  });
+
+  test('persists an active reminder recurrence and an independently completed occurrence', async () => {
+    const source = createInMemoryDataSource();
+
+    await source.saveReminder(reminder);
+    await source.saveRecurrenceSeries(reminderRecurrenceSeries);
+    await (source as unknown as {
+      saveRecurrenceOccurrence: (occurrence: typeof recurrenceOccurrence) => Promise<void>;
+      getRecurrenceOccurrence: (id: string) => Promise<typeof recurrenceOccurrence | null>;
+    }).saveRecurrenceOccurrence({
+      ...recurrenceOccurrence,
+      seriesId: reminderRecurrenceSeries.id,
+      completedAt: '2026-08-09T10:00:00.000Z',
+    });
+
+    await expect((source as unknown as {
+      getRecurrenceOccurrence: (id: string) => Promise<typeof recurrenceOccurrence | null>;
+    }).getRecurrenceOccurrence(recurrenceOccurrence.id)).resolves.toMatchObject({
+      completedAt: '2026-08-09T10:00:00.000Z',
+      cancelledAt: null,
+      deletedAt: null,
+    });
+  });
+
+  test('soft-deletes a reminder recurrence and occurrence with its reminder', async () => {
+    const source = createInMemoryDataSource();
+
+    await source.saveReminder(reminder);
+    await source.saveRecurrenceSeries(reminderRecurrenceSeries);
+    await (source as unknown as {
+      saveRecurrenceOccurrence: (occurrence: typeof recurrenceOccurrence) => Promise<void>;
+      getRecurrenceSeries: (id: string) => Promise<RecurrenceSeries | null>;
+      getRecurrenceOccurrence: (id: string) => Promise<typeof recurrenceOccurrence | null>;
+    }).saveRecurrenceOccurrence({
+      ...recurrenceOccurrence,
+      seriesId: reminderRecurrenceSeries.id,
+    });
+
+    await source.deleteReminder(reminder.id);
+
+    await expect((source as unknown as {
+      getRecurrenceSeries: (id: string) => Promise<RecurrenceSeries | null>;
+    }).getRecurrenceSeries(reminderRecurrenceSeries.id)).resolves.toBeNull();
+    await expect((source as unknown as {
+      getRecurrenceOccurrence: (id: string) => Promise<typeof recurrenceOccurrence | null>;
+    }).getRecurrenceOccurrence(recurrenceOccurrence.id)).resolves.toBeNull();
+  });
+
+  test('rejects a second live occurrence for one series date', async () => {
+    const source = createInMemoryDataSource();
+
+    await source.saveTaskItem(task);
+    await source.saveRecurrenceSeries(recurrenceSeries);
+    const planningSource = source as unknown as {
+      saveRecurrenceOccurrence: (occurrence: typeof recurrenceOccurrence) => Promise<void>;
+    };
+    await planningSource.saveRecurrenceOccurrence(recurrenceOccurrence);
+
+    await expect(planningSource.saveRecurrenceOccurrence({
+      ...recurrenceOccurrence,
+      id: 'occurrence-duplicate',
+    })).rejects.toThrow(/экземпляр/i);
+  });
+
+  test('soft-deletes exact blocks belonging to a deleted recurrence occurrence', async () => {
+    const source = createInMemoryDataSource();
+    const occurrenceBlock: ScheduleBlock = {
+      ...scheduleBlock,
+      id: 'occurrence-block-1',
+      occurrenceId: recurrenceOccurrence.id,
+    };
+
+    await source.saveTaskItem(task);
+    await source.saveRecurrenceSeries(recurrenceSeries);
+    await source.saveRecurrenceOccurrence(recurrenceOccurrence);
+    await source.saveScheduleBlock(occurrenceBlock);
+    await source.deleteRecurrenceOccurrence(recurrenceOccurrence.id);
+
+    await expect(source.getScheduleBlock(occurrenceBlock.id)).resolves.toBeNull();
   });
 });
