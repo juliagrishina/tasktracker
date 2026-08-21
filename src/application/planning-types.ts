@@ -13,6 +13,7 @@ export interface SaveTaskPlanningInput {
   taskId: EntityId;
   blocks: readonly ScheduleBlock[];
   deletedBlockIds?: readonly EntityId[];
+  forceConflicts?: boolean;
   recurrence?: PlanningRecurrenceInput | null;
 }
 export interface SaveOccurrenceExceptionInput {

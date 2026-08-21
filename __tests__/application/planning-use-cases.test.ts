@@ -1,6 +1,6 @@
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import type { ScheduleBlock, TaskItem } from '../../src/domain/entities';
-import { getPlanScheduleBlocks, saveOccurrenceException, saveTaskPlanning } from '../../src/application/planning-use-cases';
+import { getPlanScheduleBlocks, getPlanUntimedReminders, saveOccurrenceException, saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 
 const createdAt = '2026-08-01T00:00:00.000Z';
 const task: TaskItem = { id: 'task-1', kind: 'task', projectId: null, parentTaskId: null, title: 'План', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null };
@@ -25,6 +25,22 @@ describe('planning use cases', () => {
     const source = createInMemoryDataSource(); await source.saveTaskItem(task);
     await saveTaskPlanning(source, { taskId: task.id, blocks: [block], recurrence: { id: 'series-1', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt } });
     await saveOccurrenceException(source, { occurrence: { id: 'occurrence-1', seriesId: 'series-1', occursOn: '2026-08-10', cancelledAt: null, completedAt: null, blocksOverridden: true, taskPatch: null, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null }, blocks: [] });
+    await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(0);
+  });
+
+  test('completes one recurring instance without completing its series', async () => {
+    const source = createInMemoryDataSource(); await source.saveTaskItem(task);
+    await saveTaskPlanning(source, { taskId: task.id, blocks: [block], recurrence: { id: 'series-1', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt } });
+    await setRecurrenceOccurrenceState(source, 'series-1', '2026-08-10', 'completed');
+    await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(0);
+    await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toHaveLength(1);
+  });
+
+  test('shows date-only recurring reminders without adding them to exact load', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveReminder({ id: 'reminder-1', title: 'Оплатить', remindsOn: '2026-08-03', periodStartOn: null, periodEndOn: null, repeatRule: { frequency: 'weekly', interval: 1 }, estimatedDurationMinutes: 30, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await syncReminderRecurrence(source, 'reminder-1');
+    await expect(getPlanUntimedReminders(source, '2026-08-10')).resolves.toMatchObject([{ title: 'Оплатить' }]);
     await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(0);
   });
 });

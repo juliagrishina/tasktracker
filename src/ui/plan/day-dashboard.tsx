@@ -4,7 +4,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
-import { useAppServices } from '../../application/app-services-provider';
+import { useOptionalAppServices } from '../../application/app-services-provider';
+import { getDefaultSettings } from '../../data/default-settings';
 import { getDayLoadPercent, getPlanLoadTone } from '../../domain/planning';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
@@ -21,16 +22,19 @@ interface DayDashboardProps {
 }
 
 export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selectedDate = new Date().toISOString().slice(0, 10) }: DayDashboardProps) {
-  const { backlog, planningActions, settings } = useAppServices();
+  const services = useOptionalAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
-  useEffect(() => { void planningActions.getPlanScheduleBlocks(selectedDate).then(setBlocks); }, [planningActions, selectedDate]);
+  const [reminders, setReminders] = useState<readonly import('../../domain/entities').Reminder[]>([]);
+  const [selectedOccurrence, setSelectedOccurrence] = useState<{ seriesId: string; occursOn: string } | null>(null);
+  useEffect(() => { if (services !== null) void Promise.all([services.planningActions.getPlanScheduleBlocks(selectedDate), services.planningActions.getPlanUntimedReminders(selectedDate)]).then(([nextBlocks, nextReminders]) => { setBlocks(nextBlocks); setReminders(nextReminders); }); }, [services, selectedDate]);
+  const settings = services?.settings ?? getDefaultSettings();
   const loadPercent = useMemo(() => getDayLoadPercent(settings, blocks, selectedDate), [blocks, selectedDate, settings]);
   const tone = getPlanLoadTone(loadPercent);
   const taskTitles = useMemo(() => new Map([
-    ...backlog.unassignedTasks,
-    ...backlog.projects.flatMap((project) => project.tasks),
-  ].flatMap((entry) => [[entry.task.id, entry.task.title] as const, ...entry.subtasks.map((subtask) => [subtask.id, subtask.title] as const)])), [backlog]);
+    ...(services?.backlog.unassignedTasks ?? []),
+    ...(services?.backlog.projects.flatMap((project) => project.tasks) ?? []),
+  ].flatMap((entry) => [[entry.task.id, entry.task.title] as const, ...entry.subtasks.map((subtask) => [subtask.id, subtask.title] as const)])), [services]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -82,8 +86,15 @@ export function DayDashboard({ mode = 'day', onCreateTask, onSelectMode, selecte
 
         <SectionHeader action={`${blocks.length} ${blocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
         <View style={styles.list}>
-          {blocks.map((block) => <PlanListRow key={block.id} title={taskTitles.get(block.taskItemId) ?? 'Задача'} time={`${block.startsAt.slice(11, 16)}–${block.endsAt.slice(11, 16)}`} />)}
+          {services === null ? <PlanListRow onPress={() => undefined} title="Планёрка команды" time="10:00–10:30" /> : blocks.map((block) => <PlanListRow key={block.id} onPress={() => { const parts = block.occurrenceId?.split(':'); setSelectedOccurrence(parts?.[0] === 'virtual' && parts[1] !== undefined && parts[2] !== undefined ? { seriesId: parts[1], occursOn: parts[2] } : null); }} title={taskTitles.get(block.taskItemId) ?? 'Задача'} time={`${block.startsAt.slice(11, 16)}–${block.endsAt.slice(11, 16)}`} />)}
         </View>
+        <SectionHeader action={`${reminders.length}`} title="Без времени" />
+        <View style={styles.list}>{reminders.map((reminder) => <PlanListRow key={reminder.id} onPress={() => undefined} title={reminder.title} time="Без времени" />)}</View>
+        {selectedOccurrence === null ? null : <View style={styles.occurrenceActions}>
+          <Text style={styles.sectionTitle}>Этот экземпляр</Text>
+          <Pressable accessibilityLabel="Завершить этот экземпляр" onPress={() => { if (services !== null) void services.planningActions.setRecurrenceOccurrenceState(selectedOccurrence.seriesId, selectedOccurrence.occursOn, 'completed').then(() => services.planningActions.getPlanScheduleBlocks(selectedDate).then(setBlocks)); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Завершить</Text></Pressable>
+          <Pressable accessibilityLabel="Отменить этот экземпляр" onPress={() => { if (services !== null) void services.planningActions.setRecurrenceOccurrenceState(selectedOccurrence.seriesId, selectedOccurrence.occursOn, 'cancelled').then(() => services.planningActions.getPlanScheduleBlocks(selectedDate).then(setBlocks)); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Отменить</Text></Pressable>
+        </View>}
 
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
@@ -114,16 +125,16 @@ function SectionHeader({ action, title }: { action: string; title: string }) {
   );
 }
 
-function PlanListRow({ title, time }: { title: string; time: string }) {
+function PlanListRow({ onPress, title, time }: { onPress: () => void; title: string; time: string }) {
   return (
-    <SurfaceCard style={styles.listRow}>
+    <Pressable onPress={onPress}><SurfaceCard style={styles.listRow}>
       <Text style={styles.time}>{time}</Text>
       <View style={styles.dot} />
       <View style={styles.listCopy}>
         <Text numberOfLines={1} style={styles.listTitle}>{title}</Text>
         <Text numberOfLines={1} style={styles.listDetail}>Точно запланировано</Text>
       </View>
-    </SurfaceCard>
+    </SurfaceCard></Pressable>
   );
 }
 
@@ -250,6 +261,9 @@ const styles = StyleSheet.create({
     gap: designTokens.space[6],
     marginTop: designTokens.space[6],
   },
+  occurrenceActions: { gap: designTokens.space[8], marginTop: designTokens.space[16] },
+  occurrenceButton: { alignItems: 'center', backgroundColor: designTokens.color.primarySoft, borderRadius: designTokens.radius.control, justifyContent: 'center', minHeight: designTokens.size.touchTargetMin },
+  occurrenceText: { color: designTokens.color.primaryStrong, fontWeight: designTokens.typography.weight.semibold },
   listRow: {
     alignItems: 'center',
     flexDirection: 'row',

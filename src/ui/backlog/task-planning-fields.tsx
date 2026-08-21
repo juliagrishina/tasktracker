@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
 import { PlanningValuePicker, type PlanningValueOption } from './planning-value-picker';
+import { PlanningDatePicker } from './planning-date-picker';
 
 export type TaskScheduleMode = 'none' | 'date' | 'period';
 export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly';
@@ -123,12 +124,12 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
         })}
       </View>
       {value.scheduleMode === 'date' ? (
-        <PlanningInput accessibilityLabel="Дата задачи" label="Дата задачи" onChangeText={(scheduledOn) => update({ scheduledOn })} value={value.scheduledOn} />
+        <Field label="Дата задачи"><PlanningDatePicker accessibilityLabel="Дата задачи" onChange={(scheduledOn) => update({ scheduledOn })} value={value.scheduledOn} /></Field>
       ) : null}
       {value.scheduleMode === 'period' ? (
         <View>
-          <PlanningInput accessibilityLabel="Начало периода задачи" label="Начало периода" onChangeText={(periodStartOn) => update({ periodStartOn })} value={value.periodStartOn} />
-          <PlanningInput accessibilityLabel="Конец периода задачи" label="Конец периода" onChangeText={(periodEndOn) => update({ periodEndOn })} value={value.periodEndOn} />
+          <Field label="Начало периода"><PlanningDatePicker accessibilityLabel="Начало периода задачи" onChange={(periodStartOn) => update({ periodStartOn, periodEndOn: value.periodEndOn < periodStartOn ? periodStartOn : value.periodEndOn })} value={value.periodStartOn} /></Field>
+          <Field label="Конец периода"><PlanningDatePicker accessibilityLabel="Конец периода задачи" onChange={(periodEndOn) => update({ periodEndOn })} value={value.periodEndOn} /></Field>
         </View>
       ) : null}
       <Text style={styles.label}>Повторение</Text>
@@ -168,7 +169,7 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
               <Text style={styles.removeBlockText}>Удалить</Text>
             </Pressable>
           </View>
-          <PlanningInput accessibilityLabel={`Дата блока ${index + 1}`} label="Дата" onChangeText={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} />
+          <Field label="Дата"><PlanningDatePicker accessibilityLabel={`Дата блока ${index + 1}`} onChange={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} /></Field>
           <Text style={styles.label}>Начало</Text>
           <PlanningValuePicker accessibilityLabel={`Начало блока ${index + 1}`} onChange={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} options={timeOptions} title="Начало блока" value={block.startsAt} />
           <Text style={styles.label}>Длительность</Text>
@@ -184,6 +185,10 @@ function updateBlock(value: TaskPlanningDraft, id: string, patch: Partial<TaskPl
     ...value,
     blocks: value.blocks.map((block) => block.id === id ? { ...block, ...patch } : block),
   });
+}
+
+function Field({ label, children }: { label: string; children: import('react').ReactNode }) {
+  return <View><Text style={styles.label}>{label}</Text>{children}</View>;
 }
 
 function PlanningInput({

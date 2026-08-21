@@ -89,7 +89,7 @@ export default function ItemRoute() {
         onCompleted={() => router.back()}
         onDeleted={() => router.back()}
         onEdit={() => setEditing(true)}
-        onPlan={kind === 'task' || kind === 'subtask' ? () => setPlanning(true) : undefined}
+        onPlan={kind === 'task' || kind === 'subtask' || kind === 'reminder' ? () => setPlanning(true) : undefined}
       />
       {editing ? (
         <ItemFormSheet
@@ -111,7 +111,7 @@ export default function ItemRoute() {
           />
         ) : null
       )}
-      {planning && (kind === 'task' || kind === 'subtask') ? (
+      {planning && (kind === 'task' || kind === 'subtask' || kind === 'reminder') ? (
         <ItemFormSheet
           item={item}
           mode="edit"

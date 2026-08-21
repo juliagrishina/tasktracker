@@ -67,7 +67,7 @@ export function ItemDetailActions({
       {kind === 'task' && onAddSubtask !== undefined ? (
         <ActionButton disabled={isBusy} label="Добавить подзадачу" onPress={onAddSubtask} tone="secondary" />
       ) : null}
-      {kind === 'task' || kind === 'subtask' ? (
+      {kind === 'task' || kind === 'subtask' || kind === 'reminder' ? (
         <ActionButton
           disabled={isBusy}
           label="Запланировать"

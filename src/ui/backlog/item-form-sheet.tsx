@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAppServices } from '../../application/app-services-provider';
+import type { SaveTaskPlanningInput } from '../../application/planning-types';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 import {
@@ -21,6 +22,7 @@ import {
   validateTaskPlanningDraft,
 } from './task-planning-fields';
 import { PlanningValuePicker } from './planning-value-picker';
+import { PlanningDatePicker } from './planning-date-picker';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
@@ -120,6 +122,7 @@ export function ItemFormSheet({
   const [isSaving, setIsSaving] = useState(false);
   const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
   const [persistedBlockIds, setPersistedBlockIds] = useState<readonly string[]>([]);
+  const [pendingConflict, setPendingConflict] = useState<SaveTaskPlanningInput | null>(null);
   const defaultBlock = useMemo(
     () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date()),
     [planningContext?.defaultDate],
@@ -187,8 +190,9 @@ export function ItemFormSheet({
           startsOn: planningDraft.blocks[0]?.date ?? planningDraft.scheduledOn ?? planningContext?.defaultDate ?? '',
           createdAt: now,
         };
-        const result = await planningActions.saveTaskPlanning({ taskId, blocks, deletedBlockIds: persistedBlockIds.filter((id) => !blocks.some((block) => block.id === id)), recurrence });
-        if (result.conflict !== null) throw new Error('Выбранное время пересекается с другим блоком. Измените интервал и сохраните снова.');
+        const input = { taskId, blocks, deletedBlockIds: persistedBlockIds.filter((id) => !blocks.some((block) => block.id === id)), recurrence };
+        const result = await planningActions.saveTaskPlanning(input);
+        if (result.conflict !== null) { setPendingConflict(input); throw new Error('Выбранное время пересекается с другим блоком. Сохранить с пересечением?'); }
       };
 
       if (type === 'project') {
@@ -273,13 +277,16 @@ export function ItemFormSheet({
         };
 
         if (mode === 'create') {
+          const reminderId = createItemId(type);
           await backlogActions.createReminder({
-            id: createItemId(type),
+            id: reminderId,
             ...reminderInput,
             createdAt: now,
           });
+          await planningActions.syncReminderRecurrence(reminderId);
         } else if (item !== undefined) {
           await backlogActions.updateReminder({ id: item.id, ...reminderInput });
+          await planningActions.syncReminderRecurrence(item.id);
         }
       }
 
@@ -374,11 +381,11 @@ export function ItemFormSheet({
             {type === 'reminder' ? (
               <View style={styles.reminderFields}>
                 <Text style={styles.label}>Дата</Text>
-                <TextInput accessibilityLabel="Дата" onChangeText={setRemindsOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={remindsOn} />
+                <PlanningDatePicker accessibilityLabel="Дата" onChange={setRemindsOn} value={remindsOn} />
                 <Text style={styles.label}>Начало периода</Text>
-                <TextInput accessibilityLabel="Начало периода" onChangeText={setPeriodStartOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={periodStartOn} />
+                <PlanningDatePicker accessibilityLabel="Начало периода" onChange={setPeriodStartOn} value={periodStartOn} />
                 <Text style={styles.label}>Конец периода</Text>
-                <TextInput accessibilityLabel="Конец периода" onChangeText={setPeriodEndOn} placeholder="ГГГГ-ММ-ДД" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} value={periodEndOn} />
+                <PlanningDatePicker accessibilityLabel="Конец периода" onChange={setPeriodEndOn} value={periodEndOn} />
                 <Text style={styles.label}>Повторение</Text>
                 <View style={styles.repeatOptions}>
                   {([
@@ -401,6 +408,7 @@ export function ItemFormSheet({
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
+            {pendingConflict === null ? null : <Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void planningActions.saveTaskPlanning({ ...pendingConflict, forceConflicts: true }).then(() => { setPendingConflict(null); onClose(); })} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable>}
           </ScrollView>
           <View style={styles.footer}>
             <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>
@@ -527,6 +535,7 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.label,
     fontWeight: designTokens.typography.weight.semibold,
   },
+  conflictAction: { alignItems: 'center', backgroundColor: designTokens.color.primary, borderRadius: designTokens.radius.control, justifyContent: 'center', marginTop: designTokens.space[12], minHeight: designTokens.size.touchTargetMin },
   footer: {
     flexDirection: 'row',
     gap: designTokens.space[10],
