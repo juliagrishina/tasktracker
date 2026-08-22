@@ -219,8 +219,8 @@ Epic 10 является первым обязательным post-MVP Epic и 
 1. В репозитории создана только server-side граница Supabase Edge Function `supabase/functions/ai-advisor/`.
 2. В `groq-provider.ts` зафиксированы base URL `https://api.groq.com/openai/v1` и модель `openai/gpt-oss-120b`; provider имеет неизменяемое значение `enabled: false`.
 3. `index.ts` возвращает статус недоступности и не создаёт API-клиент, не читает `GROQ_API_KEY` и не выполняет запросы к Groq.
-4. Для имени серверного секрета создан только файл-шаблон `supabase/functions/.env.example`. Реальный ключ в репозиторий не добавляется, не читается и не копируется; клиентский каталог `src/`, `app.json`, `package.json` и клиентская конфигурация не используют Groq.
-5. При будущем production-деплое `GROQ_API_KEY` отдельно добавляется в Supabase Secrets. Только активированная Edge Function получит его через `Deno.env.get('GROQ_API_KEY')`; ключ никогда не имеет префикс `EXPO_PUBLIC_` и не передаётся в React Native/iOS bundle.
+4. Для имени серверного секрета создан только файл-шаблон `supabase/functions/.env.example`. Локальный реальный `GROQ_API_KEY` хранится только в `supabase/functions/.env.local`, который исключён из Git через `supabase/.gitignore`; он не добавляется в репозиторий, не читается и не копируется в рамках текущей подготовки. Корневой `.env.local` содержит только клиентские `EXPO_PUBLIC_SUPABASE_*` и не используется для Groq.
+5. При будущем production-деплое `GROQ_API_KEY` отдельно добавляется в Supabase Secrets. Только активированная Edge Function получит его через `Deno.env.get('GROQ_API_KEY')`; ключ никогда не имеет префикс `EXPO_PUBLIC_` и не передаётся в React Native/iOS bundle. Клиентский каталог `src/`, `app.json`, `package.json` и клиентская конфигурация не используют Groq.
 
 Подготовка не включает никаких функций Epic 10: отсутствуют вызовы модели, prompts, AI-сценарии, UI, фоновые задачи, аналитика, лимиты, обработка пользовательских данных и бизнес-логика.
 
