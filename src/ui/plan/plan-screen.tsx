@@ -98,6 +98,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           onCreateTask={() => setIsTaskSheetVisible(true)}
           onSelectDate={selectDate}
           onSelectMode={() => setIsModeMenuVisible(true)}
+          onSelectToday={() => setSelectedDate(getCurrentLocalDate())}
           selectedDate={selectedDate}
           getLoadPercent={(date) => planReadModel?.byDate[date]?.loadPercent ?? 0}
         />
@@ -176,6 +177,7 @@ function PeriodPlanView({
   onCreateTask,
   onSelectDate,
   onSelectMode,
+  onSelectToday,
   selectedDate,
   getLoadPercent,
 }: {
@@ -184,6 +186,7 @@ function PeriodPlanView({
   onCreateTask: () => void;
   onSelectDate: (isoDate: string) => void;
   onSelectMode: () => void;
+  onSelectToday: () => void;
   selectedDate: string;
   getLoadPercent: (isoDate: string) => number;
 }) {
@@ -210,6 +213,7 @@ function PeriodPlanView({
           nextAccessibilityLabel={navigationLabels.next}
           onNext={() => onChangeAnchor(1)}
           onPrevious={() => onChangeAnchor(-1)}
+          onToday={onSelectToday}
           previousAccessibilityLabel={navigationLabels.previous}
         />
         <View style={styles.periodContent}>

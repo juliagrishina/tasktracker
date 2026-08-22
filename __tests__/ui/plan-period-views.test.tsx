@@ -3,6 +3,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PlanScreen } from '../../src/ui/plan/plan-screen';
 import { AppServicesProvider } from '../../src/application/app-services-provider';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import { formatPlanWeekRange } from '../../src/ui/plan/plan-period-model';
 
 describe('PlanScreen view mode control', () => {
   test('opens the Plan on the current local device date by default', async () => {
@@ -82,6 +83,9 @@ describe('PlanScreen period views', () => {
     await waitFor(() => {
       expect(view.getByLabelText('Режим просмотра: День')).toBeOnTheScreen();
     });
+    expect(view.getByText('План')).toBeOnTheScreen();
+    expect(view.queryByText('Сегодня')).toBeNull();
+    expect(view.getByText('2026-08-05')).toBeOnTheScreen();
   });
 
   test('renders Month B as a load heatmap and moves to the next month', async () => {
@@ -103,6 +107,28 @@ describe('PlanScreen period views', () => {
     await waitFor(() => {
       expect(view.getAllByText('Сентябрь 2026')).toHaveLength(2);
     });
+  });
+
+  test('returns a period view to the current local day', async () => {
+    const now = new Date();
+    const toLocalIsoDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const today = toLocalIsoDate(now);
+    const twoWeeksEarlier = new Date(now);
+    twoWeeksEarlier.setDate(twoWeeksEarlier.getDate() - 14);
+    const oneWeekEarlier = new Date(now);
+    oneWeekEarlier.setDate(oneWeekEarlier.getDate() - 7);
+    const view = await render(<PlanScreen initialDate={toLocalIsoDate(twoWeeksEarlier)} />);
+
+    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await waitFor(() => expect(view.getByLabelText('Неделя')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Неделя'));
+    await waitFor(() => expect(view.getAllByText(formatPlanWeekRange(toLocalIsoDate(twoWeeksEarlier)))).toHaveLength(2));
+    fireEvent.press(view.getByLabelText('Следующая неделя'));
+    await waitFor(() => expect(view.getAllByText(formatPlanWeekRange(toLocalIsoDate(oneWeekEarlier)))).toHaveLength(2));
+
+    fireEvent.press(view.getByLabelText('Перейти к сегодняшнему дню'));
+
+    await waitFor(() => expect(view.getAllByText(formatPlanWeekRange(today))).toHaveLength(2));
   });
 
   test('derives Week and Month load from stored schedule blocks', async () => {

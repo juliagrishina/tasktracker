@@ -8,6 +8,7 @@ interface PlanPeriodNavigatorProps {
   nextAccessibilityLabel: string;
   onNext: () => void;
   onPrevious: () => void;
+  onToday: () => void;
   previousAccessibilityLabel: string;
 }
 
@@ -16,6 +17,7 @@ export function PlanPeriodNavigator({
   nextAccessibilityLabel,
   onNext,
   onPrevious,
+  onToday,
   previousAccessibilityLabel,
 }: PlanPeriodNavigatorProps) {
   return (
@@ -27,7 +29,16 @@ export function PlanPeriodNavigator({
         style={({ pressed }) => [styles.arrow, pressed && styles.pressed]}>
         <Ionicons color={designTokens.color.text.primary} name="chevron-back" size={20} />
       </Pressable>
-      <Text style={styles.label}>{label}</Text>
+      <View style={styles.labelGroup}>
+        <Text style={styles.label}>{label}</Text>
+        <Pressable
+          accessibilityLabel="Перейти к сегодняшнему дню"
+          accessibilityRole="button"
+          onPress={onToday}
+          style={({ pressed }) => [styles.today, pressed && styles.pressed]}>
+          <Text style={styles.todayText}>Сегодня</Text>
+        </Pressable>
+      </View>
       <Pressable
         accessibilityLabel={nextAccessibilityLabel}
         accessibilityRole="button"
@@ -57,6 +68,21 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.label,
     fontWeight: designTokens.typography.weight.bold,
     lineHeight: designTokens.typography.lineHeight.label,
+  },
+  labelGroup: {
+    alignItems: 'center',
+    gap: designTokens.space[2],
+  },
+  today: {
+    minHeight: designTokens.size.touchTargetMin,
+    justifyContent: 'center',
+    paddingHorizontal: designTokens.space[8],
+  },
+  todayText: {
+    color: designTokens.color.primaryStrong,
+    fontSize: designTokens.typography.size.meta,
+    fontWeight: designTokens.typography.weight.semibold,
+    lineHeight: designTokens.typography.lineHeight.meta,
   },
   pressed: {
     opacity: designTokens.state.pressedOpacity,
