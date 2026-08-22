@@ -162,6 +162,21 @@ describe('PlanScreen period views', () => {
     await waitFor(() => expect(view.getByDisplayValue('Редактируемая задача')).toBeOnTheScreen());
   });
 
+  test('opens the task linked to a timeline block in the editor', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'parent-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Родительская задача', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveTaskItem({ id: 'timeline-subtask', kind: 'subtask', projectId: null, parentTaskId: 'parent-task', title: 'Связанная подзадача', description: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'timeline-subtask-block', taskItemId: 'timeline-subtask', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Связанная подзадача, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Связанная подзадача, 09:00–10:00, колонка 1 из 1'));
+
+    await waitFor(() => expect(view.getByDisplayValue('Связанная подзадача')).toBeOnTheScreen());
+    expect(view.queryByDisplayValue('Родительская задача')).toBeNull();
+  });
+
   test('lets a recurring task instance choose its editing scope from the Day view', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
