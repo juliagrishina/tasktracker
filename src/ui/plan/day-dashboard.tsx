@@ -17,6 +17,7 @@ import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
 import type { PlanViewMode } from './plan-period-model';
 import { DayTimeline } from './day-timeline';
 import type { ScheduleBlock, TaskItem } from '../../domain/entities';
+import type { PlanDayReadModel } from '../../application/plan-read-model';
 
 interface DayDashboardProps {
   mode?: PlanViewMode;
@@ -27,9 +28,10 @@ interface DayDashboardProps {
   onSelectMode?: () => void;
   refreshToken?: number;
   selectedDate?: string;
+  dayPlan?: PlanDayReadModel | null;
 }
 
-export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRecurrence, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10) }: DayDashboardProps) {
+export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRecurrence, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
   const services = useOptionalAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
@@ -46,10 +48,35 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
   const [selectedReminderOccurrence, setSelectedReminderOccurrence] = useState<{ seriesId: string; occursOn: string } | null>(null);
   const [isReminderMoveDialogVisible, setIsReminderMoveDialogVisible] = useState(false);
   const [isReminderRemoveDialogVisible, setIsReminderRemoveDialogVisible] = useState(false);
-  useEffect(() => { if (services !== null) void Promise.all([services.planningActions.getPlanScheduleBlocks(selectedDate), services.planningActions.getPlanUntimedReminders(selectedDate), services.planningActions.getPlanUntimedTasks(selectedDate)]).then(async ([nextBlocks, nextReminders, nextUntimedTasks]) => { const taskEntries = await Promise.all([...new Set(nextBlocks.map((block) => block.taskItemId))].map(async (taskId) => [taskId, await services.planningActions.getTaskItem(taskId)] as const)); setBlocks(nextBlocks); setBlockTasks(new Map(taskEntries.filter((entry): entry is readonly [string, TaskItem] => entry[1] !== null) as readonly (readonly [string, TaskItem])[])); setReminders(nextReminders); setUntimedTasks(nextUntimedTasks); }); }, [refreshToken, services, selectedDate]);
+  useEffect(() => {
+    if (dayPlan !== undefined) {
+      setBlocks(dayPlan?.blocks ?? []);
+      setBlockTasks(dayPlan?.taskById ?? new Map());
+      setReminders(dayPlan?.untimedReminders ?? []);
+      setUntimedTasks(dayPlan?.untimedTasks ?? []);
+      return;
+    }
+    if (services === null) return;
+    let isCurrent = true;
+    void Promise.all([
+      services.planningActions.getPlanScheduleBlocks(selectedDate),
+      services.planningActions.getPlanUntimedReminders(selectedDate),
+      services.planningActions.getPlanUntimedTasks(selectedDate),
+    ]).then(async ([nextBlocks, nextReminders, nextUntimedTasks]) => {
+      const taskEntries = await Promise.all([...new Set(nextBlocks.map((block) => block.taskItemId))]
+        .map(async (taskId) => [taskId, await services.planningActions.getTaskItem(taskId)] as const));
+      if (!isCurrent) return;
+      setBlocks(nextBlocks);
+      setBlockTasks(new Map(taskEntries.filter((entry): entry is readonly [string, TaskItem] => entry[1] !== null) as readonly (readonly [string, TaskItem])[]));
+      setReminders(nextReminders);
+      setUntimedTasks(nextUntimedTasks);
+    });
+    return () => { isCurrent = false; };
+  }, [dayPlan, refreshToken, services, selectedDate]);
   const settings = services?.settings ?? getDefaultSettings();
   const estimatedMinutes = useMemo(() => [...reminders, ...untimedTasks].reduce((total, item) => total + (item.estimatedDurationMinutes ?? 0), 0), [reminders, untimedTasks]);
-  const loadPercent = useMemo(() => getDayLoadPercent(settings, blocks, selectedDate, estimatedMinutes), [blocks, estimatedMinutes, selectedDate, settings]);
+  const calculatedLoadPercent = useMemo(() => getDayLoadPercent(settings, blocks, selectedDate, estimatedMinutes), [blocks, estimatedMinutes, selectedDate, settings]);
+  const loadPercent = dayPlan?.loadPercent ?? calculatedLoadPercent;
   const tone = getPlanLoadTone(loadPercent);
   const timelineBlocks = services === null ? [createDemoTimelineBlock(selectedDate)] : blocks;
   const timelineTitles = services === null
