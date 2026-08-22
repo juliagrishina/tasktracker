@@ -15,7 +15,8 @@ import { RecurrenceScopeDialog } from './recurrence-scope-dialog';
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
 import type { PlanViewMode } from './plan-period-model';
-import type { TaskItem } from '../../domain/entities';
+import { DayTimeline } from './day-timeline';
+import type { ScheduleBlock, TaskItem } from '../../domain/entities';
 
 interface DayDashboardProps {
   mode?: PlanViewMode;
@@ -50,6 +51,26 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
   const estimatedMinutes = useMemo(() => [...reminders, ...untimedTasks].reduce((total, item) => total + (item.estimatedDurationMinutes ?? 0), 0), [reminders, untimedTasks]);
   const loadPercent = useMemo(() => getDayLoadPercent(settings, blocks, selectedDate, estimatedMinutes), [blocks, estimatedMinutes, selectedDate, settings]);
   const tone = getPlanLoadTone(loadPercent);
+  const timelineBlocks = services === null ? [createDemoTimelineBlock(selectedDate)] : blocks;
+  const timelineTitles = services === null
+    ? new Map([['demo-plan-task', 'Планёрка команды']])
+    : new Map([...blockTasks.entries()].map(([taskId, task]) => [taskId, task.title]));
+  const handleBlockPress = (block: ScheduleBlock) => {
+    const parts = block.occurrenceId?.split(':');
+    const task = blockTasks.get(block.taskItemId);
+    if (parts?.[0] === 'virtual' && parts[1] !== undefined && parts[2] !== undefined && task !== undefined) {
+      setSelectedOccurrence({ seriesId: parts[1], occursOn: parts[2], task });
+      return;
+    }
+    if (block.occurrenceId !== null && task !== undefined) {
+      void services?.planningActions.getRecurrenceOccurrenceById(block.occurrenceId).then((occurrence) => {
+        if (occurrence !== null && occurrence !== undefined) setSelectedOccurrence({ seriesId: occurrence.seriesId, occursOn: occurrence.occursOn, task });
+        else onEditTask?.(task);
+      });
+      return;
+    }
+    if (task !== undefined) onEditTask?.(task);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -100,9 +121,7 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
         </SurfaceCard>
 
         <SectionHeader action={`${blocks.length} ${blocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
-        <View style={styles.list}>
-          {services === null ? <PlanListRow onPress={() => undefined} title="Планёрка команды" time="10:00–10:30" /> : blocks.map((block) => <PlanListRow key={block.id} onPress={() => { const parts = block.occurrenceId?.split(':'); const task = blockTasks.get(block.taskItemId); if (parts?.[0] === 'virtual' && parts[1] !== undefined && parts[2] !== undefined && task !== undefined) { setSelectedOccurrence({ seriesId: parts[1], occursOn: parts[2], task }); return; } if (block.occurrenceId !== null && task !== undefined) { void services.planningActions.getRecurrenceOccurrenceById(block.occurrenceId).then((occurrence) => { if (occurrence !== null) setSelectedOccurrence({ seriesId: occurrence.seriesId, occursOn: occurrence.occursOn, task }); else onEditTask?.(task); }); return; } if (task !== undefined) onEditTask?.(task); }} title={blockTasks.get(block.taskItemId)?.title ?? 'Задача'} time={formatBlockTime(block, settings.timeZoneId)} />)}
-        </View>
+        <DayTimeline blocks={timelineBlocks} onPressBlock={handleBlockPress} selectedDate={selectedDate} timeZoneId={settings.timeZoneId} titleByTaskId={timelineTitles} />
         <SectionHeader action={`${reminders.length + untimedTasks.length}`} title="Без времени" />
         <View style={styles.list}>
           {untimedTasks.map((task) => <PlanListRow key={`${task.id}-${task.occursOn ?? 'single'}`} onPress={() => { if (task.seriesId === null && onEditTask !== undefined) onEditTask(task); else setSelectedUntimedTask(task); }} title={task.title} time="Без времени" />)}
@@ -169,6 +188,20 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
 
 function formatBlockTime(block: import('../../domain/entities').ScheduleBlock, timeZoneId: string): string {
   return `${getTimeInTimeZone(block.startsAt, timeZoneId)}–${getTimeInTimeZone(block.endsAt, timeZoneId)}`;
+}
+
+function createDemoTimelineBlock(selectedDate: string): ScheduleBlock {
+  return {
+    id: 'demo-plan-block',
+    taskItemId: 'demo-plan-task',
+    occurrenceId: null,
+    timeZoneId: 'Europe/Moscow',
+    startsAt: `${selectedDate}T10:00:00+03:00`,
+    endsAt: `${selectedDate}T10:30:00+03:00`,
+    createdAt: `${selectedDate}T00:00:00.000Z`,
+    updatedAt: `${selectedDate}T00:00:00.000Z`,
+    deletedAt: null,
+  };
 }
 
 function SectionHeader({ action, title }: { action: string; title: string }) {

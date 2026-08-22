@@ -63,6 +63,7 @@ describe('DayDashboard', () => {
     expect(view.getByText('План в норме')).toBeOnTheScreen();
     expect(view.getByText('Без времени')).toBeOnTheScreen();
     expect(view.getByText('Расписание')).toBeOnTheScreen();
+    expect(view.getByLabelText('Суточная шкала: 24 часа')).toBeOnTheScreen();
     expect(view.getByText('Планёрка команды')).toBeOnTheScreen();
   });
 });
