@@ -50,13 +50,14 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
   const estimatedMinutes = useMemo(() => [...reminders, ...untimedTasks].reduce((total, item) => total + (item.estimatedDurationMinutes ?? 0), 0), [reminders, untimedTasks]);
   const loadPercent = useMemo(() => getDayLoadPercent(settings, blocks, selectedDate, estimatedMinutes), [blocks, estimatedMinutes, selectedDate, settings]);
   const tone = getPlanLoadTone(loadPercent);
+  const title = selectedDate === getCurrentLocalDate() ? 'Сегодня' : 'План';
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerSurface}>
         <View style={[styles.headerContent, temporaryWebContentStyle()]}>
           <View>
-            <Text style={styles.screenTitle}>Сегодня</Text>
+            <Text style={styles.screenTitle}>{title}</Text>
             <Text style={styles.date}>{selectedDate}</Text>
           </View>
           <View style={styles.headerActions}>
@@ -165,6 +166,13 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); setSelectedUntimedTask(null); setIsUntimedRemoveDialogVisible(false); }} onRequestClose={() => setIsUntimedRemoveDialogVisible(false)} visible={isUntimedRemoveDialogVisible} />}
     </SafeAreaView>
   );
+}
+
+function getCurrentLocalDate(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatBlockTime(block: import('../../domain/entities').ScheduleBlock, timeZoneId: string): string {
