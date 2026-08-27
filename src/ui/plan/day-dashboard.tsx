@@ -11,6 +11,7 @@ import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { RecurrenceMoveDialog } from './recurrence-move-dialog';
 import { RecurrenceScopeDialog } from './recurrence-scope-dialog';
+import { CompletionDialog } from './completion-dialog';
 
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
@@ -29,9 +30,10 @@ interface DayDashboardProps {
   refreshToken?: number;
   selectedDate?: string;
   dayPlan?: PlanDayReadModel | null;
+  now?: Date;
 }
 
-export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRecurrence, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
+export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEditRecurrence, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
   const services = useOptionalAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
@@ -48,6 +50,9 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
   const [selectedReminderOccurrence, setSelectedReminderOccurrence] = useState<{ seriesId: string; occursOn: string } | null>(null);
   const [isReminderMoveDialogVisible, setIsReminderMoveDialogVisible] = useState(false);
   const [isReminderRemoveDialogVisible, setIsReminderRemoveDialogVisible] = useState(false);
+  const [completionCandidate, setCompletionCandidate] = useState<{ eligibility: import('../../application/completion-eligibility').CompletionEligibility; task: TaskItem } | null>(null);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
   useEffect(() => {
     if (dayPlan !== undefined || services === null) return;
     let isCurrent = true;
@@ -66,6 +71,20 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
     });
     return () => { isCurrent = false; };
   }, [dayPlan, refreshToken, services, selectedDate]);
+  useEffect(() => {
+    if (services === null) return;
+    let isCurrent = true;
+    void services.planningActions.getCompletionEligibility(now).then(async (eligible) => {
+      const first = eligible[0];
+      if (first === undefined) {
+        if (isCurrent) setCompletionCandidate(null);
+        return;
+      }
+      const task = await services.planningActions.getTaskItem(first.taskItemId);
+      if (isCurrent && task !== null) setCompletionCandidate({ eligibility: first, task });
+    });
+    return () => { isCurrent = false; };
+  }, [now, refreshToken, services]);
   const currentBlocks = useMemo(() => dayPlan === undefined ? blocks : dayPlan?.blocks ?? [], [blocks, dayPlan]);
   const currentBlockTasks = useMemo(() => dayPlan === undefined ? blockTasks : dayPlan?.taskById ?? new Map(), [blockTasks, dayPlan]);
   const currentReminders = useMemo(() => dayPlan === undefined ? reminders : dayPlan?.untimedReminders ?? [], [dayPlan, reminders]);
@@ -94,6 +113,40 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
       return;
     }
     if (task !== undefined) onEditTask?.(task);
+  };
+  const completeCandidate = async () => {
+    if (services === null || completionCandidate === null) return;
+    setCompletionError(null);
+    setIsCompleting(true);
+    try {
+      if (completionCandidate.eligibility.occurrence === null) {
+        await services.backlogActions.completeItem({ kind: completionCandidate.task.kind, id: completionCandidate.task.id, completedAt: (now ?? new Date()).toISOString() });
+      } else {
+        await services.planningActions.setRecurrenceOccurrenceState(
+          completionCandidate.eligibility.occurrence.seriesId,
+          completionCandidate.eligibility.occurrence.occursOn,
+          'completed',
+        );
+      }
+      const [nextBlocks, nextReminders, nextUntimedTasks] = await Promise.all([
+        services.planningActions.getPlanScheduleBlocks(selectedDate),
+        services.planningActions.getPlanUntimedReminders(selectedDate),
+        services.planningActions.getPlanUntimedTasks(selectedDate),
+      ]);
+      const taskEntries = await Promise.all([...new Set(nextBlocks.map((block) => block.taskItemId))]
+        .map(async (taskId) => [taskId, await services.planningActions.getTaskItem(taskId)] as const));
+      setBlocks(nextBlocks);
+      setBlockTasks(new Map(taskEntries.filter((entry): entry is readonly [string, TaskItem] => entry[1] !== null) as readonly (readonly [string, TaskItem])[]));
+      setReminders(nextReminders);
+      setUntimedTasks(nextUntimedTasks);
+      setCompletionCandidate(null);
+      setFeedback('Дело завершено');
+      onRefresh?.();
+    } catch (caughtError) {
+      setCompletionError(caughtError instanceof Error ? caughtError.message : 'Не удалось завершить дело');
+    } finally {
+      setIsCompleting(false);
+    }
   };
   const title = selectedDate === getCurrentLocalDate() ? 'Сегодня' : 'План';
 
@@ -208,6 +261,7 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
       {selectedReminderOccurrence === null ? null : <RecurrenceMoveDialog key={`reminder-${selectedReminderOccurrence.occursOn}`} occursOn={selectedReminderOccurrence.occursOn} onMove={async (targetDate, scope) => { if (services === null) return; await services.planningActions.moveRecurrenceOccurrence({ ...selectedReminderOccurrence, targetDate, scope }); setReminders(await services.planningActions.getPlanUntimedReminders(selectedDate)); onRefresh?.(); setSelectedReminderOccurrence(null); setIsReminderMoveDialogVisible(false); }} onRequestClose={() => setIsReminderMoveDialogVisible(false)} visible={isReminderMoveDialogVisible} />}
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceMoveDialog key={`untimed-${selectedUntimedTask.occursOn}`} occursOn={selectedUntimedTask.occursOn} onMove={async (targetDate, scope) => { if (services === null) return; await services.planningActions.moveRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, targetDate, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedMoveDialogVisible(false); }} onRequestClose={() => setIsUntimedMoveDialogVisible(false)} visible={isUntimedMoveDialogVisible} />}
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedRemoveDialogVisible(false); }} onRequestClose={() => setIsUntimedRemoveDialogVisible(false)} visible={isUntimedRemoveDialogVisible} />}
+      {completionCandidate === null ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) setCompletionCandidate(null); }} taskTitle={completionCandidate.task.title} visible />}
     </SafeAreaView>
   );
 }

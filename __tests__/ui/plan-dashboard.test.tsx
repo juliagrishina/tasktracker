@@ -17,6 +17,38 @@ describe('ProgressRing', () => {
 });
 
 describe('DayDashboard', () => {
+  test('offers to complete the final block and removes the completed task from the active plan', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'completion-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'completion-block', taskItemId: 'completion-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await waitFor(async () => expect(await source.getTaskItem('completion-task')).toMatchObject({ completedAt: expect.any(String) }));
+    await waitFor(() => expect(view.queryByText('Подготовить отчёт')).toBeNull());
+  });
+
+  test('completes only the prompted recurring occurrence', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'recurring-completion-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Повторяющийся отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'recurring-completion-block', taskItemId: 'recurring-completion-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-21T09:00:00+03:00', endsAt: '2026-08-21T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'recurring-completion-series', itemKind: 'task', itemId: 'recurring-completion-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-21', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await waitFor(async () => expect(await source.listRecurrenceOccurrences('recurring-completion-series')).toMatchObject([{ occursOn: '2026-08-28', completedAt: expect.any(String) }]));
+    await expect(source.getTaskItem('recurring-completion-task')).resolves.toMatchObject({ completedAt: null });
+    await expect(source.listRecurrenceOccurrences('recurring-completion-series')).resolves.toHaveLength(1);
+  });
+
   test('updates existing cards immediately after changing the planning timezone', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
