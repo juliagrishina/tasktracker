@@ -50,6 +50,7 @@ import {
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 import { convertReminderToTask } from './convert-reminder-to-task';
+import { localNotificationScheduler } from './local-notification-scheduler';
 import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 
@@ -165,9 +166,9 @@ export function AppServicesProvider({
       moveTaskToProject: (input) =>
         runBacklogAction(() => moveTaskToProject(appSource, input)),
       completeItem: (input) =>
-        runBacklogAction(() => completeBacklogItem(appSource, input)),
+        runBacklogAction(() => completeBacklogItem(appSource, input, localNotificationScheduler)),
       deleteItem: (input) =>
-        runBacklogAction(() => deleteBacklogItem(appSource, input)),
+        runBacklogAction(() => deleteBacklogItem(appSource, input, localNotificationScheduler)),
     }),
     [appSource, runBacklogAction],
   );
@@ -182,11 +183,11 @@ export function AppServicesProvider({
       setRecurrenceOccurrenceState: (seriesId, occursOn, state) => setRecurrenceOccurrenceState(appSource, seriesId, occursOn, state),
       getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
       getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
-      returnTaskToBacklog: (input) => runBacklogAction(() => returnTaskToBacklog(appSource, input)),
+      returnTaskToBacklog: (input) => runBacklogAction(() => returnTaskToBacklog(appSource, input, localNotificationScheduler)),
       syncReminderRecurrence: (reminderId) => syncReminderRecurrence(appSource, reminderId),
-      saveTaskPlanning: (input) => saveTaskPlanning(appSource, input),
-      saveTaskWithPlanning: (input) => runBacklogAction(() => saveTaskWithPlanning(appSource, input)),
-      createTimedReminderTaskWithPlanning: (input) => runBacklogAction(() => createTimedReminderTaskWithPlanning(appSource, input)),
+      saveTaskPlanning: (input) => saveTaskPlanning(appSource, input, localNotificationScheduler),
+      saveTaskWithPlanning: (input) => runBacklogAction(() => saveTaskWithPlanning(appSource, input, localNotificationScheduler)),
+      createTimedReminderTaskWithPlanning: (input) => runBacklogAction(() => createTimedReminderTaskWithPlanning(appSource, input, localNotificationScheduler)),
       saveOccurrenceException: (input) => saveOccurrenceException(appSource, input),
       moveRecurrenceOccurrence: (input) => moveRecurrenceOccurrence(appSource, input),
       removeRecurrenceOccurrence: (input) => removeRecurrenceOccurrence(appSource, input),

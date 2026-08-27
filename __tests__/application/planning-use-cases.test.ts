@@ -2,6 +2,7 @@ import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import type { AppDataSource } from '../../src/data/contracts';
 import * as planningUseCases from '../../src/application/planning-use-cases';
 import type { ScheduleBlock, TaskItem } from '../../src/domain/entities';
+import type { LocalNotificationScheduler } from '../../src/application/notification-scheduling';
 import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 
 const createdAt = '2026-08-01T00:00:00.000Z';
@@ -9,6 +10,25 @@ const task: TaskItem = { id: 'task-1', kind: 'task', projectId: null, parentTask
 const block: ScheduleBlock = { id: 'block-1', taskItemId: task.id, occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-03T09:00:00+03:00', endsAt: '2026-08-03T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null };
 
 describe('planning use cases', () => {
+  test('persists a newly scheduled notification when a future block is saved', async () => {
+    const source = createInMemoryDataSource();
+    const scheduler: LocalNotificationScheduler = {
+      schedule: jest.fn().mockResolvedValue('notification-1'),
+      cancel: jest.fn(),
+    };
+    const futureBlock = {
+      ...block,
+      startsAt: '2026-09-01T10:00:00+03:00',
+      endsAt: '2026-09-01T11:00:00+03:00',
+    };
+    await source.saveTaskItem(task);
+
+    await saveTaskPlanning(source, { taskId: task.id, blocks: [futureBlock], recurrence: null }, scheduler);
+
+    await expect(source.getScheduleBlock(block.id)).resolves.toMatchObject({ notificationId: 'notification-1' });
+    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: '2026-09-01T06:50:00.000Z' }));
+  });
+
   test('projects date-only and period tasks, then records an atomic return to Backlog', async () => {
     const source = createInMemoryDataSource();
     await source.saveTaskItem({ ...task, id: 'date-task', title: 'На дату', scheduledOn: '2026-08-10', periodStartOn: null, periodEndOn: null } as TaskItem);

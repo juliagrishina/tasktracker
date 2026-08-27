@@ -12,6 +12,7 @@ import {
   updateTaskItem,
 } from '../../src/application/backlog-use-cases';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import type { LocalNotificationScheduler } from '../../src/application/notification-scheduling';
 
 const createdAt = '2026-08-02T09:00:00.000Z';
 const completedAt = '2026-08-02T18:00:00.000Z';
@@ -171,6 +172,35 @@ describe('backlog use cases', () => {
     });
   });
 
+  test('cancels a task notification before marking the task complete', async () => {
+    const source = createInMemoryDataSource();
+    const scheduler: LocalNotificationScheduler = {
+      schedule: jest.fn(),
+      cancel: jest.fn(),
+    };
+    const task = await createTask(source, {
+      id: 'notification-task',
+      title: 'Подготовить отчёт',
+      createdAt,
+    });
+    await source.saveScheduleBlock({
+      id: 'notification-block',
+      taskItemId: task.id,
+      occurrenceId: null,
+      notificationId: 'notification-1',
+      timeZoneId: 'Europe/Moscow',
+      startsAt: '2026-09-01T10:00:00+03:00',
+      endsAt: '2026-09-01T11:00:00+03:00',
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    });
+
+    await completeBacklogItem(source, { kind: 'task', id: task.id, completedAt }, scheduler);
+
+    expect(scheduler.cancel).toHaveBeenCalledWith('notification-1');
+  });
+
   test('edits only supplied fields and turns an empty description into null', async () => {
     const source = createInMemoryDataSource();
     const project = await createProject(source, {
@@ -282,5 +312,34 @@ describe('backlog use cases', () => {
 
     const view = await getBacklogView(source);
     expect(view.unassignedTasks).toEqual([]);
+  });
+
+  test('cancels a task notification before deleting the task', async () => {
+    const source = createInMemoryDataSource();
+    const scheduler: LocalNotificationScheduler = {
+      schedule: jest.fn(),
+      cancel: jest.fn(),
+    };
+    const task = await createTask(source, {
+      id: 'delete-notification-task',
+      title: 'Перенести встречу',
+      createdAt,
+    });
+    await source.saveScheduleBlock({
+      id: 'delete-notification-block',
+      taskItemId: task.id,
+      occurrenceId: null,
+      notificationId: 'notification-2',
+      timeZoneId: 'Europe/Moscow',
+      startsAt: '2026-09-01T10:00:00+03:00',
+      endsAt: '2026-09-01T11:00:00+03:00',
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    });
+
+    await deleteBacklogItem(source, { kind: 'task', id: task.id, confirmed: true }, scheduler);
+
+    expect(scheduler.cancel).toHaveBeenCalledWith('notification-2');
   });
 });

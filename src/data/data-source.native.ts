@@ -74,6 +74,7 @@ interface ScheduleBlockRow {
   starts_at: string;
   ends_at: string;
   occurrence_id: string | null;
+  notification_id: string | null;
   time_zone_id: string | null;
   created_at: string;
   updated_at: string | null;
@@ -624,11 +625,12 @@ class NativeDataSource implements AppDataSource {
     const updatedAt = new Date().toISOString();
     await database.runAsync(
       `INSERT INTO schedule_blocks (
-        id, task_item_id, occurrence_id, time_zone_id, starts_at, ends_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, task_item_id, occurrence_id, notification_id, time_zone_id, starts_at, ends_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         task_item_id = excluded.task_item_id,
         occurrence_id = excluded.occurrence_id,
+        notification_id = excluded.notification_id,
         time_zone_id = excluded.time_zone_id,
         starts_at = excluded.starts_at,
         ends_at = excluded.ends_at,
@@ -638,6 +640,7 @@ class NativeDataSource implements AppDataSource {
         block.id,
         block.taskItemId,
         block.occurrenceId,
+        block.notificationId ?? null,
         block.timeZoneId,
         block.startsAt,
         block.endsAt,
@@ -651,7 +654,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, occurrence_id, time_zone_id, starts_at, ends_at, created_at, updated_at
+      `SELECT id, task_item_id, occurrence_id, notification_id, time_zone_id, starts_at, ends_at, created_at, updated_at
       FROM schedule_blocks
       WHERE id = ? AND deleted_at IS NULL`,
       [id],
@@ -663,6 +666,7 @@ class NativeDataSource implements AppDataSource {
           id: row.id,
           taskItemId: row.task_item_id,
           occurrenceId: row.occurrence_id,
+          notificationId: row.notification_id,
           timeZoneId: row.time_zone_id ?? 'UTC',
           startsAt: row.starts_at,
           endsAt: row.ends_at,
@@ -676,7 +680,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, occurrence_id, time_zone_id, starts_at, ends_at, created_at, updated_at
+      `SELECT id, task_item_id, occurrence_id, notification_id, time_zone_id, starts_at, ends_at, created_at, updated_at
       FROM schedule_blocks
       WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
@@ -686,6 +690,7 @@ class NativeDataSource implements AppDataSource {
       id: row.id,
       taskItemId: row.task_item_id,
       occurrenceId: row.occurrence_id,
+      notificationId: row.notification_id,
       timeZoneId: row.time_zone_id ?? 'UTC',
       startsAt: row.starts_at,
       endsAt: row.ends_at,

@@ -4,6 +4,7 @@ import { assertPlanningDateRange, assertRecurrenceOccurrence, assertRecurrenceRu
 import { assertScheduleBlockShape } from '../domain/invariants';
 import { createReminder, createSubtask, createTask, updateTaskItem } from './backlog-use-cases';
 import { convertReminderToTask } from './convert-reminder-to-task';
+import { cancelScheduleBlockNotification, type LocalNotificationScheduler, synchronizeScheduleBlockNotification } from './notification-scheduling';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput, ScheduleConflict } from './planning-types';
 
 export async function getTaskPlanningSnapshot(source: AppDataSource, taskId: EntityId): Promise<{ blocks: readonly ScheduleBlock[]; recurrence: RecurrenceSeries | null; placement: { scheduledOn: string | null; periodStartOn: string | null; periodEndOn: string | null } }> {
@@ -41,9 +42,22 @@ async function getTaskPlanningConflicts(source: AppDataSource, input: SaveTaskPl
   return conflictList(input.blocks, blocks, input.deletedBlockIds ?? [], new Map(tasks.map((task) => [task.id, task.title])));
 }
 
-async function persistTaskPlanning(source: AppDataSource, input: SaveTaskPlanningInput): Promise<void> {
-  for (const id of input.deletedBlockIds ?? []) await source.deleteScheduleBlock(id);
-  for (const block of input.blocks) await source.saveScheduleBlock(block);
+async function persistTaskPlanning(source: AppDataSource, input: SaveTaskPlanningInput, scheduler?: LocalNotificationScheduler): Promise<void> {
+  for (const id of input.deletedBlockIds ?? []) {
+    const current = await source.getScheduleBlock(id);
+    if (current !== null && scheduler !== undefined) await cancelScheduleBlockNotification(scheduler, current);
+    await source.deleteScheduleBlock(id);
+  }
+  const [task, settings] = await Promise.all([source.getTaskItem(input.taskId), source.getSettings()]);
+  if (task === null) throw new Error('Задача для планирования не найдена');
+  for (const block of input.blocks) {
+    const current = await source.getScheduleBlock(block.id);
+    const currentBlock = { ...block, notificationId: current?.notificationId ?? null };
+    const scheduled = scheduler === undefined
+      ? currentBlock
+      : await synchronizeScheduleBlockNotification({ block: currentBlock, notificationLeadMinutes: settings.notificationLeadMinutes, now: new Date(), scheduler, taskTitle: task.title });
+    await source.saveScheduleBlock(scheduled);
+  }
   const series = (await source.listRecurrenceSeries()).filter((candidate) => candidate.itemKind === 'task' && candidate.itemId === input.taskId);
   if (input.recurrence === null) for (const candidate of series) await source.deleteRecurrenceSeries(candidate.id);
   if (input.recurrence !== undefined && input.recurrence !== null) {
@@ -58,12 +72,12 @@ async function persistTaskPlanning(source: AppDataSource, input: SaveTaskPlannin
   }
 }
 
-export async function saveTaskPlanning(source: AppDataSource, input: SaveTaskPlanningInput): Promise<SaveTaskPlanningResult> {
+export async function saveTaskPlanning(source: AppDataSource, input: SaveTaskPlanningInput, scheduler?: LocalNotificationScheduler): Promise<SaveTaskPlanningResult> {
   await validateTaskPlanning(source, input);
   const conflicts = await getTaskPlanningConflicts(source, input);
   if (conflicts.length > 0 && !input.forceConflicts) return { conflict: conflicts };
   await source.transaction(async () => {
-    await persistTaskPlanning(source, input);
+    await persistTaskPlanning(source, input, scheduler);
   });
   return { conflict: null };
 }
@@ -80,7 +94,7 @@ async function changeTaskProject(source: AppDataSource, taskId: EntityId, projec
   for (const item of related) await source.saveTaskItem({ ...item, projectId });
 }
 
-export async function saveTaskWithPlanning(source: AppDataSource, input: SaveTaskWithPlanningInput): Promise<SaveTaskPlanningResult> {
+export async function saveTaskWithPlanning(source: AppDataSource, input: SaveTaskWithPlanningInput, scheduler?: LocalNotificationScheduler): Promise<SaveTaskPlanningResult> {
   if (input.task.id !== input.planning.taskId) throw new Error('Задача и планирование должны относиться к одному элементу');
   const conflicts = await getTaskPlanningConflicts(source, input.planning);
   if (conflicts.length > 0 && !input.planning.forceConflicts) return { conflict: conflicts };
@@ -99,12 +113,12 @@ export async function saveTaskWithPlanning(source: AppDataSource, input: SaveTas
       if (input.task.kind === 'task' && current.projectId !== input.task.projectId) await changeTaskProject(source, input.task.id, input.task.projectId);
     }
     await validateTaskPlanning(source, input.planning);
-    await persistTaskPlanning(source, input.planning);
+    await persistTaskPlanning(source, input.planning, scheduler);
   });
   return { conflict: null };
 }
 
-export async function createTimedReminderTaskWithPlanning(source: AppDataSource, input: CreateTimedReminderTaskWithPlanningInput): Promise<SaveTaskPlanningResult> {
+export async function createTimedReminderTaskWithPlanning(source: AppDataSource, input: CreateTimedReminderTaskWithPlanningInput, scheduler?: LocalNotificationScheduler): Promise<SaveTaskPlanningResult> {
   if (input.taskId !== input.planning.taskId) throw new Error('Задача и планирование должны относиться к одному элементу');
   const conflicts = await getTaskPlanningConflicts(source, input.planning);
   if (conflicts.length > 0 && !input.planning.forceConflicts) return { conflict: conflicts };
@@ -118,7 +132,7 @@ export async function createTimedReminderTaskWithPlanning(source: AppDataSource,
       : { id: `series-${input.taskId}`, frequency: input.reminder.repeatRule.frequency, interval: input.reminder.repeatRule.interval, weekdays: input.reminder.repeatRule.weekdays, startsOn, createdAt: input.reminder.createdAt });
     const planning = { ...input.planning, recurrence };
     await validateTaskPlanning(source, planning);
-    await persistTaskPlanning(source, planning);
+    await persistTaskPlanning(source, planning, scheduler);
   });
   return { conflict: null };
 }
@@ -295,13 +309,16 @@ export async function getPlanUntimedTasks(source: AppDataSource, isoDate: string
   return result;
 }
 
-export async function returnTaskToBacklog(source: AppDataSource, input: { taskId: EntityId; reason: string | null }): Promise<void> {
+export async function returnTaskToBacklog(source: AppDataSource, input: { taskId: EntityId; reason: string | null }, scheduler?: LocalNotificationScheduler): Promise<void> {
   const task = await source.getTaskItem(input.taskId);
   if (task === null) throw new Error('Задача для возврата в Backlog не найдена');
   const returnedAt = new Date().toISOString();
   await source.transaction(async () => {
     await source.saveTaskItem({ ...task, scheduledOn: null, periodStartOn: null, periodEndOn: null });
-    for (const block of await source.listScheduleBlocksForTaskItem(task.id)) if (new Date(block.startsAt).getTime() > new Date(returnedAt).getTime()) await source.deleteScheduleBlock(block.id);
+    for (const block of await source.listScheduleBlocksForTaskItem(task.id)) if (new Date(block.startsAt).getTime() > new Date(returnedAt).getTime()) {
+      if (scheduler !== undefined) await cancelScheduleBlockNotification(scheduler, block);
+      await source.deleteScheduleBlock(block.id);
+    }
     for (const series of await source.listRecurrenceSeries()) if (series.itemKind === 'task' && series.itemId === task.id) await source.deleteRecurrenceSeries(series.id);
     await source.saveTransferHistory({ id: `transfer-${task.id}-${returnedAt}`, taskItemId: task.id, reason: input.reason, returnedAt, createdAt: returnedAt });
   });

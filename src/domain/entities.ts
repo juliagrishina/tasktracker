@@ -68,6 +68,7 @@ export interface ScheduleBlock {
   id: EntityId;
   taskItemId: EntityId;
   occurrenceId: EntityId | null;
+  notificationId?: string | null;
   timeZoneId: string;
   startsAt: string;
   endsAt: string;

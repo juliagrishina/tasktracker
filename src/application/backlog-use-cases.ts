@@ -7,6 +7,8 @@ import {
 } from '../domain/backlog-invariants';
 import type { EntityId, Project, Reminder, TaskItem } from '../domain/entities';
 
+import { cancelScheduleBlockNotification, type LocalNotificationScheduler } from './notification-scheduling';
+
 import type {
   BacklogItemKind,
   BacklogProjectTree,
@@ -28,6 +30,14 @@ import type {
 
 const backlogCategoryOrder = ['reminders', 'unassigned', 'projects'] as const;
 const russianCollator = new Intl.Collator('ru');
+
+async function cancelTaskNotifications(source: AppDataSource, taskIds: readonly EntityId[], scheduler?: LocalNotificationScheduler): Promise<void> {
+  if (scheduler === undefined) return;
+  const ids = new Set(taskIds);
+  for (const block of await source.listScheduleBlocks()) {
+    if (ids.has(block.taskItemId)) await cancelScheduleBlockNotification(scheduler, block);
+  }
+}
 
 function compareByCreatedAt<T extends { id: EntityId; createdAt: string }>(
   left: T,
@@ -379,7 +389,15 @@ export async function moveTaskToProject(
 export async function completeBacklogItem(
   source: AppDataSource,
   input: CompleteBacklogItemInput,
+  scheduler?: LocalNotificationScheduler,
 ): Promise<void> {
+  const related = await source.listTaskItems();
+  const taskIds = input.kind === 'project'
+    ? related.filter((item) => item.projectId === input.id).map((item) => item.id)
+    : input.kind === 'task'
+      ? related.filter((item) => item.id === input.id || item.parentTaskId === input.id).map((item) => item.id)
+      : input.kind === 'subtask' ? [input.id] : [];
+  await cancelTaskNotifications(source, taskIds, scheduler);
   await source.transaction(async () => {
     if (input.kind === 'project') {
       const project = await getExistingProject(source, input.id);
@@ -432,10 +450,17 @@ export async function completeBacklogItem(
 export async function deleteBacklogItem(
   source: AppDataSource,
   input: DeleteBacklogItemInput,
+  scheduler?: LocalNotificationScheduler,
 ): Promise<void> {
   if (!input.confirmed) {
     throw new Error('Требуется подтверждение удаления');
   }
+
+  const related = await source.listTaskItems();
+  const taskIds = input.kind === 'task'
+    ? related.filter((item) => item.id === input.id || item.parentTaskId === input.id).map((item) => item.id)
+    : input.kind === 'subtask' ? [input.id] : [];
+  await cancelTaskNotifications(source, taskIds, scheduler);
 
   await source.transaction(async () => {
     if (input.kind === 'project') {
