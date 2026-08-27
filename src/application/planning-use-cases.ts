@@ -295,7 +295,7 @@ export async function getPlanUntimedTasks(source: AppDataSource, isoDate: string
   const taskIdsWithExactTime = new Set(blocks.map((block) => block.taskItemId));
   const result: PlanUntimedTask[] = [];
   for (const task of tasks) {
-    if (task.completedAt !== null || taskIdsWithExactTime.has(task.id)) continue;
+    if (taskIdsWithExactTime.has(task.id)) continue;
     const recurrence = series.find((candidate) => candidate.itemKind === 'task' && candidate.itemId === task.id);
     if (recurrence === undefined) {
       if (hasPlacementOn(task, isoDate)) result.push({ ...task, seriesId: null, occursOn: null });
@@ -303,8 +303,8 @@ export async function getPlanUntimedTasks(source: AppDataSource, isoDate: string
     }
     const occurrences = await source.listRecurrenceOccurrences(recurrence.id);
     const occurrence = occurrences.find((candidate) => candidate.occursOn === isoDate);
-    if (getRecurrenceDates(recurrence, isoDate, isoDate).includes(isoDate) && !(occurrence?.cancelledAt !== null && occurrence?.cancelledAt !== undefined || occurrence?.completedAt !== null && occurrence?.completedAt !== undefined)) result.push({ ...task, ...(occurrence?.taskPatch ?? {}), seriesId: recurrence.id, occursOn: isoDate });
-    for (const moved of occurrences.filter((candidate) => candidate.taskPatch?.scheduledOn === isoDate && candidate.completedAt === null)) result.push({ ...task, ...(moved.taskPatch ?? {}), seriesId: recurrence.id, occursOn: moved.occursOn });
+    if (getRecurrenceDates(recurrence, isoDate, isoDate).includes(isoDate) && !(occurrence?.cancelledAt !== null && occurrence?.cancelledAt !== undefined)) result.push({ ...task, ...(occurrence?.taskPatch ?? {}), seriesId: recurrence.id, occursOn: isoDate });
+    for (const moved of occurrences.filter((candidate) => candidate.taskPatch?.scheduledOn === isoDate)) result.push({ ...task, ...(moved.taskPatch ?? {}), seriesId: recurrence.id, occursOn: moved.occursOn });
   }
   return result;
 }
@@ -326,16 +326,16 @@ export async function returnTaskToBacklog(source: AppDataSource, input: { taskId
 
 export async function getPlanScheduleBlocks(source: AppDataSource, isoDate: string): Promise<readonly ScheduleBlock[]> {
   const [blocks, series, tasks] = await Promise.all([source.listScheduleBlocks(), source.listRecurrenceSeries(), source.listTaskItems()]);
-  const activeTaskIds = new Set(tasks.filter((task) => task.completedAt === null).map((task) => task.id));
+  const taskIds = new Set(tasks.map((task) => task.id));
   const recurringTaskIds = new Set(series.filter((candidate) => candidate.itemKind === 'task').map((candidate) => candidate.itemId));
-  const projected: ScheduleBlock[] = blocks.filter((block) => block.occurrenceId === null && activeTaskIds.has(block.taskItemId) && !recurringTaskIds.has(block.taskItemId));
-  projected.push(...blocks.filter((block) => block.occurrenceId !== null && activeTaskIds.has(block.taskItemId) && recurringTaskIds.has(block.taskItemId)));
+  const projected: ScheduleBlock[] = blocks.filter((block) => block.occurrenceId === null && taskIds.has(block.taskItemId) && !recurringTaskIds.has(block.taskItemId));
+  projected.push(...blocks.filter((block) => block.occurrenceId !== null && taskIds.has(block.taskItemId) && recurringTaskIds.has(block.taskItemId)));
   for (const recurring of series.filter((candidate) => candidate.itemKind === 'task')) {
     const masterBlocks = blocks.filter((block) => block.occurrenceId === null && block.taskItemId === recurring.itemId);
     if (masterBlocks.length === 0 || !getRecurrenceDates(recurring, isoDate, isoDate).includes(isoDate)) continue;
     const occurrences = await source.listRecurrenceOccurrences(recurring.id);
     const occurrence = occurrences.find((candidate) => candidate.occursOn === isoDate);
-    if (occurrence !== undefined && (occurrence.cancelledAt !== null || occurrence.completedAt !== null)) continue;
+    if (occurrence !== undefined && occurrence.cancelledAt !== null) continue;
     const selected = occurrence?.blocksOverridden ? [] : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, isoDate, recurring.startsOn), id: `recurrence-${recurring.id}-${isoDate}-${block.id}`, occurrenceId: occurrence?.id ?? `virtual:${recurring.id}:${isoDate}` }));
     projected.push(...selected);
   }

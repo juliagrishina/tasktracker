@@ -52,6 +52,8 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
   const [isReminderRemoveDialogVisible, setIsReminderRemoveDialogVisible] = useState(false);
   const [completionCandidate, setCompletionCandidate] = useState<{ eligibility: import('../../application/completion-eligibility').CompletionEligibility; task: TaskItem } | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
+  const [completedBlockIds, setCompletedBlockIds] = useState<ReadonlySet<string>>(new Set());
+  const [completedUntimedTaskKeys, setCompletedUntimedTaskKeys] = useState<ReadonlySet<string>>(new Set());
   const [isCompleting, setIsCompleting] = useState(false);
   useEffect(() => {
     if (dayPlan !== undefined || services === null) return;
@@ -89,6 +91,36 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
   const currentBlockTasks = useMemo(() => dayPlan === undefined ? blockTasks : dayPlan?.taskById ?? new Map(), [blockTasks, dayPlan]);
   const currentReminders = useMemo(() => dayPlan === undefined ? reminders : dayPlan?.untimedReminders ?? [], [dayPlan, reminders]);
   const currentUntimedTasks = useMemo(() => dayPlan === undefined ? untimedTasks : dayPlan?.untimedTasks ?? [], [dayPlan, untimedTasks]);
+  useEffect(() => {
+    if (services === null) return;
+    let isCurrent = true;
+    void Promise.all(currentBlocks.map(async (block) => {
+      const task = currentBlockTasks.get(block.taskItemId);
+      if (task?.completedAt !== null && task?.completedAt !== undefined) return block.id;
+      const virtual = block.occurrenceId?.split(':');
+      const occurrence = virtual?.[0] === 'virtual' && virtual[1] !== undefined && virtual[2] !== undefined
+        ? await services.planningActions.getRecurrenceOccurrence(virtual[1], virtual[2])
+        : block.occurrenceId === null ? null : await services.planningActions.getRecurrenceOccurrenceById(block.occurrenceId);
+      return occurrence?.completedAt === null || occurrence?.completedAt === undefined ? null : block.id;
+    })).then((ids) => {
+      if (isCurrent) setCompletedBlockIds(new Set(ids.filter((id): id is string => id !== null)));
+    });
+    return () => { isCurrent = false; };
+  }, [currentBlockTasks, currentBlocks, services]);
+  useEffect(() => {
+    if (services === null) return;
+    let isCurrent = true;
+    void Promise.all(currentUntimedTasks.map(async (task) => {
+      const key = `${task.id}-${task.occursOn ?? 'single'}`;
+      if (task.completedAt !== null) return key;
+      if (task.seriesId === null || task.occursOn === null) return null;
+      const occurrence = await services.planningActions.getRecurrenceOccurrence(task.seriesId, task.occursOn);
+      return occurrence?.completedAt === null || occurrence?.completedAt === undefined ? null : key;
+    })).then((keys) => {
+      if (isCurrent) setCompletedUntimedTaskKeys(new Set(keys.filter((key): key is string => key !== null)));
+    });
+    return () => { isCurrent = false; };
+  }, [currentUntimedTasks, services]);
   const settings = services?.settings ?? getDefaultSettings();
   const estimatedMinutes = useMemo(() => [...currentReminders, ...currentUntimedTasks].reduce((total, item) => total + (item.estimatedDurationMinutes ?? 0), 0), [currentReminders, currentUntimedTasks]);
   const calculatedLoadPercent = useMemo(() => getDayLoadPercent(settings, currentBlocks, selectedDate, estimatedMinutes), [currentBlocks, estimatedMinutes, selectedDate, settings]);
@@ -200,11 +232,11 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
 
         <SectionHeader action={`${currentReminders.length + currentUntimedTasks.length}`} title="Без времени" />
         <View style={styles.list}>
-          {currentUntimedTasks.map((task) => <PlanListRow key={`${task.id}-${task.occursOn ?? 'single'}`} onPress={() => { if (task.seriesId === null && onEditTask !== undefined) onEditTask(task); else setSelectedUntimedTask(task); }} title={task.title} time="Без времени" />)}
+          {currentUntimedTasks.map((task) => { const key = `${task.id}-${task.occursOn ?? 'single'}`; return <PlanListRow completed={completedUntimedTaskKeys.has(key)} key={key} onPress={() => { if (task.seriesId === null && onEditTask !== undefined) onEditTask(task); else setSelectedUntimedTask(task); }} title={task.title} time="Без времени" />; })}
           {currentReminders.map((reminder) => <PlanListRow key={reminder.id} onPress={() => setSelectedReminderOccurrence(reminder.seriesId === null || reminder.occursOn === null ? null : { seriesId: reminder.seriesId, occursOn: reminder.occursOn })} title={reminder.title} time="Без времени" />)}
         </View>
         <SectionHeader action={`${currentBlocks.length} ${currentBlocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
-        <DayTimeline blocks={timelineBlocks} onPressBlock={handleBlockPress} selectedDate={selectedDate} timeZoneId={settings.timeZoneId} titleByTaskId={timelineTitles} />
+        <DayTimeline blocks={timelineBlocks} completedBlockIds={completedBlockIds} onPressBlock={handleBlockPress} selectedDate={selectedDate} timeZoneId={settings.timeZoneId} titleByTaskId={timelineTitles} />
         {selectedUntimedTask === null ? null : <View style={styles.occurrenceActions}>
           <Text style={styles.sectionTitle}>Запланированная задача</Text>
           <Pressable accessibilityLabel="Вернуть задачу в Backlog" onPress={() => { if (services !== null) void services.planningActions.returnTaskToBacklog({ taskId: selectedUntimedTask.id, reason: null }).then(() => services.planningActions.getPlanUntimedTasks(selectedDate).then((nextTasks) => { setUntimedTasks(nextTasks); setSelectedUntimedTask(null); onRefresh?.(); })); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Вернуть в Backlog</Text></Pressable>
@@ -300,14 +332,14 @@ function SectionHeader({ action, title }: { action: string; title: string }) {
   );
 }
 
-function PlanListRow({ onPress, title, time }: { onPress: () => void; title: string; time: string }) {
+function PlanListRow({ completed = false, onPress, title, time }: { completed?: boolean; onPress: () => void; title: string; time: string }) {
   return (
-    <Pressable onPress={onPress}><SurfaceCard style={styles.listRow}>
+    <Pressable accessibilityLabel={`${time}: ${title}${completed ? ', выполнено' : ''}`} disabled={completed} onPress={onPress}><SurfaceCard style={[styles.listRow, completed && styles.completedListRow]}>
       <Text style={styles.time}>{time}</Text>
-      <View style={styles.dot} />
+      <View style={[styles.dot, completed && styles.completedDot]} />
       <View style={styles.listCopy}>
-        <Text numberOfLines={1} style={styles.listTitle}>{title}</Text>
-        <Text numberOfLines={1} style={styles.listDetail}>Точно запланировано</Text>
+        <Text numberOfLines={1} style={[styles.listTitle, completed && styles.completedListText]}>{completed ? `✓ ${title}` : title}</Text>
+        <Text numberOfLines={1} style={[styles.listDetail, completed && styles.completedListText]}>{completed ? 'Выполнено' : 'Точно запланировано'}</Text>
       </View>
     </SurfaceCard></Pressable>
   );
@@ -445,6 +477,9 @@ const styles = StyleSheet.create({
     gap: designTokens.space[8],
     padding: designTokens.space[10],
   },
+  completedListRow: {
+    backgroundColor: designTokens.color.surface.subtle,
+  },
   time: {
     color: designTokens.color.text.secondary,
     fontSize: designTokens.typography.size.micro,
@@ -456,6 +491,9 @@ const styles = StyleSheet.create({
     borderRadius: designTokens.radius.pill,
     height: designTokens.space[8],
     width: designTokens.space[8],
+  },
+  completedDot: {
+    backgroundColor: designTokens.color.text.tertiary,
   },
   meetingDot: {
     backgroundColor: designTokens.color.meeting.accent,
@@ -474,6 +512,10 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.meta,
     lineHeight: designTokens.typography.lineHeight.meta,
     marginTop: designTokens.space[2],
+  },
+  completedListText: {
+    color: designTokens.color.text.tertiary,
+    textDecorationLine: 'line-through',
   },
   feedback: {
     color: designTokens.color.text.secondary,

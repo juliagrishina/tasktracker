@@ -53,13 +53,13 @@ describe('planning use cases', () => {
     await expect(historySource.listTransferHistories()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ taskItemId: 'period-task', reason: 'не хватило времени' })]));
   });
 
-  test('projects an independent date-only recurrence and returns an expired period to Backlog', async () => {
+  test('keeps a completed date-only recurrence in its planned day and returns an expired period to Backlog', async () => {
     const source = createInMemoryDataSource();
     await source.saveTaskItem({ ...task, id: 'repeat-date-task', scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null } as TaskItem);
     await saveTaskPlanning(source, { taskId: 'repeat-date-task', blocks: [], placement: { scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null }, recurrence: { id: 'repeat-date-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt } });
     await expect((planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> }).getPlanUntimedTasks(source, '2026-08-10')).resolves.toMatchObject([{ id: 'repeat-date-task' }]);
     await setRecurrenceOccurrenceState(source, 'repeat-date-series', '2026-08-10', 'completed');
-    await expect((planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> }).getPlanUntimedTasks(source, '2026-08-10')).resolves.toEqual([]);
+    await expect((planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> }).getPlanUntimedTasks(source, '2026-08-10')).resolves.toMatchObject([{ id: 'repeat-date-task' }]);
 
     await source.saveTaskItem({ ...task, id: 'expired-period-task', scheduledOn: null, periodStartOn: '2026-08-01', periodEndOn: '2026-08-03' } as TaskItem);
     await expect((planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> }).getPlanUntimedTasks(source, '2026-08-04')).resolves.toEqual([]);
@@ -140,11 +140,11 @@ describe('planning use cases', () => {
     await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(0);
   });
 
-  test('completes one recurring instance without completing its series', async () => {
+  test('keeps one completed recurring instance in its day without completing its series', async () => {
     const source = createInMemoryDataSource(); await source.saveTaskItem(task);
     await saveTaskPlanning(source, { taskId: task.id, blocks: [block], recurrence: { id: 'series-1', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt } });
     await setRecurrenceOccurrenceState(source, 'series-1', '2026-08-10', 'completed');
-    await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(0);
+    await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(1);
     await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toHaveLength(1);
   });
 

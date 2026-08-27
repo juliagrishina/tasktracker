@@ -15,6 +15,7 @@ const WORKDAY_END_HOUR = 22;
 
 interface DayTimelineProps {
   blocks: readonly ScheduleBlock[];
+  completedBlockIds?: ReadonlySet<string>;
   now?: Date;
   onPressBlock?: (block: ScheduleBlock) => void;
   selectedDate: string;
@@ -36,7 +37,7 @@ function formatTimeRange(block: ScheduleBlock, timeZoneId: string): string {
   return `${getTimeInTimeZone(block.startsAt, timeZoneId)}–${getTimeInTimeZone(block.endsAt, timeZoneId)}`;
 }
 
-export function DayTimeline({ blocks, now = new Date(), onPressBlock, selectedDate, timeZoneId, titleByTaskId }: DayTimelineProps) {
+export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new Date(), onPressBlock, selectedDate, timeZoneId, titleByTaskId }: DayTimelineProps) {
   const scrollRef = useRef<ScrollView>(null);
   const layouts = getDayTimelineBlockLayouts(blocks, selectedDate, timeZoneId);
   const currentMinute = getCurrentMinute(selectedDate, timeZoneId, now);
@@ -63,11 +64,13 @@ export function DayTimeline({ blocks, now = new Date(), onPressBlock, selectedDa
           {layouts.map((layout) => {
             const title = titleByTaskId.get(layout.block.taskItemId) ?? 'Задача';
             const timeRange = formatTimeRange(layout.block, timeZoneId);
-            const label = `${title}, ${timeRange}, колонка ${layout.column + 1} из ${layout.columnCount}`;
+            const isCompleted = completedBlockIds.has(layout.blockId);
+            const label = `${title}, ${timeRange}${isCompleted ? ', выполнено' : ''}, колонка ${layout.column + 1} из ${layout.columnCount}`;
             return (
               <Pressable
                 accessibilityLabel={label}
                 accessibilityRole="button"
+                disabled={isCompleted}
                 key={layout.blockId}
                 onPress={() => onPressBlock?.(layout.block)}
                 style={({ pressed }) => [
@@ -78,10 +81,11 @@ export function DayTimeline({ blocks, now = new Date(), onPressBlock, selectedDa
                     top: layout.startMinute * MINUTE_HEIGHT,
                     width: `${1 / layout.columnCount * 100}%`,
                   },
+                  isCompleted && styles.completedBlock,
                   pressed && styles.pressed,
                 ]}>
-                <Text numberOfLines={1} style={styles.blockTitle}>{title}</Text>
-                <Text numberOfLines={1} style={styles.blockTime}>{timeRange}</Text>
+                <Text numberOfLines={1} style={[styles.blockTitle, isCompleted && styles.completedText]}>{isCompleted ? `✓ ${title}` : title}</Text>
+                <Text numberOfLines={1} style={[styles.blockTime, isCompleted && styles.completedText]}>{timeRange}</Text>
               </Pressable>
             );
           })}
@@ -145,6 +149,11 @@ const styles = StyleSheet.create({
     paddingVertical: designTokens.space[4],
     position: 'absolute',
   },
+  completedBlock: {
+    backgroundColor: designTokens.color.surface.subtle,
+    borderColor: designTokens.color.border.subtle,
+    borderLeftColor: designTokens.color.border.subtle,
+  },
   blockTitle: {
     color: designTokens.color.primaryStrong,
     fontSize: designTokens.typography.size.label,
@@ -155,6 +164,10 @@ const styles = StyleSheet.create({
     color: designTokens.color.primaryStrong,
     fontSize: designTokens.typography.size.meta,
     lineHeight: designTokens.typography.lineHeight.meta,
+  },
+  completedText: {
+    color: designTokens.color.text.tertiary,
+    textDecorationLine: 'line-through',
   },
   currentTime: {
     alignItems: 'center',

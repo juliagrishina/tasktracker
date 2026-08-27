@@ -17,7 +17,7 @@ describe('ProgressRing', () => {
 });
 
 describe('DayDashboard', () => {
-  test('offers to complete the final block and removes the completed task from the active plan', async () => {
+  test('keeps a completed block in the plan and marks it as completed', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
@@ -29,7 +29,20 @@ describe('DayDashboard', () => {
     await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Да, завершить дело'));
     await waitFor(async () => expect(await source.getTaskItem('completion-task')).toMatchObject({ completedAt: expect.any(String) }));
-    await waitFor(() => expect(view.queryByText('Подготовить отчёт')).toBeNull());
+    await waitFor(() => expect(view.getByLabelText('Подготовить отчёт, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
+  });
+
+  test('shows a completed date-only task and keeps its estimate in the day load', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'completed-date-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Завершённое дело без времени', description: null, estimatedDurationMinutes: 60, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: '2026-08-28T10:00:00.000Z', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Завершённое дело без времени, выполнено')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
   });
 
   test('completes only the prompted recurring occurrence', async () => {
@@ -45,6 +58,7 @@ describe('DayDashboard', () => {
     await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Да, завершить дело'));
     await waitFor(async () => expect(await source.listRecurrenceOccurrences('recurring-completion-series')).toMatchObject([{ occursOn: '2026-08-28', completedAt: expect.any(String) }]));
+    await waitFor(() => expect(view.getByLabelText('Повторяющийся отчёт, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
     await expect(source.getTaskItem('recurring-completion-task')).resolves.toMatchObject({ completedAt: null });
     await expect(source.listRecurrenceOccurrences('recurring-completion-series')).resolves.toHaveLength(1);
   });
