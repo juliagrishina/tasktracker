@@ -12,6 +12,7 @@ import { temporaryWebContentStyle } from '../screen-shell';
 import { RecurrenceMoveDialog } from './recurrence-move-dialog';
 import { RecurrenceScopeDialog } from './recurrence-scope-dialog';
 import { CompletionDialog } from './completion-dialog';
+import { UnfinishedTaskDialog } from './unfinished-task-dialog';
 
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
@@ -52,6 +53,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
   const [isReminderRemoveDialogVisible, setIsReminderRemoveDialogVisible] = useState(false);
   const [completionCandidate, setCompletionCandidate] = useState<{ eligibility: import('../../application/completion-eligibility').CompletionEligibility; task: TaskItem } | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
+  const [isUnfinishedDialogVisible, setIsUnfinishedDialogVisible] = useState(false);
   const [completedBlockIds, setCompletedBlockIds] = useState<ReadonlySet<string>>(new Set());
   const [completedUntimedTaskKeys, setCompletedUntimedTaskKeys] = useState<ReadonlySet<string>>(new Set());
   const [isCompleting, setIsCompleting] = useState(false);
@@ -180,6 +182,50 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
       setIsCompleting(false);
     }
   };
+  const handleUnfinishedMove = () => {
+    if (completionCandidate === null) return;
+    const { eligibility, task } = completionCandidate;
+    setCompletionCandidate(null);
+    setIsUnfinishedDialogVisible(false);
+    if (eligibility.occurrence === null) onEditTask?.(task);
+    else onEditRecurrence?.(task, eligibility.occurrence.seriesId, eligibility.occurrence.occursOn);
+  };
+  const continueCandidate = async () => {
+    if (services === null || completionCandidate === null) return;
+    setCompletionError(null);
+    setIsCompleting(true);
+    try {
+      await services.planningActions.continueIncompleteTask({ taskId: completionCandidate.task.id, occurrence: completionCandidate.eligibility.occurrence, now: now ?? new Date() });
+      setBlocks(await services.planningActions.getPlanScheduleBlocks(selectedDate));
+      setCompletionCandidate(null);
+      setIsUnfinishedDialogVisible(false);
+      setFeedback('Дело продлено на 30 минут');
+      if (completionCandidate.eligibility.occurrence === null) onEditTask?.(completionCandidate.task);
+      else onEditRecurrence?.(completionCandidate.task, completionCandidate.eligibility.occurrence.seriesId, completionCandidate.eligibility.occurrence.occursOn);
+      onRefresh?.();
+    } catch (caughtError) {
+      setCompletionError(caughtError instanceof Error ? caughtError.message : 'Не удалось продлить дело');
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+  const returnCandidateToBacklog = async (reason: string | null) => {
+    if (services === null || completionCandidate === null) return;
+    setCompletionError(null);
+    setIsCompleting(true);
+    try {
+      await services.planningActions.returnIncompleteTaskToBacklog({ taskId: completionCandidate.task.id, occurrence: completionCandidate.eligibility.occurrence, reason });
+      setBlocks(await services.planningActions.getPlanScheduleBlocks(selectedDate));
+      setCompletionCandidate(null);
+      setIsUnfinishedDialogVisible(false);
+      setFeedback('Дело возвращено в Backlog');
+      onRefresh?.();
+    } catch (caughtError) {
+      setCompletionError(caughtError instanceof Error ? caughtError.message : 'Не удалось вернуть дело в Backlog');
+    } finally {
+      setIsCompleting(false);
+    }
+  };
   const title = selectedDate === getCurrentLocalDate() ? 'Сегодня' : 'План';
 
   return (
@@ -293,7 +339,8 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
       {selectedReminderOccurrence === null ? null : <RecurrenceMoveDialog key={`reminder-${selectedReminderOccurrence.occursOn}`} occursOn={selectedReminderOccurrence.occursOn} onMove={async (targetDate, scope) => { if (services === null) return; await services.planningActions.moveRecurrenceOccurrence({ ...selectedReminderOccurrence, targetDate, scope }); setReminders(await services.planningActions.getPlanUntimedReminders(selectedDate)); onRefresh?.(); setSelectedReminderOccurrence(null); setIsReminderMoveDialogVisible(false); }} onRequestClose={() => setIsReminderMoveDialogVisible(false)} visible={isReminderMoveDialogVisible} />}
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceMoveDialog key={`untimed-${selectedUntimedTask.occursOn}`} occursOn={selectedUntimedTask.occursOn} onMove={async (targetDate, scope) => { if (services === null) return; await services.planningActions.moveRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, targetDate, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedMoveDialogVisible(false); }} onRequestClose={() => setIsUntimedMoveDialogVisible(false)} visible={isUntimedMoveDialogVisible} />}
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedRemoveDialogVisible(false); }} onRequestClose={() => setIsUntimedRemoveDialogVisible(false)} visible={isUntimedRemoveDialogVisible} />}
-      {completionCandidate === null ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) setCompletionCandidate(null); }} taskTitle={completionCandidate.task.title} visible />}
+      {completionCandidate === null ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) setCompletionCandidate(null); }} onUnfinished={() => { if (!isCompleting) setIsUnfinishedDialogVisible(true); }} taskTitle={completionCandidate.task.title} visible={!isUnfinishedDialogVisible} />}
+      {completionCandidate === null ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
     </SafeAreaView>
   );
 }

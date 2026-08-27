@@ -6,12 +6,13 @@ interface CompletionDialogProps {
   error?: string | null;
   isCompleting: boolean;
   onComplete: () => void;
+  onUnfinished?: () => void;
   onRequestClose: () => void;
   taskTitle: string;
   visible: boolean;
 }
 
-export function CompletionDialog({ error = null, isCompleting, onComplete, onRequestClose, taskTitle, visible }: CompletionDialogProps) {
+export function CompletionDialog({ error = null, isCompleting, onComplete, onRequestClose, onUnfinished, taskTitle, visible }: CompletionDialogProps) {
   return (
     <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible={visible}>
       <View style={styles.overlay}>
@@ -35,6 +36,14 @@ export function CompletionDialog({ error = null, isCompleting, onComplete, onReq
             style={({ pressed }) => [styles.deferAction, pressed && styles.pressed, isCompleting && styles.disabled]}>
             <Text style={styles.deferActionText}>Не сейчас</Text>
           </Pressable>
+          {onUnfinished === undefined ? null : <Pressable
+            accessibilityLabel="Нет, выбрать действие для незавершённого дела"
+            accessibilityRole="button"
+            disabled={isCompleting}
+            onPress={onUnfinished}
+            style={({ pressed }) => [styles.deferAction, pressed && styles.pressed, isCompleting && styles.disabled]}>
+            <Text style={styles.deferActionText}>Нет, выбрать действие</Text>
+          </Pressable>}
         </View>
       </View>
     </Modal>

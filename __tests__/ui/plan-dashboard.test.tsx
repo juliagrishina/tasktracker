@@ -33,6 +33,27 @@ describe('DayDashboard', () => {
     expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
   });
 
+  test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'unfinished-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Незавершённый отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'unfinished-block', taskItemId: 'unfinished-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const editTask = jest.fn();
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} onEditTask={editTask} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Нет, выбрать действие для незавершённого дела')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Нет, выбрать действие для незавершённого дела'));
+    await waitFor(() => expect(view.getByText('Что сделать с незавершённым делом?')).toBeOnTheScreen());
+    expect(view.getByLabelText('Перенести дело на другое время')).toBeOnTheScreen();
+    expect(view.getByLabelText('Причина возврата в Backlog')).toBeOnTheScreen();
+    expect(view.getByLabelText('Вернуть дело в Backlog')).toBeOnTheScreen();
+    fireEvent.press(view.getByLabelText('Продолжить дело на 30 минут'));
+    await waitFor(async () => expect(await source.getScheduleBlock('unfinished-block')).toMatchObject({ endsAt: '2026-08-28T07:30:00.000Z' }));
+    expect(editTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'unfinished-task' }));
+  });
+
   test('shows a completed date-only task and keeps its estimate in the day load', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
