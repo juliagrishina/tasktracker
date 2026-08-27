@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { getDefaultSettings } from '../../src/data/default-settings';
+import type { NotificationPermissionGateway } from '../../src/application/notification-permissions';
 import { SettingsStatePanel } from '../../src/ui/settings/settings-state-panel';
 
 describe('SettingsStatePanel', () => {
@@ -37,6 +38,25 @@ describe('SettingsStatePanel', () => {
 
     await waitFor(() => {
       expect(view.getByText('Статус обновлён в демо-режиме')).toBeOnTheScreen();
+    });
+  });
+
+  test('keeps the planner usable when local notification permission is declined', async () => {
+    const notificationPermissions: NotificationPermissionGateway = {
+      getStatus: jest.fn().mockResolvedValue('undetermined'),
+      requestPermission: jest.fn().mockResolvedValue('denied'),
+    };
+    const view = await render(<SettingsStatePanel notificationPermissions={notificationPermissions} settings={getDefaultSettings()} />);
+
+    await waitFor(() => expect(view.getByRole('button', { name: 'Настроить уведомления' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: 'Настроить уведомления' }));
+    await waitFor(() => expect(view.getByRole('button', { name: 'Разрешить уведомления' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: 'Разрешить уведомления' }));
+
+    await waitFor(() => {
+      expect(notificationPermissions.requestPermission).toHaveBeenCalledTimes(1);
+      expect(view.getByText('Не разрешены')).toBeOnTheScreen();
+      expect(view.getByText(/Планирование и отметка дел останутся доступными/)).toBeOnTheScreen();
     });
   });
 });

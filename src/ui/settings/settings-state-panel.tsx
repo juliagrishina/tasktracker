@@ -1,8 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  createNotificationPermissionService,
+  type NotificationPermissionGateway,
+  type NotificationPermissionStatus,
+  type WebNotificationPermissionGateway,
+} from '../../application/notification-permissions';
 import type { AppSettings } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
@@ -13,15 +19,28 @@ import { temporaryWebContentStyle } from '../screen-shell';
 import { settingsDemoState } from './settings-demo-state';
 
 interface SettingsStatePanelProps {
+  notificationPermissions?: NotificationPermissionGateway;
   onTimeZoneChange?: (timeZoneId: string) => Promise<void>;
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ onTimeZoneChange, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ notificationPermissions, onTimeZoneChange, settings }: SettingsStatePanelProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
+  const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<NotificationPermissionStatus>('undetermined');
   const [syncLabel, setSyncLabel] = useState<string>(settingsDemoState.initialSyncLabel);
   const [isTimeZoneEditorVisible, setIsTimeZoneEditorVisible] = useState(false);
   const [timeZoneId, setTimeZoneId] = useState(settings.timeZoneId);
+  const notificationPermissionService = useMemo(
+    () => notificationPermissions === undefined ? undefined : createNotificationPermissionService(notificationPermissions),
+    [notificationPermissions],
+  );
+
+  useEffect(() => {
+    if (notificationPermissionService === undefined) return;
+
+    void notificationPermissionService.getStatus().then(setNotificationPermissionStatus);
+  }, [notificationPermissionService]);
 
   const refreshDemoStatus = () => {
     setSyncLabel('синхр. только что');
@@ -36,6 +55,22 @@ export function SettingsStatePanel({ onTimeZoneChange, settings }: SettingsState
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'Не удалось обновить часовой пояс');
     }
+  };
+  const requestNotificationPermission = async () => {
+    if (notificationPermissionService === undefined) return;
+
+    const nextStatus = await notificationPermissionService.request();
+    setNotificationPermissionStatus(nextStatus);
+    setIsNotificationPermissionPromptVisible(false);
+    setFeedback(nextStatus === 'granted' ? 'Локальные уведомления разрешены' : 'Уведомления не разрешены; планирование продолжит работать');
+  };
+  const postponeNotificationPermission = () => {
+    if (isWebNotificationPermissionGateway(notificationPermissions)) {
+      notificationPermissions.setDemoStatus('denied');
+      setNotificationPermissionStatus('denied');
+    }
+    setIsNotificationPermissionPromptVisible(false);
+    setFeedback('Уведомления можно включить позже в настройках');
   };
 
   return (
@@ -78,10 +113,17 @@ export function SettingsStatePanel({ onTimeZoneChange, settings }: SettingsState
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
-          <CardTitle action="Разрешены" actionTone="success" title="Уведомления" />
+          <CardTitle action={notificationPermissionAction(notificationPermissionStatus).label} actionTone={notificationPermissionAction(notificationPermissionStatus).tone} onAction={notificationPermissions === undefined ? undefined : () => setIsNotificationPermissionPromptVisible(true)} title="Уведомления" />
           <SettingsRow description="До задачи или встречи" label="Предварительное" value={`${settings.notificationLeadMinutes} минут`} />
+          {isNotificationPermissionPromptVisible ? <View style={styles.permissionPrompt}>
+            <Text style={styles.settingDescription}>Разрешите локальные напоминания, когда будете готовы. План дня останется доступен в любом случае.</Text>
+            <View style={styles.buttonRow}>
+              <View style={styles.actionWrap}><ActionButton label="Разрешить уведомления" onPress={() => void requestNotificationPermission()} tone="primary" /></View>
+              <View style={styles.actionWrap}><ActionButton label="Не сейчас" onPress={postponeNotificationPermission} tone="secondary" /></View>
+            </View>
+          </View> : null}
           <View style={styles.warning}>
-            <Text style={styles.warningText}>Если уведомления будут запрещены, приложение продолжит работать и предложит открыть системные настройки.</Text>
+            <Text style={styles.warningText}>{notificationPermissionStatus === 'denied' ? 'Уведомления не разрешены. Планирование и отметка дел останутся доступными.' : 'Если уведомления будут запрещены, приложение продолжит работать и предложит открыть системные настройки.'}</Text>
           </View>
         </SurfaceCard>
 
@@ -101,6 +143,19 @@ export function SettingsStatePanel({ onTimeZoneChange, settings }: SettingsState
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function notificationPermissionAction(status: NotificationPermissionStatus): { label: string; tone: 'default' | 'success' } {
+  if (status === 'granted') return { label: 'Разрешены', tone: 'success' };
+  if (status === 'denied') return { label: 'Не разрешены', tone: 'default' };
+
+  return { label: 'Настроить уведомления', tone: 'default' };
+}
+
+function isWebNotificationPermissionGateway(
+  gateway: NotificationPermissionGateway | undefined,
+): gateway is WebNotificationPermissionGateway {
+  return gateway !== undefined && 'setDemoStatus' in gateway;
 }
 
 function CardTitle({ action, actionTone = 'default', onAction, title }: {
@@ -297,6 +352,12 @@ const styles = StyleSheet.create({
     borderRadius: designTokens.radius.row,
     marginTop: designTokens.space[8],
     padding: designTokens.space[10],
+  },
+  permissionPrompt: {
+    borderTopColor: designTokens.color.border.subtle,
+    borderTopWidth: 1,
+    marginTop: designTokens.space[8],
+    paddingTop: designTokens.space[8],
   },
   warningText: {
     color: designTokens.color.feedback.warning.foreground,
