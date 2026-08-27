@@ -53,10 +53,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
   const [planReadModel, setPlanReadModel] = useState<PlanReadModel | null>(null);
 
   useEffect(() => {
-    if (services === null) {
-      setPlanReadModel(null);
-      return;
-    }
+    if (services === null) return;
     let isCurrent = true;
     const dates = mode === 'week'
       ? getWeekLoadDays(selectedDate).map((day) => day.isoDate)
@@ -68,6 +65,8 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
       .catch(() => { if (isCurrent) setPlanReadModel(null); });
     return () => { isCurrent = false; };
   }, [mode, refreshToken, selectedDate, services]);
+
+  const activePlanReadModel = services === null ? null : planReadModel;
 
   const selectDate = (isoDate: string) => {
     setSelectedDate(isoDate);
@@ -87,7 +86,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           }}
           onRefresh={() => { setRefreshToken((value) => value + 1); }}
           refreshToken={refreshToken}
-          dayPlan={services === null ? undefined : planReadModel?.byDate[selectedDate] ?? null}
+          dayPlan={services === null ? undefined : activePlanReadModel?.byDate[selectedDate] ?? null}
           onSelectMode={() => setIsModeMenuVisible(true)}
           selectedDate={selectedDate}
         />
@@ -100,7 +99,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           onSelectMode={() => setIsModeMenuVisible(true)}
           onSelectToday={() => setSelectedDate(getCurrentLocalDate())}
           selectedDate={selectedDate}
-          getLoadPercent={(date) => planReadModel?.byDate[date]?.loadPercent ?? 0}
+          getLoadPercent={(date) => activePlanReadModel?.byDate[date]?.loadPercent ?? 0}
         />
       )}
       <PlanViewMenu
