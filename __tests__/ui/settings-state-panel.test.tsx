@@ -20,8 +20,10 @@ describe('SettingsStatePanel', () => {
   test('renders the approved Settings 2 state cards', async () => {
     const view = await render(<SettingsStatePanel settings={getDefaultSettings()} />);
 
-    expect(view.getByText('Microsoft 365')).toBeOnTheScreen();
-    expect(view.getByText('Подключён')).toBeOnTheScreen();
+    expect(view.getByText('Microsoft 365: Не подключён')).toBeOnTheScreen();
+    expect(view.getByText('Не подключён')).toBeOnTheScreen();
+    expect(view.getByRole('button', { name: 'Обновить сейчас' })).toBeOnTheScreen();
+    expect(view.getByRole('button', { name: 'Управление' })).toBeOnTheScreen();
     expect(view.getByText('Рабочий диапазон')).toBeOnTheScreen();
     expect(view.getByText('Уведомления')).toBeOnTheScreen();
     expect(view.getByText('Удалить локальные данные')).toBeOnTheScreen();

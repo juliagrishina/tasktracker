@@ -54,10 +54,10 @@ export function SettingsStatePanel({ onTimeZoneChange, settings }: SettingsState
               <Text style={styles.microsoftIconLabel}>O</Text>
             </View>
             <View style={styles.grow}>
-              <Text style={styles.cardHeading}>Microsoft 365</Text>
+              <Text style={styles.cardHeading}>Microsoft 365: Не подключён</Text>
               <Text style={styles.cardSubheading}>{settingsDemoState.account} · {syncLabel}</Text>
             </View>
-            <StatusPill label={settingsDemoState.connectedLabel} tone="success" />
+            <StatusPill label={settingsDemoState.connectedLabel} tone="neutral" />
           </View>
           <View style={styles.buttonRow}>
             <View style={styles.actionWrap}>
