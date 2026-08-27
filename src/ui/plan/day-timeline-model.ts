@@ -1,5 +1,5 @@
 import type { ScheduleBlock } from '../../domain/entities';
-import { getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
+import { getDateTimeInTimeZone } from '../../domain/planning';
 
 export interface DayTimelineBlockLayout {
   block: ScheduleBlock;
@@ -22,10 +22,10 @@ function toMinute(time: string): number {
 }
 
 function minuteWithinDay(instant: string, selectedDate: string, timeZoneId: string, isEnd: boolean): number {
-  const date = getDateInTimeZone(instant, timeZoneId);
-  if (date < selectedDate) return 0;
-  if (date > selectedDate) return 24 * 60;
-  const minute = toMinute(getTimeInTimeZone(instant, timeZoneId));
+  const dateTime = getDateTimeInTimeZone(instant, timeZoneId);
+  if (dateTime.date < selectedDate) return 0;
+  if (dateTime.date > selectedDate) return 24 * 60;
+  const minute = toMinute(dateTime.time);
   return isEnd && minute === 0 && new Date(instant).getTime() > new Date(`${selectedDate}T00:00:00Z`).getTime() ? 24 * 60 : minute;
 }
 

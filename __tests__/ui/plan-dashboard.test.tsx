@@ -103,7 +103,7 @@ function DashboardWithTimeZoneSwitch() {
   return <><DayDashboard selectedDate="2026-08-03" /><Pressable accessibilityLabel="Переключить пояс на Berlin" onPress={() => void settingsActions.updateTimeZone('Europe/Berlin')}><Text>Berlin</Text></Pressable></>;
 }
 
-function collectRenderedText(node: ReturnType<Awaited<ReturnType<typeof render>>['toJSON']>): readonly string[] {
+function collectRenderedText(node: unknown): readonly string[] {
   if (node === null) {
     return [];
   }
@@ -116,5 +116,9 @@ function collectRenderedText(node: ReturnType<Awaited<ReturnType<typeof render>>
     return node.flatMap(collectRenderedText);
   }
 
-  return node.children.flatMap(collectRenderedText);
+  if (typeof node === 'object' && 'children' in node && Array.isArray(node.children)) {
+    return node.children.flatMap(collectRenderedText);
+  }
+
+  return [];
 }

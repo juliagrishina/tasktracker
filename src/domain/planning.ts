@@ -16,18 +16,26 @@ function addDays(value: string, amount: number): string { const date = dateOf(va
 function addMonths(value: string, amount: number): string { const source = dateOf(value); const month = source.getUTCMonth() + amount; const year = source.getUTCFullYear() + Math.floor(month / 12); const targetMonth = (month % 12 + 12) % 12; return iso(new Date(Date.UTC(year, targetMonth, Math.min(source.getUTCDate(), new Date(Date.UTC(year, targetMonth + 1, 0)).getUTCDate())))); }
 function weekday(value: string): number { return dateOf(value).getUTCDay(); }
 function minutes(value: string): number { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new Error('Время должно иметь формат ЧЧ:ММ'); const [hours, mins] = value.split(':').map(Number); return hours * 60 + mins; }
+const timeZoneFormatters = new Map<string, Intl.DateTimeFormat>();
 function zoneParts(instant: Date, timeZone: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(instant);
+  const formatter = timeZoneFormatters.get(timeZone) ?? new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+  timeZoneFormatters.set(timeZone, formatter);
+  const parts = formatter.formatToParts(instant);
   const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value);
   return { year: get('year'), month: get('month'), day: get('day'), hour: get('hour'), minute: get('minute'), second: get('second') };
 }
-export function getDateInTimeZone(instant: string, timeZone: string): string {
+export function getDateTimeInTimeZone(instant: string, timeZone: string): { date: string; time: string } {
   const parts = zoneParts(new Date(instant), timeZone);
-  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+  return {
+    date: `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`,
+    time: `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`,
+  };
+}
+export function getDateInTimeZone(instant: string, timeZone: string): string {
+  return getDateTimeInTimeZone(instant, timeZone).date;
 }
 export function getTimeInTimeZone(instant: string, timeZone: string): string {
-  const parts = zoneParts(new Date(instant), timeZone);
-  return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
+  return getDateTimeInTimeZone(instant, timeZone).time;
 }
 function zoned(value: string, timeZone: string): Date {
   const [year, month, day] = value.split('-').map(Number); const guessed = Date.UTC(year, month - 1, day);
