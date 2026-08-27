@@ -57,6 +57,21 @@ describe('DayDashboard', () => {
     await waitFor(() => expect(source.getTaskItem('date-task')).resolves.toMatchObject({ scheduledOn: null }));
   });
 
+  test('renders untimed items before the schedule', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'untimed-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Без времени', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-10', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveTaskItem({ id: 'timed-task', kind: 'task', projectId: null, parentTaskId: null, title: 'По расписанию', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'timed-block', taskItemId: 'timed-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-10T09:00:00+03:00', endsAt: '2026-08-10T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('По расписанию')).toBeOnTheScreen());
+
+    const renderedText = collectRenderedText(view.toJSON());
+    expect(renderedText.indexOf('Без времени')).toBeLessThan(renderedText.indexOf('Расписание'));
+  });
+
   test('uses a supplied day read-model instead of a second plan query', async () => {
     const model: PlanDayReadModel = {
       blocks: [{ id: 'model-block', taskItemId: 'model-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-10T09:00:00+03:00', endsAt: '2026-08-10T10:00:00+03:00', createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z', deletedAt: null }],
@@ -86,4 +101,20 @@ describe('DayDashboard', () => {
 function DashboardWithTimeZoneSwitch() {
   const { settingsActions } = useAppServices();
   return <><DayDashboard selectedDate="2026-08-03" /><Pressable accessibilityLabel="Переключить пояс на Berlin" onPress={() => void settingsActions.updateTimeZone('Europe/Berlin')}><Text>Berlin</Text></Pressable></>;
+}
+
+function collectRenderedText(node: ReturnType<Awaited<ReturnType<typeof render>>['toJSON']>): readonly string[] {
+  if (node === null) {
+    return [];
+  }
+
+  if (typeof node === 'string') {
+    return [node];
+  }
+
+  if (Array.isArray(node)) {
+    return node.flatMap(collectRenderedText);
+  }
+
+  return node.children.flatMap(collectRenderedText);
 }

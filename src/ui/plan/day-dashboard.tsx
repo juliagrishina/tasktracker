@@ -148,13 +148,13 @@ export function DayDashboard({ mode = 'day', onCreateTask, onEditTask, onEditRec
           </SurfaceCard>}
         </SurfaceCard>
 
-        <SectionHeader action={`${blocks.length} ${blocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
-        <DayTimeline blocks={timelineBlocks} onPressBlock={handleBlockPress} selectedDate={selectedDate} timeZoneId={settings.timeZoneId} titleByTaskId={timelineTitles} />
         <SectionHeader action={`${reminders.length + untimedTasks.length}`} title="Без времени" />
         <View style={styles.list}>
           {untimedTasks.map((task) => <PlanListRow key={`${task.id}-${task.occursOn ?? 'single'}`} onPress={() => { if (task.seriesId === null && onEditTask !== undefined) onEditTask(task); else setSelectedUntimedTask(task); }} title={task.title} time="Без времени" />)}
           {reminders.map((reminder) => <PlanListRow key={reminder.id} onPress={() => setSelectedReminderOccurrence(reminder.seriesId === null || reminder.occursOn === null ? null : { seriesId: reminder.seriesId, occursOn: reminder.occursOn })} title={reminder.title} time="Без времени" />)}
         </View>
+        <SectionHeader action={`${blocks.length} ${blocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
+        <DayTimeline blocks={timelineBlocks} onPressBlock={handleBlockPress} selectedDate={selectedDate} timeZoneId={settings.timeZoneId} titleByTaskId={timelineTitles} />
         {selectedUntimedTask === null ? null : <View style={styles.occurrenceActions}>
           <Text style={styles.sectionTitle}>Запланированная задача</Text>
           <Pressable accessibilityLabel="Вернуть задачу в Backlog" onPress={() => { if (services !== null) void services.planningActions.returnTaskToBacklog({ taskId: selectedUntimedTask.id, reason: null }).then(() => services.planningActions.getPlanUntimedTasks(selectedDate).then((nextTasks) => { setUntimedTasks(nextTasks); setSelectedUntimedTask(null); })); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Вернуть в Backlog</Text></Pressable>
