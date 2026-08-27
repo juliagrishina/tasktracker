@@ -50,6 +50,7 @@ import {
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 import { convertReminderToTask } from './convert-reminder-to-task';
+import { getCompletionEligibility, type CompletionEligibility } from './completion-eligibility';
 import { localNotificationScheduler } from './local-notification-scheduler';
 import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
@@ -74,6 +75,7 @@ interface PlanningActions {
   convertReminderToTask(reminderId: string, taskId: string, createdAt: string): ReturnType<typeof convertReminderToTask>;
   getPlanScheduleBlocks(isoDate: string): ReturnType<typeof getPlanScheduleBlocks>;
   getTaskPlanningSnapshot(taskId: string): ReturnType<typeof getTaskPlanningSnapshot>;
+  getCompletionEligibility(now?: Date): Promise<readonly CompletionEligibility[]>;
   setRecurrenceOccurrenceState(seriesId: string, occursOn: string, state: 'completed' | 'cancelled'): Promise<void>;
   getPlanUntimedReminders(isoDate: string): ReturnType<typeof getPlanUntimedReminders>;
   getPlanUntimedTasks(isoDate: string): ReturnType<typeof getPlanUntimedTasks>;
@@ -180,6 +182,7 @@ export function AppServicesProvider({
       convertReminderToTask: (reminderId, taskId, createdAt) => convertReminderToTask(appSource, { reminderId, taskId, createdAt }),
       getPlanScheduleBlocks: (isoDate) => getPlanScheduleBlocks(appSource, isoDate),
       getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),
+      getCompletionEligibility: (now) => getCompletionEligibility(appSource, now),
       setRecurrenceOccurrenceState: (seriesId, occursOn, state) => setRecurrenceOccurrenceState(appSource, seriesId, occursOn, state),
       getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
       getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
