@@ -31,6 +31,7 @@ import type {
   CreateTaskInput,
   DeleteBacklogItemInput,
   MoveTaskToProjectInput,
+  ResumeBacklogItemInput,
   UpdateProjectInput,
   UpdateReminderInput,
   UpdateTaskItemInput,
@@ -45,17 +46,19 @@ import {
   deleteBacklogItem,
   getBacklogView,
   moveTaskToProject,
+  resumeBacklogItem,
   updateProject,
   updateReminder,
   updateTaskItem,
 } from './backlog-use-cases';
+import { getCompletedItems, type CompletedItem } from './completed-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 import { convertReminderToTask } from './convert-reminder-to-task';
 import { getCompletionEligibility, type CompletionEligibility } from './completion-eligibility';
 import { getEveningReviewItems, synchronizeEveningReviewNotification } from './evening-review';
 import { localNotificationScheduler } from './local-notification-scheduler';
-import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
+import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 
 interface BacklogActions {
@@ -69,6 +72,7 @@ interface BacklogActions {
   updateReminder(input: UpdateReminderInput): Promise<Reminder>;
   moveTaskToProject(input: MoveTaskToProjectInput): Promise<void>;
   completeItem(input: CompleteBacklogItemInput): Promise<void>;
+  resumeItem(input: ResumeBacklogItemInput): Promise<void>;
   deleteItem(input: DeleteBacklogItemInput): Promise<void>;
 }
 
@@ -80,7 +84,7 @@ interface PlanningActions {
   getPlanScheduleBlocks(isoDate: string): ReturnType<typeof getPlanScheduleBlocks>;
   getTaskPlanningSnapshot(taskId: string): ReturnType<typeof getTaskPlanningSnapshot>;
   getCompletionEligibility(now?: Date): Promise<readonly CompletionEligibility[]>;
-  setRecurrenceOccurrenceState(seriesId: string, occursOn: string, state: 'completed' | 'cancelled'): Promise<void>;
+  setRecurrenceOccurrenceState(seriesId: string, occursOn: string, state: 'active' | 'completed' | 'cancelled'): Promise<void>;
   getPlanUntimedReminders(isoDate: string): ReturnType<typeof getPlanUntimedReminders>;
   getPlanUntimedTasks(isoDate: string): ReturnType<typeof getPlanUntimedTasks>;
   getEveningReviewItems(isoDate: string): ReturnType<typeof getEveningReviewItems>;
@@ -107,9 +111,11 @@ interface AppServicesContextValue {
   settingsActions: SettingsActions;
   demoTasks: DemoTaskGroups;
   backlog: BacklogView;
+  completedItems: readonly CompletedItem[];
   backlogActions: BacklogActions;
   planningActions: PlanningActions;
   refreshBacklog(): Promise<void>;
+  refreshCompletedItems(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
 }
@@ -140,6 +146,7 @@ export function AppServicesProvider({
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);
   const [demoTasks, setDemoTasks] = useState<DemoTaskGroups>(emptyDemoTaskGroups);
   const [backlog, setBacklog] = useState<BacklogView>(emptyBacklogView);
+  const [completedItems, setCompletedItems] = useState<readonly CompletedItem[]>([]);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const runStorageDiagnostic = useCallback(
     () => runPersistenceDiagnostic(appSource),
@@ -149,13 +156,16 @@ export function AppServicesProvider({
     const loadedBacklog = await getBacklogView(appSource);
     setBacklog(loadedBacklog);
   }, [appSource]);
+  const refreshCompletedItems = useCallback(async () => {
+    setCompletedItems(await getCompletedItems(appSource));
+  }, [appSource]);
   const runBacklogAction = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T> => {
       const result = await action();
-      await refreshBacklog();
+      await Promise.all([refreshBacklog(), refreshCompletedItems()]);
       return result;
     },
-    [refreshBacklog],
+    [refreshBacklog, refreshCompletedItems],
   );
   const backlogActions = useMemo<BacklogActions>(
     () => ({
@@ -178,6 +188,7 @@ export function AppServicesProvider({
         runBacklogAction(() => moveTaskToProject(appSource, input)),
       completeItem: (input) =>
         runBacklogAction(() => completeBacklogItem(appSource, input, localNotificationScheduler)),
+      resumeItem: (input) => runBacklogAction(() => resumeBacklogItem(appSource, input)),
       deleteItem: (input) =>
         runBacklogAction(() => deleteBacklogItem(appSource, input, localNotificationScheduler)),
     }),
@@ -192,7 +203,11 @@ export function AppServicesProvider({
       getPlanScheduleBlocks: (isoDate) => getPlanScheduleBlocks(appSource, isoDate),
       getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),
       getCompletionEligibility: (now) => getCompletionEligibility(appSource, now),
-      setRecurrenceOccurrenceState: (seriesId, occursOn, state) => setRecurrenceOccurrenceState(appSource, seriesId, occursOn, state),
+      setRecurrenceOccurrenceState: async (seriesId, occursOn, state) => {
+        await setRecurrenceOccurrenceState(appSource, seriesId, occursOn, state);
+        void synchronizeRecurrenceNotifications(appSource, localNotificationScheduler, new Date()).catch(() => {});
+        await refreshCompletedItems();
+      },
       getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
       getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
       getEveningReviewItems: (isoDate) => getEveningReviewItems(appSource, isoDate),
@@ -203,11 +218,11 @@ export function AppServicesProvider({
       saveTaskPlanning: (input) => saveTaskPlanning(appSource, input, localNotificationScheduler),
       saveTaskWithPlanning: (input) => runBacklogAction(() => saveTaskWithPlanning(appSource, input, localNotificationScheduler)),
       createTimedReminderTaskWithPlanning: (input) => runBacklogAction(() => createTimedReminderTaskWithPlanning(appSource, input, localNotificationScheduler)),
-      saveOccurrenceException: (input) => saveOccurrenceException(appSource, input),
-      moveRecurrenceOccurrence: (input) => moveRecurrenceOccurrence(appSource, input),
-      removeRecurrenceOccurrence: (input) => removeRecurrenceOccurrence(appSource, input),
+      saveOccurrenceException: (input) => saveOccurrenceException(appSource, input, localNotificationScheduler),
+      moveRecurrenceOccurrence: (input) => moveRecurrenceOccurrence(appSource, input, localNotificationScheduler),
+      removeRecurrenceOccurrence: (input) => removeRecurrenceOccurrence(appSource, input, localNotificationScheduler),
     }),
-    [appSource, runBacklogAction],
+    [appSource, refreshCompletedItems, runBacklogAction],
   );
   const settingsActions = useMemo<SettingsActions>(
     () => ({
@@ -245,12 +260,15 @@ export function AppServicesProvider({
           ? await loadDemoTaskGroups(appSource)
           : emptyDemoTaskGroups;
         const loadedBacklog = await getBacklogView(appSource);
+        const loadedCompletedItems = await getCompletedItems(appSource);
+        void synchronizeRecurrenceNotifications(appSource, localNotificationScheduler, new Date()).catch(() => {});
         void synchronizeEveningReviewNotification({ now: new Date(), scheduler: localNotificationScheduler, source: appSource }).catch(() => {});
 
         if (isMounted) {
           setSettings(loadedSettings);
           setDemoTasks(loadedDemoTasks);
           setBacklog(loadedBacklog);
+          setCompletedItems(loadedCompletedItems);
           setIsReady(true);
         }
       } catch {
@@ -282,9 +300,11 @@ export function AppServicesProvider({
         settingsActions,
         demoTasks,
         backlog,
+        completedItems,
         backlogActions,
         planningActions,
         refreshBacklog,
+        refreshCompletedItems,
         runBacklogAction,
         runStorageDiagnostic,
       }}>

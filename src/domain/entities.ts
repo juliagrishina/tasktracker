@@ -104,6 +104,7 @@ export interface RecurrenceOccurrence {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  notificationIds?: readonly string[];
 }
 
 export interface TransferHistory {

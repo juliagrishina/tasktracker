@@ -71,10 +71,9 @@ export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new D
               <Pressable
                 accessibilityLabel={label}
                 accessibilityRole="button"
-                disabled={isCompleted}
                 key={layout.blockId}
                 onLongPress={() => onLongPressBlock?.(layout.block)}
-                onPress={() => onPressBlock?.(layout.block)}
+                onPress={() => { if (!isCompleted) onPressBlock?.(layout.block); }}
                 style={({ pressed }) => [
                   styles.block,
                   {

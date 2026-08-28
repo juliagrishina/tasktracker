@@ -24,6 +24,7 @@ import type {
   CreateTaskInput,
   DeleteBacklogItemInput,
   MoveTaskToProjectInput,
+  ResumeBacklogItemInput,
   UpdateProjectInput,
   UpdateReminderInput,
   UpdateTaskItemInput,
@@ -473,6 +474,24 @@ export async function completeBacklogItem(
   });
 }
 
+export async function resumeBacklogItem(source: AppDataSource, input: ResumeBacklogItemInput): Promise<void> {
+  await source.transaction(async () => {
+    if (input.kind === 'project') {
+      const project = await getExistingProject(source, input.id);
+      await source.saveProject({ ...project, completedAt: null });
+      return;
+    }
+    if (input.kind === 'reminder') {
+      const reminder = await getExistingReminder(source, input.id);
+      await source.saveReminder({ ...reminder, completedAt: null });
+      return;
+    }
+    const task = await getExistingTaskItem(source, input.id);
+    if (task.kind !== input.kind) throw new Error('Тип элемента не совпадает');
+    await source.saveTaskItem({ ...task, completedAt: null });
+  });
+}
+
 export async function deleteBacklogItem(
   source: AppDataSource,
   input: DeleteBacklogItemInput,
@@ -531,6 +550,7 @@ export type {
   CreateTaskInput,
   DeleteBacklogItemInput,
   MoveTaskToProjectInput,
+  ResumeBacklogItemInput,
   UpdateProjectInput,
   UpdateReminderInput,
   UpdateTaskItemInput,

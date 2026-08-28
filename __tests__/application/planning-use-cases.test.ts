@@ -3,7 +3,7 @@ import type { AppDataSource } from '../../src/data/contracts';
 import * as planningUseCases from '../../src/application/planning-use-cases';
 import type { ScheduleBlock, TaskItem } from '../../src/domain/entities';
 import type { LocalNotificationScheduler } from '../../src/application/notification-scheduling';
-import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, returnIncompleteTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
+import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, returnIncompleteTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 
 const createdAt = '2026-08-01T00:00:00.000Z';
 const task: TaskItem = { id: 'task-1', kind: 'task', projectId: null, parentTaskId: null, title: 'План', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null };
@@ -178,6 +178,31 @@ describe('planning use cases', () => {
     await setRecurrenceOccurrenceState(source, 'series-1', '2026-08-10', 'completed');
     await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(1);
     await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toHaveLength(1);
+  });
+
+  test('synchronizes concrete notifications for the 90-day recurring horizon and removes a completed occurrence notification', async () => {
+    const source = createInMemoryDataSource();
+    const scheduler: LocalNotificationScheduler = {
+      schedule: jest.fn().mockResolvedValue('recurrence-notification'),
+      cancel: jest.fn(),
+    };
+    await source.saveTaskItem(task);
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [block],
+      recurrence: { id: 'notification-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
+    });
+
+    await synchronizeRecurrenceNotifications(source, scheduler, new Date('2026-08-01T00:00:00.000Z'));
+
+    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: '2026-08-03T05:50:00.000Z' }));
+    const occurrence = (await source.listRecurrenceOccurrences('notification-series')).find((candidate) => candidate.occursOn === '2026-08-03');
+    expect(occurrence?.notificationIds).toEqual(['recurrence-notification']);
+
+    await setRecurrenceOccurrenceState(source, 'notification-series', '2026-08-03', 'completed', scheduler, new Date('2026-08-01T00:00:00.000Z'));
+
+    expect(scheduler.cancel).toHaveBeenCalledWith('recurrence-notification');
+    await expect(source.listRecurrenceOccurrences('notification-series')).resolves.toContainEqual(expect.objectContaining({ occursOn: '2026-08-03', completedAt: expect.any(String), notificationIds: [] }));
   });
 
   test('moves either one recurring occurrence or the whole series', async () => {

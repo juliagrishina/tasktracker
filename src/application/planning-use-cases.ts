@@ -79,6 +79,7 @@ export async function saveTaskPlanning(source: AppDataSource, input: SaveTaskPla
   await source.transaction(async () => {
     await persistTaskPlanning(source, input, scheduler);
   });
+  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
   return { conflict: null };
 }
 
@@ -115,6 +116,7 @@ export async function saveTaskWithPlanning(source: AppDataSource, input: SaveTas
     await validateTaskPlanning(source, input.planning);
     await persistTaskPlanning(source, input.planning, scheduler);
   });
+  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
   return { conflict: null };
 }
 
@@ -134,24 +136,29 @@ export async function createTimedReminderTaskWithPlanning(source: AppDataSource,
     await validateTaskPlanning(source, planning);
     await persistTaskPlanning(source, planning, scheduler);
   });
+  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
   return { conflict: null };
 }
 
-export async function saveOccurrenceException(source: AppDataSource, input: SaveOccurrenceExceptionInput): Promise<void> {
+export async function saveOccurrenceException(source: AppDataSource, input: SaveOccurrenceExceptionInput, scheduler?: LocalNotificationScheduler): Promise<void> {
   const series = await source.getRecurrenceSeries(input.occurrence.seriesId);
   if (series === null) throw new Error('Серия повторения не найдена');
   assertRecurrenceOccurrence(series, input.occurrence.occursOn);
   if (series.itemKind === 'task' && input.occurrence.reminderPatch !== null) throw new Error('Неверный тип изменения экземпляра');
   if (series.itemKind === 'reminder' && input.occurrence.taskPatch !== null) throw new Error('Неверный тип изменения экземпляра');
-  await source.transaction(async () => { await persistOccurrenceException(source, input); });
+  await source.transaction(async () => { await persistOccurrenceException(source, input, scheduler); });
+  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
 }
 
-async function persistOccurrenceException(source: AppDataSource, input: SaveOccurrenceExceptionInput): Promise<void> {
+async function persistOccurrenceException(source: AppDataSource, input: SaveOccurrenceExceptionInput, scheduler?: LocalNotificationScheduler): Promise<void> {
   await source.saveRecurrenceOccurrence(input.occurrence);
   if (input.blocks === undefined) return;
   const taskId = input.blocks[0]?.taskItemId;
   const prior = await source.listScheduleBlocks();
-  for (const block of prior.filter((block) => block.occurrenceId === input.occurrence.id)) await source.deleteScheduleBlock(block.id);
+  for (const block of prior.filter((block) => block.occurrenceId === input.occurrence.id)) {
+    if (scheduler !== undefined) await cancelScheduleBlockNotification(scheduler, block);
+    await source.deleteScheduleBlock(block.id);
+  }
   if (taskId === undefined) return;
   const task = await source.getTaskItem(taskId);
   if (task === null) throw new Error('Задача для блока не найдена');
@@ -164,7 +171,7 @@ function shiftedDate(value: string, source: string, target: string): string {
   return new Date(base.getTime() + delta).toISOString().slice(0, 10);
 }
 
-export async function moveRecurrenceOccurrence(source: AppDataSource, input: MoveRecurrenceOccurrenceInput): Promise<{ scope: MoveRecurrenceOccurrenceInput['scope'] }> {
+export async function moveRecurrenceOccurrence(source: AppDataSource, input: MoveRecurrenceOccurrenceInput, scheduler?: LocalNotificationScheduler): Promise<{ scope: MoveRecurrenceOccurrenceInput['scope'] }> {
   const series = await source.getRecurrenceSeries(input.seriesId);
   if (series === null) throw new Error('Серия повторения не найдена');
   assertRecurrenceOccurrence(series, input.occursOn);
@@ -209,30 +216,33 @@ export async function moveRecurrenceOccurrence(source: AppDataSource, input: Mov
       deletedAt: null,
     };
     const blocks = masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, input.targetDate), id: `${occurrenceId}-${block.id}`, occurrenceId, createdAt: now, updatedAt: now, deletedAt: null }));
-    await persistOccurrenceException(source, { occurrence, blocks });
+    await persistOccurrenceException(source, { occurrence, blocks }, scheduler);
   });
+  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
   return { scope: input.scope };
 }
 
-export async function setRecurrenceOccurrenceState(source: AppDataSource, seriesId: EntityId, occursOn: string, state: 'completed' | 'cancelled'): Promise<void> {
+export async function setRecurrenceOccurrenceState(source: AppDataSource, seriesId: EntityId, occursOn: string, state: 'active' | 'completed' | 'cancelled', scheduler?: LocalNotificationScheduler, now = new Date()): Promise<void> {
   const series = await source.getRecurrenceSeries(seriesId);
   if (series === null) throw new Error('Серия повторения не найдена');
   assertRecurrenceOccurrence(series, occursOn);
   const existing = (await source.listRecurrenceOccurrences(seriesId)).find((occurrence) => occurrence.occursOn === occursOn);
-  const now = new Date().toISOString();
+  const updatedAt = now.toISOString();
   await source.saveRecurrenceOccurrence({
     id: existing?.id ?? `occurrence-${seriesId}-${occursOn}`,
     seriesId,
     occursOn,
-    cancelledAt: state === 'cancelled' ? now : null,
-    completedAt: state === 'completed' ? now : null,
+    cancelledAt: state === 'cancelled' ? updatedAt : null,
+    completedAt: state === 'completed' ? updatedAt : null,
     blocksOverridden: existing?.blocksOverridden ?? false,
     taskPatch: existing?.taskPatch ?? null,
     reminderPatch: existing?.reminderPatch ?? null,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
+    createdAt: existing?.createdAt ?? updatedAt,
+    updatedAt,
     deletedAt: null,
+    notificationIds: existing?.notificationIds ?? [],
   });
+  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, now);
 }
 
 export interface UnfinishedTaskActionInput {
@@ -249,6 +259,73 @@ async function synchronizeBlocks(source: AppDataSource, task: TaskItem, blocks: 
   if (scheduler === undefined) return blocks;
   const settings = await source.getSettings();
   return Promise.all(blocks.map((block) => synchronizeScheduleBlockNotification({ block, notificationLeadMinutes: settings.notificationLeadMinutes, now, scheduler, taskTitle: task.title })));
+}
+
+const recurrenceNotificationHorizonDays = 90;
+
+function addCalendarDays(isoDate: string, days: number): string {
+  const value = new Date(`${isoDate}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+async function cancelOccurrenceNotifications(source: AppDataSource, scheduler: LocalNotificationScheduler): Promise<void> {
+  const [series, blocks] = await Promise.all([source.listRecurrenceSeries(), source.listScheduleBlocks()]);
+  for (const block of blocks.filter((candidate) => candidate.occurrenceId !== null || series.some((recurrence) => recurrence.itemKind === 'task' && recurrence.itemId === candidate.taskItemId))) {
+    await cancelScheduleBlockNotification(scheduler, block);
+    if (block.notificationId !== null && block.notificationId !== undefined) await source.saveScheduleBlock({ ...block, notificationId: null });
+  }
+  for (const recurrence of series) {
+    for (const occurrence of await source.listRecurrenceOccurrences(recurrence.id)) {
+      for (const notificationId of occurrence.notificationIds ?? []) await scheduler.cancel(notificationId);
+      if ((occurrence.notificationIds?.length ?? 0) > 0) await source.saveRecurrenceOccurrence({ ...occurrence, notificationIds: [] });
+    }
+  }
+}
+
+/**
+ * Native notifications cannot safely represent an unbounded custom recurrence.
+ * Store concrete notifications only in the next 90 days and rebuild them on startup
+ * and after every change to a recurrence series or occurrence.
+ */
+export async function synchronizeRecurrenceNotifications(source: AppDataSource, scheduler: LocalNotificationScheduler, now = new Date()): Promise<void> {
+  const [settings, series, allBlocks] = await Promise.all([source.getSettings(), source.listRecurrenceSeries(), source.listScheduleBlocks()]);
+  const fromDate = getDateInTimeZone(now.toISOString(), settings.timeZoneId);
+  const untilDate = addCalendarDays(fromDate, recurrenceNotificationHorizonDays);
+  await cancelOccurrenceNotifications(source, scheduler);
+
+  for (const recurrence of series.filter((candidate) => candidate.itemKind === 'task')) {
+    const task = await source.getTaskItem(recurrence.itemId);
+    if (task === null || task.completedAt !== null) continue;
+    const masterBlocks = allBlocks.filter((block) => block.taskItemId === task.id && block.occurrenceId === null);
+    if (masterBlocks.length === 0) continue;
+    const occurrences = await source.listRecurrenceOccurrences(recurrence.id);
+    const byDate = new Map(occurrences.map((occurrence) => [occurrence.occursOn, occurrence]));
+    for (const occursOn of getRecurrenceDates(recurrence, fromDate, untilDate)) {
+      const existing = byDate.get(occursOn);
+      if (existing?.cancelledAt !== null && existing?.cancelledAt !== undefined || existing?.completedAt !== null && existing?.completedAt !== undefined) continue;
+      const occurrenceId = existing?.id ?? `occurrence-${recurrence.id}-${occursOn}`;
+      const blocks = existing?.blocksOverridden
+        ? (await source.listScheduleBlocks()).filter((block) => block.occurrenceId === occurrenceId)
+        : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, occursOn, recurrence.startsOn), id: `${occurrenceId}-${block.id}`, occurrenceId, notificationId: null }));
+      const scheduled = await synchronizeBlocks(source, task, blocks.map((block) => ({ ...block, notificationId: null })), now, scheduler);
+      const notificationIds = scheduled.map((block) => block.notificationId).filter((id): id is string => id !== null && id !== undefined);
+      await source.saveRecurrenceOccurrence({
+        id: occurrenceId,
+        seriesId: recurrence.id,
+        occursOn,
+        cancelledAt: existing?.cancelledAt ?? null,
+        completedAt: existing?.completedAt ?? null,
+        blocksOverridden: existing?.blocksOverridden ?? false,
+        taskPatch: existing?.taskPatch ?? null,
+        reminderPatch: existing?.reminderPatch ?? null,
+        createdAt: existing?.createdAt ?? now.toISOString(),
+        updatedAt: now.toISOString(),
+        deletedAt: existing?.deletedAt ?? null,
+        notificationIds,
+      });
+    }
+  }
 }
 
 export async function continueIncompleteTask(source: AppDataSource, input: UnfinishedTaskActionInput, scheduler?: LocalNotificationScheduler): Promise<void> {
@@ -295,8 +372,9 @@ export async function continueIncompleteTask(source: AppDataSource, input: Unfin
         deletedAt: null,
       },
       blocks: scheduledBlocks,
-    });
+    }, scheduler);
   });
+  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, actionTime);
 }
 
 export async function returnIncompleteTaskToBacklog(source: AppDataSource, input: UnfinishedTaskActionInput & { reason: string | null }, scheduler?: LocalNotificationScheduler): Promise<void> {
@@ -306,7 +384,7 @@ export async function returnIncompleteTaskToBacklog(source: AppDataSource, input
   }
   const series = await source.getRecurrenceSeries(input.occurrence.seriesId);
   if (series === null || series.itemKind !== 'task' || series.itemId !== input.taskId) throw new Error('Повторение задачи не найдено');
-  await setRecurrenceOccurrenceState(source, series.id, input.occurrence.occursOn, 'cancelled');
+  await setRecurrenceOccurrenceState(source, series.id, input.occurrence.occursOn, 'cancelled', scheduler);
   const occurrence = (await source.listRecurrenceOccurrences(series.id)).find((candidate) => candidate.occursOn === input.occurrence!.occursOn);
   if (occurrence !== undefined) {
     for (const block of (await source.listScheduleBlocks()).filter((candidate) => candidate.occurrenceId === occurrence.id)) {
@@ -318,12 +396,13 @@ export async function returnIncompleteTaskToBacklog(source: AppDataSource, input
   await source.saveTransferHistory({ id: `transfer-${input.taskId}-${input.occurrence.occursOn}-${returnedAt}`, taskItemId: input.taskId, reason: input.reason, returnedAt, createdAt: returnedAt });
 }
 
-export async function removeRecurrenceOccurrence(source: AppDataSource, input: { seriesId: EntityId; occursOn: string; scope: 'occurrence' | 'series' }): Promise<void> {
+export async function removeRecurrenceOccurrence(source: AppDataSource, input: { seriesId: EntityId; occursOn: string; scope: 'occurrence' | 'series' }, scheduler?: LocalNotificationScheduler): Promise<void> {
   const series = await source.getRecurrenceSeries(input.seriesId);
   if (series === null) throw new Error('Серия повторения не найдена');
   assertRecurrenceOccurrence(series, input.occursOn);
   if (input.scope === 'series') {
     await source.transaction(async () => { await source.deleteRecurrenceSeries(series.id); });
+    if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
     return;
   }
   const existing = (await source.listRecurrenceOccurrences(series.id)).find((occurrence) => occurrence.occursOn === input.occursOn);
@@ -332,7 +411,7 @@ export async function removeRecurrenceOccurrence(source: AppDataSource, input: {
     await source.saveRecurrenceOccurrence({ ...existing, cancelledAt: now, completedAt: null, taskPatch: null, reminderPatch: null, updatedAt: now });
     return;
   }
-  await setRecurrenceOccurrenceState(source, series.id, input.occursOn, 'cancelled');
+  await setRecurrenceOccurrenceState(source, series.id, input.occursOn, 'cancelled', scheduler);
 }
 
 export async function syncReminderRecurrence(source: AppDataSource, reminderId: EntityId): Promise<void> {

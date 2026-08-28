@@ -123,6 +123,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           item={editingTask}
           mode="edit"
           onComplete={async (task) => { if (services === null) return; await services.backlogActions.completeItem({ kind: task.kind, id: task.id, completedAt: new Date().toISOString() }); }}
+          onResume={async (task) => { if (services === null) return; await services.backlogActions.resumeItem({ kind: task.kind, id: task.id }); setRefreshToken((value) => value + 1); }}
           onClose={() => setEditingTask(null)}
           onDelete={async (task) => { if (services === null) return; await services.backlogActions.deleteItem({ kind: task.kind, id: task.id, confirmed: true }); setEditingTask(null); setRefreshToken((value) => value + 1); }}
           planningContext={{ defaultDate: selectedDate }}
@@ -133,9 +134,10 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
       ) : null}
       {editingOccurrence !== null ? (
         <ItemFormSheet
-          item={{ ...editingOccurrence.task, ...editingOccurrence.occurrence?.taskPatch }}
+          item={{ ...editingOccurrence.task, ...editingOccurrence.occurrence?.taskPatch, completedAt: editingOccurrence.occurrence?.completedAt ?? editingOccurrence.task.completedAt }}
           mode="edit"
           onComplete={async () => { if (services === null) return; await services.planningActions.setRecurrenceOccurrenceState(editingOccurrence.seriesId, editingOccurrence.occursOn, 'completed'); }}
+          onResume={async () => { if (services === null) return; await services.planningActions.setRecurrenceOccurrenceState(editingOccurrence.seriesId, editingOccurrence.occursOn, 'active'); setRefreshToken((value) => value + 1); }}
           occurrenceEdit={{
             onSave: async ({ title, description, estimatedDurationMinutes }) => {
               if (services === null) return;

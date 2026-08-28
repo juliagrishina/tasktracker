@@ -103,6 +103,11 @@ export interface CompleteBacklogItemInput {
   completedAt: string;
 }
 
+export interface ResumeBacklogItemInput {
+  kind: BacklogItemKind;
+  id: EntityId;
+}
+
 export interface DeleteBacklogItemInput {
   kind: BacklogItemKind;
   id: EntityId;

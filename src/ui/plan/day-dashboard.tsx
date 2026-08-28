@@ -240,9 +240,27 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
       if (occurrence !== null && scope === 'occurrence') await services.planningActions.setRecurrenceOccurrenceState(occurrence.seriesId, occurrence.occursOn, 'completed');
       else await services.backlogActions.completeItem({ kind: task.kind, id: task.id, completedAt: (now ?? new Date()).toISOString() });
     }
+    if (action === 'resume') {
+      if (occurrence !== null && scope === 'occurrence') await services.planningActions.setRecurrenceOccurrenceState(occurrence.seriesId, occurrence.occursOn, 'active');
+      else await services.backlogActions.resumeItem({ kind: task.kind, id: task.id });
+    }
     if (action === 'returnToBacklog') {
-      if (occurrence !== null && scope === 'occurrence') await services.planningActions.returnIncompleteTaskToBacklog({ taskId: task.id, occurrence, reason: null });
-      else await services.planningActions.returnTaskToBacklog({ taskId: task.id, reason: null });
+      if (occurrence !== null && scope === 'occurrence') {
+        await services.planningActions.setRecurrenceOccurrenceState(occurrence.seriesId, occurrence.occursOn, 'active');
+        await services.planningActions.returnIncompleteTaskToBacklog({ taskId: task.id, occurrence, reason: null });
+      } else {
+        await services.backlogActions.resumeItem({ kind: task.kind, id: task.id });
+        await services.planningActions.returnTaskToBacklog({ taskId: task.id, reason: null });
+      }
+    }
+    if (action === 'plan') {
+      if (occurrence !== null && scope === 'occurrence') {
+        await services.planningActions.setRecurrenceOccurrenceState(occurrence.seriesId, occurrence.occursOn, 'active');
+        onEditRecurrence?.({ ...task, completedAt: null }, occurrence.seriesId, occurrence.occursOn);
+      } else {
+        await services.backlogActions.resumeItem({ kind: task.kind, id: task.id });
+        onEditTask?.({ ...task, completedAt: null });
+      }
     }
     if (action === 'delete') {
       if (occurrence !== null && scope === 'occurrence') await services.planningActions.removeRecurrenceOccurrence({ ...occurrence, scope: 'occurrence' });
@@ -254,7 +272,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
     onRefresh?.();
   };
   const chooseQuickAction = (action: PlanTaskAction) => {
-    if (quickActionTarget?.occurrence !== null && quickActionTarget?.occurrence !== undefined) {
+    if (quickActionTarget?.occurrence !== null && quickActionTarget?.occurrence !== undefined && action !== 'resume' && action !== 'plan') {
       setPendingQuickAction(action);
       return;
     }
@@ -424,7 +442,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
       {completionCandidate === null ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
       {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
       <EveningReviewDialog items={eveningReviewItems} onRequestClose={() => setIsEveningReviewVisible(false)} visible={isEveningReviewVisible} />
-      {quickActionTarget === null ? null : <PlanTaskActionsDialog onAction={chooseQuickAction} onRequestClose={() => setQuickActionTarget(null)} taskTitle={quickActionTarget.task.title} visible={pendingQuickAction === null && !isQuickDeleteConfirmVisible} />}
+      {quickActionTarget === null ? null : <PlanTaskActionsDialog isCompleted={quickActionTarget.task.completedAt !== null} onAction={chooseQuickAction} onRequestClose={() => setQuickActionTarget(null)} taskTitle={quickActionTarget.task.title} visible={pendingQuickAction === null && !isQuickDeleteConfirmVisible} />}
       {quickActionTarget === null || pendingQuickAction === null ? null : <RecurrenceScopeDialog actionLabel={pendingQuickAction === 'complete' ? 'Выполнить повторение' : pendingQuickAction === 'delete' ? 'Удалить повторение' : 'Вернуть повторение в Backlog'} onChoose={async (scope) => { if (pendingQuickAction === 'delete' && scope === 'series') setIsQuickDeleteConfirmVisible(true); else await runQuickAction(pendingQuickAction, scope); }} onRequestClose={() => setPendingQuickAction(null)} visible />}
       {quickActionTarget === null ? null : <DeletePlanTaskDialog onConfirm={() => void runQuickAction('delete', quickActionTarget.occurrence === null ? 'series' : 'series')} onRequestClose={() => { setIsQuickDeleteConfirmVisible(false); setPendingQuickAction(null); }} visible={isQuickDeleteConfirmVisible} />}
     </SafeAreaView>
@@ -467,7 +485,7 @@ function SectionHeader({ action, title }: { action: string; title: string }) {
 
 function PlanListRow({ completed = false, onLongPress, onPress, title, time }: { completed?: boolean; onLongPress?: () => void; onPress: () => void; title: string; time: string }) {
   return (
-    <Pressable accessibilityLabel={`${time}: ${title}${completed ? ', выполнено' : ''}`} disabled={completed} onLongPress={onLongPress} onPress={onPress}><SurfaceCard style={[styles.listRow, completed && styles.completedListRow]}>
+    <Pressable accessibilityLabel={`${time}: ${title}${completed ? ', выполнено' : ''}`} onLongPress={onLongPress} onPress={() => { if (!completed) onPress(); }}><SurfaceCard style={[styles.listRow, completed && styles.completedListRow]}>
       <Text style={styles.time}>{time}</Text>
       <View style={[styles.dot, completed && styles.completedDot]} />
       <View style={styles.listCopy}>
