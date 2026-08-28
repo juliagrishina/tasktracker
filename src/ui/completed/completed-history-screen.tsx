@@ -10,6 +10,7 @@ import { ItemFormSheet } from '../backlog/item-form-sheet';
 import { designTokens } from '../design/tokens';
 import { PlanTaskActionsDialog, type PlanTaskAction } from '../plan/plan-task-actions-dialog';
 import { SurfaceCard } from '../primitives/surface-card';
+import { ContextMenuPressable } from '../primitives/context-menu-pressable';
 import { temporaryWebContentStyle } from '../screen-shell';
 
 const periods = ['Сегодня', 'Неделя', 'Месяц', 'Год'] as const;
@@ -123,7 +124,7 @@ function CompletedRow({ item, onPressMore, showDivider }: {
   showDivider: boolean;
 }) {
   return (
-    <Pressable accessibilityLabel={`Действия: ${item.title}`} delayLongPress={350} onLongPress={onPressMore} style={[styles.row, showDivider && styles.rowDivider]}>
+    <ContextMenuPressable accessibilityLabel={`Действия: ${item.title}`} delayLongPress={350} onContextMenu={(event) => { event.preventDefault(); onPressMore(); }} onLongPress={onPressMore} style={[styles.row, showDivider && styles.rowDivider]}>
       <View style={[styles.typeIcon, item.kind === 'reminder' && styles.reminderIcon, item.kind === 'project' && styles.projectIcon]}>
         <Ionicons color={iconColor(item.kind)} name={typeIcons[item.kind]} size={17} />
       </View>
@@ -137,7 +138,7 @@ function CompletedRow({ item, onPressMore, showDivider }: {
           <Ionicons color={designTokens.color.text.tertiary} name="ellipsis-horizontal" size={18} />
         </Pressable>
       </View>
-    </Pressable>
+    </ContextMenuPressable>
   );
 }
 

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ScheduleBlock } from '../../domain/entities';
 import { getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 import { designTokens } from '../design/tokens';
+import { ContextMenuPressable } from '../primitives/context-menu-pressable';
 
 import { getDayTimelineBlockLayouts } from './day-timeline-model';
 
@@ -68,10 +69,11 @@ export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new D
             const isCompleted = completedBlockIds.has(layout.blockId);
             const label = `${title}, ${timeRange}${isCompleted ? ', выполнено' : ''}, колонка ${layout.column + 1} из ${layout.columnCount}`;
             return (
-              <Pressable
+              <ContextMenuPressable
                 accessibilityLabel={label}
                 accessibilityRole="button"
                 key={layout.blockId}
+                onContextMenu={(event) => { event.preventDefault(); onLongPressBlock?.(layout.block); }}
                 onLongPress={() => onLongPressBlock?.(layout.block)}
                 onPress={() => { if (!isCompleted) onPressBlock?.(layout.block); }}
                 style={({ pressed }) => [
@@ -87,7 +89,7 @@ export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new D
                 ]}>
                 <Text numberOfLines={1} style={[styles.blockTitle, isCompleted && styles.completedText]}>{isCompleted ? `✓ ${title}` : title}</Text>
                 <Text numberOfLines={1} style={[styles.blockTime, isCompleted && styles.completedText]}>{timeRange}</Text>
-              </Pressable>
+              </ContextMenuPressable>
             );
           })}
         </View>

@@ -8,6 +8,7 @@ import { useOptionalAppServices } from '../../application/app-services-provider'
 import { getDefaultSettings } from '../../data/default-settings';
 import { getDateInTimeZone, getDayLoadPercent, getPlanLoadTone, getTimeInTimeZone } from '../../domain/planning';
 import { SurfaceCard } from '../primitives/surface-card';
+import { ContextMenuPressable } from '../primitives/context-menu-pressable';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { RecurrenceMoveDialog } from './recurrence-move-dialog';
 import { RecurrenceScopeDialog } from './recurrence-scope-dialog';
@@ -142,6 +143,8 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
   const timelineTitles = services === null
     ? new Map([['demo-plan-task', 'Планёрка команды']])
     : new Map([...currentBlockTasks.entries()].map(([taskId, task]) => [taskId, task.title]));
+  const nextBlock = currentBlocks[0];
+  const nextBlockTitle = nextBlock === undefined ? null : timelineTitles.get(nextBlock.taskItemId) ?? 'Ближайший временной блок';
   const handleBlockPress = (block: ScheduleBlock) => {
     const parts = block.occurrenceId?.split(':');
     const task = currentBlockTasks.get(block.taskItemId);
@@ -369,9 +372,9 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
               </View>
             </View>
           </View>
-          {currentBlocks[0] === undefined ? null : <SurfaceCard style={styles.nextEvent}>
-            <Text style={styles.nextDetail}>{formatBlockTime(currentBlocks[0], settings.timeZoneId)}</Text>
-            <Text style={styles.nextTitle}>Ближайший временной блок</Text>
+          {nextBlock === undefined ? null : <SurfaceCard style={styles.nextEvent}>
+            <Text style={styles.nextDetail}>{formatBlockTime(nextBlock, settings.timeZoneId)}</Text>
+            <Text style={styles.nextTitle}>{nextBlockTitle}</Text>
           </SurfaceCard>}
         </SurfaceCard>
 
@@ -485,14 +488,14 @@ function SectionHeader({ action, title }: { action: string; title: string }) {
 
 function PlanListRow({ completed = false, onLongPress, onPress, title, time }: { completed?: boolean; onLongPress?: () => void; onPress: () => void; title: string; time: string }) {
   return (
-    <Pressable accessibilityLabel={`${time}: ${title}${completed ? ', выполнено' : ''}`} onLongPress={onLongPress} onPress={() => { if (!completed) onPress(); }}><SurfaceCard style={[styles.listRow, completed && styles.completedListRow]}>
+    <ContextMenuPressable accessibilityLabel={`${time}: ${title}${completed ? ', выполнено' : ''}`} onContextMenu={(event) => { event.preventDefault(); onLongPress?.(); }} onLongPress={onLongPress} onPress={() => { if (!completed) onPress(); }}><SurfaceCard style={[styles.listRow, completed && styles.completedListRow]}>
       <Text style={styles.time}>{time}</Text>
       <View style={[styles.dot, completed && styles.completedDot]} />
       <View style={styles.listCopy}>
         <Text numberOfLines={1} style={[styles.listTitle, completed && styles.completedListText]}>{completed ? `✓ ${title}` : title}</Text>
         <Text numberOfLines={1} style={[styles.listDetail, completed && styles.completedListText]}>{completed ? 'Выполнено' : 'Точно запланировано'}</Text>
       </View>
-    </SurfaceCard></Pressable>
+    </SurfaceCard></ContextMenuPressable>
   );
 }
 

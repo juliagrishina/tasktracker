@@ -31,4 +31,16 @@ describe('CompletedHistoryScreen', () => {
     fireEvent.press(view.getByLabelText('Открыть действия: Собрать обратную связь'));
     await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
   });
+
+  test('opens actions for a completed item on a browser context-menu click', async () => {
+    const source = createInMemoryDataSource();
+    const completedAt = new Date().toISOString();
+    await source.saveTaskItem({ id: 'context-menu-completed-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Закрыть итоги встречи', description: null, estimatedDurationMinutes: null, completedAt, createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
+    const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Действия: Закрыть итоги встречи')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Действия: Закрыть итоги встречи'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
+  });
 });

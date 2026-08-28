@@ -91,6 +91,33 @@ describe('DayDashboard', () => {
     expect(view.getByLabelText('Удалить задачу')).toBeOnTheScreen();
   });
 
+  test('opens explicit actions for a planned task on a browser context-menu click', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'context-menu-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить повестку', description: null, estimatedDurationMinutes: 30, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подготовить повестку')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Подготовить повестку'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
+  });
+
+  test('opens explicit actions for a scheduled task on a browser context-menu click', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'scheduled-context-menu-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Провести созвон', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'scheduled-context-menu-block', taskItemId: 'scheduled-context-menu-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Провести созвон, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Провести созвон, 09:00–10:00, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
+  });
+
   test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
@@ -191,7 +218,7 @@ describe('DayDashboard', () => {
 
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
 
-    await waitFor(() => expect(view.getByText('По расписанию')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getAllByText('По расписанию')).toHaveLength(2));
 
     const renderedText = collectRenderedText(view.toJSON());
     expect(renderedText.indexOf('Без времени')).toBeLessThan(renderedText.indexOf('Расписание'));
@@ -207,7 +234,7 @@ describe('DayDashboard', () => {
     };
     const view = await render(<AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}><DayDashboard dayPlan={model} selectedDate="2026-08-10" /></AppServicesProvider>);
 
-    expect(view.getByText('Из общего read-model')).toBeOnTheScreen();
+    expect(view.getAllByText('Из общего read-model')).toHaveLength(2);
     expect(view.getByText('7% · 1 блок')).toBeOnTheScreen();
   });
 
