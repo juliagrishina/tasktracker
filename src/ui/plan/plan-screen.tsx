@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
 import { useOptionalAppServices } from '../../application/app-services-provider';
-import type { RecurrenceOccurrence, TaskItem } from '../../domain/entities';
+import type { RecurrenceOccurrence, Reminder, TaskItem } from '../../domain/entities';
 import { loadPlanReadModel, type PlanReadModel } from '../../application/plan-read-model';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { ItemFormSheet } from '../backlog/item-form-sheet';
@@ -34,6 +34,12 @@ interface RecurrenceTaskEditor {
   task: TaskItem;
 }
 
+type PlanActionableItem = TaskItem | Reminder;
+
+function getActionableItemKind(item: PlanActionableItem): 'task' | 'subtask' | 'reminder' {
+  return 'kind' in item ? item.kind : 'reminder';
+}
+
 function getCurrentLocalDate(now = new Date()): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -48,6 +54,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
   const [selectedDate, setSelectedDate] = useState(() => initialDate ?? getCurrentLocalDate());
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [editingOccurrence, setEditingOccurrence] = useState<RecurrenceTaskEditor | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [planReadModel, setPlanReadModel] = useState<PlanReadModel | null>(null);
@@ -73,12 +80,31 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
     setMode('day');
   };
 
+  const completePlanItem = async (item: PlanActionableItem) => {
+    if (services === null) return;
+    await services.backlogActions.completeItem({ kind: getActionableItemKind(item), id: item.id, completedAt: new Date().toISOString() });
+  };
+
+  const resumePlanItem = async (item: PlanActionableItem) => {
+    if (services === null) return;
+    await services.backlogActions.resumeItem({ kind: getActionableItemKind(item), id: item.id });
+  };
+
+  const deletePlanItem = async (item: PlanActionableItem) => {
+    if (services === null) return;
+    await services.backlogActions.deleteItem({ kind: getActionableItemKind(item), id: item.id, confirmed: true });
+    setEditingTask(null);
+    setEditingReminder(null);
+    setRefreshToken((value) => value + 1);
+  };
+
   return (
     <>
       {mode === 'day' ? (
         <DayDashboard
           mode={mode}
           onCreateTask={() => setIsTaskSheetVisible(true)}
+          onEditReminder={setEditingReminder}
           onEditTask={setEditingTask}
           onEditRecurrence={(task, seriesId, occursOn) => {
             if (services === null) return;
@@ -122,17 +148,35 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         <ItemFormSheet
           item={editingTask}
           mode="edit"
+          onComplete={completePlanItem}
+          onResume={resumePlanItem}
           onClose={() => setEditingTask(null)}
+          onDelete={deletePlanItem}
           planningContext={{ defaultDate: selectedDate }}
           onSaved={() => { setEditingTask(null); setRefreshToken((value) => value + 1); }}
           type={editingTask.kind}
           visible
         />
       ) : null}
+      {editingReminder !== null ? (
+        <ItemFormSheet
+          item={editingReminder}
+          mode="edit"
+          onComplete={completePlanItem}
+          onResume={resumePlanItem}
+          onClose={() => setEditingReminder(null)}
+          onDelete={deletePlanItem}
+          onSaved={() => { setEditingReminder(null); setRefreshToken((value) => value + 1); }}
+          type="reminder"
+          visible
+        />
+      ) : null}
       {editingOccurrence !== null ? (
         <ItemFormSheet
-          item={{ ...editingOccurrence.task, ...editingOccurrence.occurrence?.taskPatch }}
+          item={{ ...editingOccurrence.task, ...editingOccurrence.occurrence?.taskPatch, completedAt: editingOccurrence.occurrence?.completedAt ?? editingOccurrence.task.completedAt }}
           mode="edit"
+          onComplete={async () => { if (services === null) return; await services.planningActions.setRecurrenceOccurrenceState(editingOccurrence.seriesId, editingOccurrence.occursOn, 'completed'); }}
+          onResume={async () => { if (services === null) return; await services.planningActions.setRecurrenceOccurrenceState(editingOccurrence.seriesId, editingOccurrence.occursOn, 'active'); setRefreshToken((value) => value + 1); }}
           occurrenceEdit={{
             onSave: async ({ title, description, estimatedDurationMinutes }) => {
               if (services === null) return;
@@ -161,6 +205,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
             },
           }}
           onClose={() => setEditingOccurrence(null)}
+          onDelete={async () => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: editingOccurrence.seriesId, occursOn: editingOccurrence.occursOn, scope: 'occurrence' }); setEditingOccurrence(null); setRefreshToken((value) => value + 1); }}
           onSaved={() => { setEditingOccurrence(null); setRefreshToken((value) => value + 1); }}
           type={editingOccurrence.task.kind}
           visible

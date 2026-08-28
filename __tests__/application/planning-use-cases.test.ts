@@ -2,13 +2,65 @@ import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import type { AppDataSource } from '../../src/data/contracts';
 import * as planningUseCases from '../../src/application/planning-use-cases';
 import type { ScheduleBlock, TaskItem } from '../../src/domain/entities';
-import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
+import type { LocalNotificationScheduler } from '../../src/application/notification-scheduling';
+import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, returnIncompleteTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 
 const createdAt = '2026-08-01T00:00:00.000Z';
 const task: TaskItem = { id: 'task-1', kind: 'task', projectId: null, parentTaskId: null, title: 'План', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null };
 const block: ScheduleBlock = { id: 'block-1', taskItemId: task.id, occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-03T09:00:00+03:00', endsAt: '2026-08-03T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null };
 
 describe('planning use cases', () => {
+  test('extends the final block of an unfinished task by 30 minutes', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    await source.saveScheduleBlock(block);
+
+    await continueIncompleteTask(source, { taskId: task.id, occurrence: null });
+
+    await expect(source.getScheduleBlock(block.id)).resolves.toMatchObject({ startsAt: '2026-08-03T09:00:00+03:00', endsAt: '2026-08-03T07:30:00.000Z' });
+  });
+
+  test('extends only the selected recurring occurrence by 30 minutes', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    await saveTaskPlanning(source, { taskId: task.id, blocks: [block], recurrence: { id: 'continue-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt } });
+
+    await continueIncompleteTask(source, { taskId: task.id, occurrence: { seriesId: 'continue-series', occursOn: '2026-08-10' } });
+
+    await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toMatchObject([{ startsAt: '2026-08-10T09:00:00+03:00', endsAt: '2026-08-10T07:30:00.000Z' }]);
+    await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toMatchObject([{ startsAt: '2026-08-17T09:00:00+03:00', endsAt: '2026-08-17T10:00:00+03:00' }]);
+  });
+
+  test('returns an unfinished task to Backlog and removes its elapsed schedule block', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem({ ...task, scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null } as TaskItem);
+    await source.saveScheduleBlock(block);
+
+    await returnIncompleteTaskToBacklog(source, { taskId: task.id, occurrence: null, reason: 'Планы изменились' });
+
+    await expect(source.getTaskItem(task.id)).resolves.toMatchObject({ scheduledOn: null, periodStartOn: null, periodEndOn: null });
+    await expect(source.getScheduleBlock(block.id)).resolves.toBeNull();
+  });
+
+  test('persists a newly scheduled notification when a future block is saved', async () => {
+    const source = createInMemoryDataSource();
+    const scheduler: LocalNotificationScheduler = {
+      schedule: jest.fn().mockResolvedValue('notification-1'),
+      cancel: jest.fn(),
+    };
+    const futureBlock = {
+      ...block,
+      startsAt: '2026-09-01T10:00:00+03:00',
+      endsAt: '2026-09-01T11:00:00+03:00',
+    };
+    await source.saveTaskItem(task);
+
+    await saveTaskPlanning(source, { taskId: task.id, blocks: [futureBlock], recurrence: null }, scheduler);
+
+    await expect(source.getScheduleBlock(block.id)).resolves.toMatchObject({ notificationId: 'notification-1' });
+    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: '2026-09-01T06:50:00.000Z' }));
+  });
+
   test('projects date-only and period tasks, then records an atomic return to Backlog', async () => {
     const source = createInMemoryDataSource();
     await source.saveTaskItem({ ...task, id: 'date-task', title: 'На дату', scheduledOn: '2026-08-10', periodStartOn: null, periodEndOn: null } as TaskItem);
@@ -33,13 +85,13 @@ describe('planning use cases', () => {
     await expect(historySource.listTransferHistories()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ taskItemId: 'period-task', reason: 'не хватило времени' })]));
   });
 
-  test('projects an independent date-only recurrence and returns an expired period to Backlog', async () => {
+  test('keeps a completed date-only recurrence in its planned day and returns an expired period to Backlog', async () => {
     const source = createInMemoryDataSource();
     await source.saveTaskItem({ ...task, id: 'repeat-date-task', scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null } as TaskItem);
     await saveTaskPlanning(source, { taskId: 'repeat-date-task', blocks: [], placement: { scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null }, recurrence: { id: 'repeat-date-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt } });
     await expect((planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> }).getPlanUntimedTasks(source, '2026-08-10')).resolves.toMatchObject([{ id: 'repeat-date-task' }]);
     await setRecurrenceOccurrenceState(source, 'repeat-date-series', '2026-08-10', 'completed');
-    await expect((planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> }).getPlanUntimedTasks(source, '2026-08-10')).resolves.toEqual([]);
+    await expect((planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> }).getPlanUntimedTasks(source, '2026-08-10')).resolves.toMatchObject([{ id: 'repeat-date-task' }]);
 
     await source.saveTaskItem({ ...task, id: 'expired-period-task', scheduledOn: null, periodStartOn: '2026-08-01', periodEndOn: '2026-08-03' } as TaskItem);
     await expect((planningUseCases as unknown as { getPlanUntimedTasks(source: AppDataSource, date: string): Promise<readonly TaskItem[]> }).getPlanUntimedTasks(source, '2026-08-04')).resolves.toEqual([]);
@@ -120,12 +172,37 @@ describe('planning use cases', () => {
     await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(0);
   });
 
-  test('completes one recurring instance without completing its series', async () => {
+  test('keeps one completed recurring instance in its day without completing its series', async () => {
     const source = createInMemoryDataSource(); await source.saveTaskItem(task);
     await saveTaskPlanning(source, { taskId: task.id, blocks: [block], recurrence: { id: 'series-1', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt } });
     await setRecurrenceOccurrenceState(source, 'series-1', '2026-08-10', 'completed');
-    await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(0);
+    await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toHaveLength(1);
     await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toHaveLength(1);
+  });
+
+  test('synchronizes concrete notifications for the 90-day recurring horizon and removes a completed occurrence notification', async () => {
+    const source = createInMemoryDataSource();
+    const scheduler: LocalNotificationScheduler = {
+      schedule: jest.fn().mockResolvedValue('recurrence-notification'),
+      cancel: jest.fn(),
+    };
+    await source.saveTaskItem(task);
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [block],
+      recurrence: { id: 'notification-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
+    });
+
+    await synchronizeRecurrenceNotifications(source, scheduler, new Date('2026-08-01T00:00:00.000Z'));
+
+    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: '2026-08-03T05:50:00.000Z' }));
+    const occurrence = (await source.listRecurrenceOccurrences('notification-series')).find((candidate) => candidate.occursOn === '2026-08-03');
+    expect(occurrence?.notificationIds).toEqual(['recurrence-notification']);
+
+    await setRecurrenceOccurrenceState(source, 'notification-series', '2026-08-03', 'completed', scheduler, new Date('2026-08-01T00:00:00.000Z'));
+
+    expect(scheduler.cancel).toHaveBeenCalledWith('recurrence-notification');
+    await expect(source.listRecurrenceOccurrences('notification-series')).resolves.toContainEqual(expect.objectContaining({ occursOn: '2026-08-03', completedAt: expect.any(String), notificationIds: [] }));
   });
 
   test('moves either one recurring occurrence or the whole series', async () => {

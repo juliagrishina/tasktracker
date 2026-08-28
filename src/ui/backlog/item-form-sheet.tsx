@@ -23,11 +23,13 @@ import {
 } from './task-planning-fields';
 import { PlanningValuePicker } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
+import { confirmBacklogDeletion } from './confirmation';
 import { getInstantInTimeZone, getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
 type FormItem = Project | TaskItem | Reminder;
+type ActionableItem = TaskItem | Reminder;
 type PendingConflict =
   | { kind: 'task'; input: SaveTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] }
   | { kind: 'timedReminder'; input: CreateTimedReminderTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] };
@@ -45,6 +47,9 @@ interface ItemFormSheetProps {
   parentTaskId?: string;
   projectId?: string | null;
   onSaved?: () => void;
+  onComplete?: (item: ActionableItem) => Promise<void>;
+  onResume?: (item: ActionableItem) => Promise<void>;
+  onDelete?: (item: ActionableItem) => Promise<void>;
   occurrenceEdit?: {
     onSave: (input: { title: string; description: string; estimatedDurationMinutes: number | null }) => Promise<void>;
   };
@@ -69,6 +74,10 @@ function getInitialProjectId(item: FormItem | undefined, projectId: string | nul
   }
 
   return projectId ?? null;
+}
+
+function isActionableItem(item: FormItem): item is ActionableItem {
+  return 'kind' in item || 'remindsOn' in item;
 }
 
 function getInitialDescription(item: FormItem | undefined): string {
@@ -116,6 +125,9 @@ export function ItemFormSheet({
   parentTaskId,
   projectId,
   onSaved,
+  onComplete,
+  onResume,
+  onDelete,
   occurrenceEdit,
   planningContext,
 }: ItemFormSheetProps) {
@@ -172,7 +184,7 @@ export function ItemFormSheet({
     return mode === 'create' ? createTitle[type] : 'Редактировать';
   }, [mode, type]);
 
-  const submit = async () => {
+  const submit = async (afterSave?: () => Promise<void>) => {
     setError(null);
     setIsSaving(true);
 
@@ -187,6 +199,7 @@ export function ItemFormSheet({
       const now = new Date().toISOString();
       if (occurrenceEdit !== undefined) {
         await occurrenceEdit.onSave({ title, description, estimatedDurationMinutes });
+        await afterSave?.();
         onSaved?.();
         onClose();
         return;
@@ -246,6 +259,7 @@ export function ItemFormSheet({
           setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
           return;
         }
+        await afterSave?.();
         onSaved?.();
         onClose();
         return;
@@ -350,6 +364,7 @@ export function ItemFormSheet({
               setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
               return;
             }
+            await afterSave?.();
             onSaved?.();
             onClose();
             return;
@@ -368,6 +383,7 @@ export function ItemFormSheet({
         }
       }
 
+      await afterSave?.();
       onSaved?.();
       onClose();
     } catch (caughtError) {
@@ -497,6 +513,9 @@ export function ItemFormSheet({
             <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>
               <Text style={styles.secondaryActionText}>Отмена</Text>
             </Pressable>
+            {mode === 'edit' && item !== undefined && isActionableItem(item) && item.completedAt === null && onComplete !== undefined ? <Pressable accessibilityLabel="Выполнить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onComplete(item))} style={[styles.action, styles.completeAction, isSaving && styles.disabledAction]}><Text style={styles.primaryActionText}>Выполнено</Text></Pressable> : null}
+            {mode === 'edit' && item !== undefined && isActionableItem(item) && item.completedAt !== null && onResume !== undefined ? <Pressable accessibilityLabel="Возобновить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onResume(item))} style={[styles.action, styles.completeAction, isSaving && styles.disabledAction]}><Text style={styles.primaryActionText}>Возобновить</Text></Pressable> : null}
+            {mode === 'edit' && item !== undefined && isActionableItem(item) && onDelete !== undefined ? <Pressable accessibilityLabel="Удалить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void (async () => { if (await confirmBacklogDeletion()) await onDelete(item); })()} style={[styles.action, styles.deleteAction, isSaving && styles.disabledAction]}><Text style={styles.deleteActionText}>Удалить</Text></Pressable> : null}
             <Pressable accessibilityState={{ disabled: isSaving }} onPress={() => void submit()} style={[styles.action, styles.primaryAction, isSaving && styles.disabledAction]}>
               <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? mode === 'create' ? 'Создать' : 'Сохранить' : 'Сохранить'}</Text>
             </Pressable>
@@ -636,6 +655,8 @@ const styles = StyleSheet.create({
     borderRadius: designTokens.radius.control,
   },
   primaryAction: { backgroundColor: designTokens.color.primary },
+  completeAction: { backgroundColor: designTokens.color.feedback.success.base },
+  deleteAction: { backgroundColor: designTokens.color.surface.subtle },
   secondaryAction: { backgroundColor: designTokens.color.surface.subtle },
   primaryActionText: {
     color: designTokens.color.text.inverse,
@@ -649,5 +670,6 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.body,
     fontWeight: designTokens.typography.weight.bold,
   },
+  deleteActionText: { color: designTokens.color.feedback.danger.foreground, fontSize: designTokens.typography.size.body, lineHeight: designTokens.typography.lineHeight.body, fontWeight: designTokens.typography.weight.bold },
   disabledAction: { opacity: designTokens.state.disabledOpacity },
 });

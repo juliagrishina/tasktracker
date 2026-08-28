@@ -25,6 +25,7 @@ interface SettingsRow {
   workday_starts_at: string;
   workday_ends_at: string;
   evening_review_at: string;
+  evening_review_notification_id: string | null;
   notification_lead_minutes: number;
 }
 
@@ -56,6 +57,8 @@ interface TaskItemRow {
 interface ReminderRow {
   id: string;
   title: string;
+  linked_task_item_id: string | null;
+  linked_occurrence_on: string | null;
   reminds_on: string | null;
   period_start_on: string | null;
   period_end_on: string | null;
@@ -74,6 +77,7 @@ interface ScheduleBlockRow {
   starts_at: string;
   ends_at: string;
   occurrence_id: string | null;
+  notification_id: string | null;
   time_zone_id: string | null;
   created_at: string;
   updated_at: string | null;
@@ -108,6 +112,7 @@ interface RecurrenceOccurrenceRow {
   blocks_overridden: number;
   task_patch: string | null;
   reminder_patch: string | null;
+  notification_ids_json: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -133,6 +138,7 @@ class NativeDataSource implements AppDataSource {
         workday_starts_at,
         workday_ends_at,
         evening_review_at,
+        evening_review_notification_id,
         notification_lead_minutes
       FROM settings
       WHERE id = 1`,
@@ -147,6 +153,7 @@ class NativeDataSource implements AppDataSource {
       workdayStartsAt: row.workday_starts_at,
       workdayEndsAt: row.workday_ends_at,
       eveningReviewAt: row.evening_review_at,
+      eveningReviewNotificationId: row.evening_review_notification_id,
       notificationLeadMinutes: row.notification_lead_minutes,
     };
   }
@@ -160,6 +167,7 @@ class NativeDataSource implements AppDataSource {
           workday_starts_at = ?,
           workday_ends_at = ?,
           evening_review_at = ?,
+          evening_review_notification_id = ?,
           notification_lead_minutes = ?
       WHERE id = 1`,
       [
@@ -167,6 +175,7 @@ class NativeDataSource implements AppDataSource {
         settings.workdayStartsAt,
         settings.workdayEndsAt,
         settings.eveningReviewAt,
+        settings.eveningReviewNotificationId ?? null,
         settings.notificationLeadMinutes,
       ],
     );
@@ -489,6 +498,8 @@ class NativeDataSource implements AppDataSource {
       `INSERT INTO reminders (
         id,
         title,
+        linked_task_item_id,
+        linked_occurrence_on,
         reminds_on,
         period_start_on,
         period_end_on,
@@ -499,9 +510,11 @@ class NativeDataSource implements AppDataSource {
         completed_at,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
+        linked_task_item_id = excluded.linked_task_item_id,
+        linked_occurrence_on = excluded.linked_occurrence_on,
         reminds_on = excluded.reminds_on,
         period_start_on = excluded.period_start_on,
         period_end_on = excluded.period_end_on,
@@ -515,6 +528,8 @@ class NativeDataSource implements AppDataSource {
       [
         reminder.id,
         reminder.title,
+        reminder.linkedTaskItemId ?? null,
+        reminder.linkedOccurrenceOn ?? null,
         reminder.remindsOn,
         reminder.periodStartOn,
         reminder.periodEndOn,
@@ -533,7 +548,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ReminderRow>(
-      `SELECT id, title, reminds_on, period_start_on, period_end_on,
+      `SELECT id, title, linked_task_item_id, linked_occurrence_on, reminds_on, period_start_on, period_end_on,
         repeat_frequency, repeat_interval, repeat_weekdays_json, estimated_duration_minutes, completed_at, created_at, updated_at
       FROM reminders
       WHERE id = ? AND deleted_at IS NULL`,
@@ -545,6 +560,8 @@ class NativeDataSource implements AppDataSource {
       : {
           id: row.id,
           title: row.title,
+          linkedTaskItemId: row.linked_task_item_id,
+          linkedOccurrenceOn: row.linked_occurrence_on,
           remindsOn: row.reminds_on,
           periodStartOn: row.period_start_on,
           periodEndOn: row.period_end_on,
@@ -564,7 +581,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ReminderRow>(
-      `SELECT id, title, reminds_on, period_start_on, period_end_on,
+      `SELECT id, title, linked_task_item_id, linked_occurrence_on, reminds_on, period_start_on, period_end_on,
         repeat_frequency, repeat_interval, repeat_weekdays_json, estimated_duration_minutes, completed_at, created_at, updated_at
       FROM reminders
       WHERE deleted_at IS NULL
@@ -574,6 +591,8 @@ class NativeDataSource implements AppDataSource {
     return rows.map((row) => ({
       id: row.id,
       title: row.title,
+      linkedTaskItemId: row.linked_task_item_id,
+      linkedOccurrenceOn: row.linked_occurrence_on,
       remindsOn: row.reminds_on,
       periodStartOn: row.period_start_on,
       periodEndOn: row.period_end_on,
@@ -624,11 +643,12 @@ class NativeDataSource implements AppDataSource {
     const updatedAt = new Date().toISOString();
     await database.runAsync(
       `INSERT INTO schedule_blocks (
-        id, task_item_id, occurrence_id, time_zone_id, starts_at, ends_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, task_item_id, occurrence_id, notification_id, time_zone_id, starts_at, ends_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         task_item_id = excluded.task_item_id,
         occurrence_id = excluded.occurrence_id,
+        notification_id = excluded.notification_id,
         time_zone_id = excluded.time_zone_id,
         starts_at = excluded.starts_at,
         ends_at = excluded.ends_at,
@@ -638,6 +658,7 @@ class NativeDataSource implements AppDataSource {
         block.id,
         block.taskItemId,
         block.occurrenceId,
+        block.notificationId ?? null,
         block.timeZoneId,
         block.startsAt,
         block.endsAt,
@@ -651,7 +672,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, occurrence_id, time_zone_id, starts_at, ends_at, created_at, updated_at
+      `SELECT id, task_item_id, occurrence_id, notification_id, time_zone_id, starts_at, ends_at, created_at, updated_at
       FROM schedule_blocks
       WHERE id = ? AND deleted_at IS NULL`,
       [id],
@@ -663,6 +684,7 @@ class NativeDataSource implements AppDataSource {
           id: row.id,
           taskItemId: row.task_item_id,
           occurrenceId: row.occurrence_id,
+          notificationId: row.notification_id,
           timeZoneId: row.time_zone_id ?? 'UTC',
           startsAt: row.starts_at,
           endsAt: row.ends_at,
@@ -676,7 +698,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ScheduleBlockRow>(
-      `SELECT id, task_item_id, occurrence_id, time_zone_id, starts_at, ends_at, created_at, updated_at
+      `SELECT id, task_item_id, occurrence_id, notification_id, time_zone_id, starts_at, ends_at, created_at, updated_at
       FROM schedule_blocks
       WHERE deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
@@ -686,6 +708,7 @@ class NativeDataSource implements AppDataSource {
       id: row.id,
       taskItemId: row.task_item_id,
       occurrenceId: row.occurrence_id,
+      notificationId: row.notification_id,
       timeZoneId: row.time_zone_id ?? 'UTC',
       startsAt: row.starts_at,
       endsAt: row.ends_at,
@@ -841,8 +864,8 @@ class NativeDataSource implements AppDataSource {
     await database.runAsync(
       `INSERT INTO recurrence_occurrences (
         id, series_id, occurs_on, cancelled_at, completed_at, blocks_overridden,
-        task_patch, reminder_patch, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        task_patch, reminder_patch, notification_ids_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         series_id = excluded.series_id,
         occurs_on = excluded.occurs_on,
@@ -851,6 +874,7 @@ class NativeDataSource implements AppDataSource {
         blocks_overridden = excluded.blocks_overridden,
         task_patch = excluded.task_patch,
         reminder_patch = excluded.reminder_patch,
+        notification_ids_json = excluded.notification_ids_json,
         created_at = excluded.created_at,
         updated_at = excluded.updated_at`,
       [
@@ -862,6 +886,7 @@ class NativeDataSource implements AppDataSource {
         occurrence.blocksOverridden ? 1 : 0,
         occurrence.taskPatch === null ? null : JSON.stringify(occurrence.taskPatch),
         occurrence.reminderPatch === null ? null : JSON.stringify(occurrence.reminderPatch),
+        JSON.stringify(occurrence.notificationIds ?? []),
         occurrence.createdAt,
         updatedAt,
       ],
@@ -873,7 +898,7 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<RecurrenceOccurrenceRow>(
       `SELECT id, series_id, occurs_on, cancelled_at, completed_at, blocks_overridden,
-        task_patch, reminder_patch, created_at, updated_at
+        task_patch, reminder_patch, notification_ids_json, created_at, updated_at
       FROM recurrence_occurrences
       WHERE id = ? AND deleted_at IS NULL`,
       [id],
@@ -886,7 +911,7 @@ class NativeDataSource implements AppDataSource {
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<RecurrenceOccurrenceRow>(
       `SELECT id, series_id, occurs_on, cancelled_at, completed_at, blocks_overridden,
-        task_patch, reminder_patch, created_at, updated_at
+        task_patch, reminder_patch, notification_ids_json, created_at, updated_at
       FROM recurrence_occurrences
       WHERE series_id = ? AND deleted_at IS NULL
       ORDER BY created_at ASC, id ASC`,
@@ -940,6 +965,7 @@ class NativeDataSource implements AppDataSource {
         row.reminder_patch === null
           ? null
           : JSON.parse(row.reminder_patch) as RecurrenceOccurrence['reminderPatch'],
+      notificationIds: row.notification_ids_json === null ? [] : JSON.parse(row.notification_ids_json) as readonly string[],
       createdAt: row.created_at,
       updatedAt: row.updated_at ?? row.created_at,
       deletedAt: null,

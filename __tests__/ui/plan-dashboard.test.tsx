@@ -17,6 +17,237 @@ describe('ProgressRing', () => {
 });
 
 describe('DayDashboard', () => {
+  test('keeps a completed block in the plan and marks it as completed', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'completion-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'completion-block', taskItemId: 'completion-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await waitFor(async () => expect(await source.getTaskItem('completion-task')).toMatchObject({ completedAt: expect.any(String) }));
+    await waitFor(() => expect(view.getByLabelText('Подготовить отчёт, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
+  });
+
+  test('offers a linked follow-up reminder after completion and creates it for the chosen date', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'follow-up-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'follow-up-block', taskItemId: 'follow-up-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await waitFor(() => expect(view.getByText('Создать связанное напоминание?')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Напомнить через 3 дня'));
+
+    await waitFor(async () => expect(await source.listReminders()).toMatchObject([{
+      title: 'Проверить: Подготовить отчёт',
+      remindsOn: '2026-08-31',
+      linkedTaskItemId: 'follow-up-task',
+      linkedOccurrenceOn: null,
+    }]));
+  });
+
+  test('opens an evening review without changing unfinished items', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'review-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Отправить отчёт', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveReminder({ id: 'review-reminder', title: 'Проверить письмо', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T18:30:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Открыть вечернюю проверку')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
+    await waitFor(() => expect(view.getByText('Вечерняя проверка')).toBeOnTheScreen());
+    expect(view.getAllByText('Отправить отчёт')).toHaveLength(2);
+    expect(view.getAllByText('Проверить письмо')).toHaveLength(2);
+    fireEvent.press(view.getByLabelText('Закрыть вечернюю проверку'));
+
+    await expect(source.getTaskItem('review-task')).resolves.toMatchObject({ completedAt: null, scheduledOn: '2026-08-28' });
+    await expect(source.getReminder('review-reminder')).resolves.toMatchObject({ completedAt: null, remindsOn: '2026-08-28' });
+  });
+
+  test('opens explicit actions for an untimed task after a long press', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'quick-actions-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить материалы', description: null, estimatedDurationMinutes: 30, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подготовить материалы')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Подготовить материалы'), 'longPress');
+
+    await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнить задачу')).toBeOnTheScreen();
+    expect(view.getByLabelText('Вернуть задачу в Backlog')).toBeOnTheScreen();
+    expect(view.getByLabelText('Удалить задачу')).toBeOnTheScreen();
+  });
+
+  test('opens explicit actions for a planned task on a browser context-menu click', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'context-menu-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить повестку', description: null, estimatedDurationMinutes: 30, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подготовить повестку')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Подготовить повестку'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
+  });
+
+  test('opens quick actions for a one-time reminder on a browser context-menu click', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveReminder({ id: 'context-menu-reminder', title: 'Подтвердить бронирование', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: 30, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить бронирование')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Подтвердить бронирование'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByText('Действия с напоминанием')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнить напоминание')).toBeOnTheScreen();
+    expect(view.getByLabelText('Удалить напоминание')).toBeOnTheScreen();
+    fireEvent.press(view.getByLabelText('Выполнить напоминание'));
+    await waitFor(async () => expect(await source.getReminder('context-menu-reminder')).toMatchObject({ completedAt: expect.any(String) }));
+  });
+
+  test('opens the same quick actions for a one-time reminder after a long press', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveReminder({ id: 'long-press-reminder', title: 'Подтвердить участие', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить участие')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Подтвердить участие'), 'longPress');
+
+    await waitFor(() => expect(view.getByText('Действия с напоминанием')).toBeOnTheScreen());
+  });
+
+  test('returns a one-time reminder to Backlog from quick actions', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveReminder({ id: 'return-reminder', title: 'Выбрать подарок', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Выбрать подарок')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Выбрать подарок'), 'contextMenu', { preventDefault: jest.fn() });
+    await waitFor(() => expect(view.getByLabelText('Вернуть напоминание в Backlog')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Вернуть напоминание в Backlog'));
+
+    await waitFor(async () => expect(await source.getReminder('return-reminder')).toMatchObject({ remindsOn: null, periodStartOn: null, periodEndOn: null }));
+  });
+
+  test('opens explicit actions for a scheduled task on a browser context-menu click', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'scheduled-context-menu-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Провести созвон', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'scheduled-context-menu-block', taskItemId: 'scheduled-context-menu-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Провести созвон, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Провести созвон, 09:00–10:00, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
+  });
+
+  test('shows resume for a completed recurring instance in plan actions', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'completed-recurring-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Завершённый повтор', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'completed-recurring-block', taskItemId: 'completed-recurring-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'completed-recurring-series', itemKind: 'task', itemId: 'completed-recurring-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceOccurrence({ id: 'completed-recurring-occurrence', seriesId: 'completed-recurring-series', occursOn: '2026-08-28', cancelledAt: null, completedAt: '2026-08-28T10:00:00.000Z', blocksOverridden: false, taskPatch: null, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Завершённый повтор, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Завершённый повтор, 09:00–10:00, выполнено, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
+  });
+
+  test('completes a recurring plan instance without asking for a series scope', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'quick-complete-recurring-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Повтор для завершения', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'quick-complete-recurring-block', taskItemId: 'quick-complete-recurring-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'quick-complete-recurring-series', itemKind: 'task', itemId: 'quick-complete-recurring-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Повтор для завершения, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Повтор для завершения, 09:00–10:00, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+    await waitFor(() => expect(view.getByLabelText('Выполнить задачу')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Выполнить задачу'));
+
+    await waitFor(async () => expect(await source.listRecurrenceOccurrences('quick-complete-recurring-series')).toMatchObject([{ occursOn: '2026-08-28', completedAt: expect.any(String) }]));
+    expect(view.queryByText('К чему применить это изменение?')).toBeNull();
+  });
+
+  test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'unfinished-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Незавершённый отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'unfinished-block', taskItemId: 'unfinished-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const editTask = jest.fn();
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} onEditTask={editTask} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Нет, выбрать действие для незавершённого дела')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Нет, выбрать действие для незавершённого дела'));
+    await waitFor(() => expect(view.getByText('Что сделать с незавершённым делом?')).toBeOnTheScreen());
+    expect(view.getByLabelText('Перенести дело на другое время')).toBeOnTheScreen();
+    expect(view.getByLabelText('Причина возврата в Backlog')).toBeOnTheScreen();
+    expect(view.getByLabelText('Вернуть дело в Backlog')).toBeOnTheScreen();
+    fireEvent.press(view.getByLabelText('Продолжить дело на 30 минут'));
+    await waitFor(async () => expect(await source.getScheduleBlock('unfinished-block')).toMatchObject({ endsAt: '2026-08-28T07:30:00.000Z' }));
+    expect(editTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'unfinished-task' }));
+  });
+
+  test('shows a completed date-only task and keeps its estimate in the day load', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'completed-date-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Завершённое дело без времени', description: null, estimatedDurationMinutes: 60, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: '2026-08-28T10:00:00.000Z', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Завершённое дело без времени, выполнено')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
+  });
+
+  test('completes only the prompted recurring occurrence', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'recurring-completion-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Повторяющийся отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'recurring-completion-block', taskItemId: 'recurring-completion-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-21T09:00:00+03:00', endsAt: '2026-08-21T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'recurring-completion-series', itemKind: 'task', itemId: 'recurring-completion-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-21', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await waitFor(async () => expect(await source.listRecurrenceOccurrences('recurring-completion-series')).toMatchObject([{ occursOn: '2026-08-28', completedAt: expect.any(String) }]));
+    await waitFor(() => expect(view.getByLabelText('Повторяющийся отчёт, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
+    await expect(source.getTaskItem('recurring-completion-task')).resolves.toMatchObject({ completedAt: null });
+    await expect(source.listRecurrenceOccurrences('recurring-completion-series')).resolves.toHaveLength(1);
+  });
+
   test('updates existing cards immediately after changing the planning timezone', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
@@ -66,7 +297,7 @@ describe('DayDashboard', () => {
 
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
 
-    await waitFor(() => expect(view.getByText('По расписанию')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getAllByText('По расписанию')).toHaveLength(2));
 
     const renderedText = collectRenderedText(view.toJSON());
     expect(renderedText.indexOf('Без времени')).toBeLessThan(renderedText.indexOf('Расписание'));
@@ -82,7 +313,7 @@ describe('DayDashboard', () => {
     };
     const view = await render(<AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}><DayDashboard dayPlan={model} selectedDate="2026-08-10" /></AppServicesProvider>);
 
-    expect(view.getByText('Из общего read-model')).toBeOnTheScreen();
+    expect(view.getAllByText('Из общего read-model')).toHaveLength(2);
     expect(view.getByText('7% · 1 блок')).toBeOnTheScreen();
   });
 

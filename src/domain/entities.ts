@@ -53,6 +53,8 @@ export type TaskItem =
 export interface Reminder {
   id: EntityId;
   title: string;
+  linkedTaskItemId?: EntityId | null;
+  linkedOccurrenceOn?: string | null;
   remindsOn: string | null;
   periodStartOn: string | null;
   periodEndOn: string | null;
@@ -68,6 +70,7 @@ export interface ScheduleBlock {
   id: EntityId;
   taskItemId: EntityId;
   occurrenceId: EntityId | null;
+  notificationId?: string | null;
   timeZoneId: string;
   startsAt: string;
   endsAt: string;
@@ -101,6 +104,7 @@ export interface RecurrenceOccurrence {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  notificationIds?: readonly string[];
 }
 
 export interface TransferHistory {
@@ -116,5 +120,6 @@ export interface AppSettings {
   workdayStartsAt: string;
   workdayEndsAt: string;
   eveningReviewAt: string;
+  eveningReviewNotificationId?: string | null;
   notificationLeadMinutes: number;
 }

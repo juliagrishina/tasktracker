@@ -6,6 +6,7 @@ import type {
   TaskItem,
 } from '../domain/entities';
 import type { AppDataSource } from '../data/contracts';
+import { getDateInTimeZone } from '../domain/planning';
 import type { DemoTask, DemoTaskGroups } from '../ui/demo-tasks';
 
 const createdAt = '2026-08-02T09:00:00.000Z';
@@ -137,44 +138,83 @@ const reminders: readonly Reminder[] = [
   },
 ];
 
-const scheduleBlocks: readonly ScheduleBlock[] = [
-  {
-    id: 'demo-plan-week-draft-block',
-    taskItemId: 'demo-plan-week-draft',
-    occurrenceId: null,
-    timeZoneId: 'UTC',
-    startsAt: '2026-08-02T09:00:00.000Z',
-    endsAt: '2026-08-02T09:30:00.000Z',
-    createdAt,
-    updatedAt: createdAt,
-    deletedAt: null,
-  },
-  {
-    id: 'demo-plan-team-call-block',
-    taskItemId: 'demo-plan-team-call',
-    occurrenceId: null,
-    timeZoneId: 'UTC',
-    startsAt: '2026-08-02T11:00:00.000Z',
-    endsAt: '2026-08-02T11:45:00.000Z',
-    createdAt,
-    updatedAt: createdAt,
-    deletedAt: null,
-  },
-];
+function createAcceptanceTasks(isoDate: string): readonly TaskItem[] {
+  return [
+    {
+      id: 'demo-evening-review-task',
+      kind: 'task',
+      projectId: 'demo-project-personal',
+      parentTaskId: null,
+      title: 'Подвести итоги дня',
+      ...taskDefaults,
+      scheduledOn: isoDate,
+      createdAt,
+    },
+  ];
+}
 
-const recurrenceSeries: readonly RecurrenceSeries[] = [
-  {
-    id: 'demo-plan-week-draft-recurrence',
-    itemKind: 'task',
-    itemId: 'demo-plan-week-draft',
-    frequency: 'weekly',
-    interval: 1,
-    startsOn: '2026-08-02',
-    createdAt,
-    updatedAt: createdAt,
-    deletedAt: null,
-  },
-];
+function createAcceptanceReminders(isoDate: string): readonly Reminder[] {
+  return [
+    {
+      id: 'demo-reminder-evening-review',
+      title: 'Подтвердить бронирование',
+      ...reminderDefaults,
+      remindsOn: isoDate,
+      createdAt,
+    },
+  ];
+}
+
+function createScheduleBlocks(now: Date, timeZoneId: string): readonly ScheduleBlock[] {
+  const roundedNow = new Date(now);
+  roundedNow.setUTCSeconds(0, 0);
+  roundedNow.setUTCMinutes(Math.floor(roundedNow.getUTCMinutes() / 5) * 5);
+  const completedScenarioEndsAt = new Date(roundedNow.getTime() - 5 * 60_000);
+  const completedScenarioStartsAt = new Date(completedScenarioEndsAt.getTime() - 30 * 60_000);
+  const upcomingScenarioStartsAt = new Date(roundedNow.getTime() + 60 * 60_000);
+  const upcomingScenarioEndsAt = new Date(upcomingScenarioStartsAt.getTime() + 45 * 60_000);
+
+  return [
+    {
+      id: 'demo-plan-week-draft-block',
+      taskItemId: 'demo-plan-week-draft',
+      occurrenceId: null,
+      timeZoneId,
+      startsAt: completedScenarioStartsAt.toISOString(),
+      endsAt: completedScenarioEndsAt.toISOString(),
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    },
+    {
+      id: 'demo-plan-team-call-block',
+      taskItemId: 'demo-plan-team-call',
+      occurrenceId: null,
+      timeZoneId,
+      startsAt: upcomingScenarioStartsAt.toISOString(),
+      endsAt: upcomingScenarioEndsAt.toISOString(),
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    },
+  ];
+}
+
+function createRecurrenceSeries(isoDate: string): readonly RecurrenceSeries[] {
+  return [
+    {
+      id: 'demo-plan-week-draft-recurrence',
+      itemKind: 'task',
+      itemId: 'demo-plan-week-draft',
+      frequency: 'weekly',
+      interval: 1,
+      startsOn: isoDate,
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    },
+  ];
+}
 
 interface DemoTaskDefinition {
   id: string;
@@ -199,28 +239,30 @@ const completedDefinitions: readonly DemoTaskDefinition[] = [
 
 export async function seedDemoData(source: AppDataSource): Promise<void> {
   await source.initialize();
+  const settings = await source.getSettings();
+  const now = new Date();
+  const currentDate = getDateInTimeZone(now.toISOString(), settings.timeZoneId);
 
   for (const project of projects) {
     await source.saveProject(project);
   }
 
-  for (const task of taskItems) {
+  for (const task of [...taskItems, ...createAcceptanceTasks(currentDate)]) {
     await source.saveTaskItem(task);
   }
 
-  for (const reminder of reminders) {
+  for (const reminder of [...reminders, ...createAcceptanceReminders(currentDate)]) {
     await source.saveReminder(reminder);
   }
 
-  for (const block of scheduleBlocks) {
+  for (const block of createScheduleBlocks(now, settings.timeZoneId)) {
     await source.saveScheduleBlock(block);
   }
 
-  for (const series of recurrenceSeries) {
+  for (const series of createRecurrenceSeries(currentDate)) {
     await source.saveRecurrenceSeries(series);
   }
 
-  const settings = await source.getSettings();
   await source.saveSettings({ ...settings, notificationLeadMinutes: 15 });
 }
 

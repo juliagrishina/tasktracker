@@ -321,6 +321,23 @@ const schemaVersionEleven = `
   ALTER TABLE settings ADD COLUMN time_zone_id TEXT;
 `;
 
+const schemaVersionTwelve = `
+  ALTER TABLE schedule_blocks ADD COLUMN notification_id TEXT;
+`;
+
+const schemaVersionThirteen = `
+  ALTER TABLE reminders ADD COLUMN linked_task_item_id TEXT;
+  ALTER TABLE reminders ADD COLUMN linked_occurrence_on TEXT;
+`;
+
+const schemaVersionFourteen = `
+  ALTER TABLE settings ADD COLUMN evening_review_notification_id TEXT;
+`;
+
+const schemaVersionFifteen = `
+  ALTER TABLE recurrence_occurrences ADD COLUMN notification_ids_json TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -404,6 +421,30 @@ const migrations: readonly Migration[] = [
     async apply(database) {
       await database.execAsync(schemaVersionEleven);
       await database.runAsync('UPDATE settings SET time_zone_id = ? WHERE id = 1', [getDefaultSettings().timeZoneId]);
+    },
+  },
+  {
+    version: 12,
+    async apply(database) {
+      await database.execAsync(schemaVersionTwelve);
+    },
+  },
+  {
+    version: 13,
+    async apply(database) {
+      await database.execAsync(schemaVersionThirteen);
+    },
+  },
+  {
+    version: 14,
+    async apply(database) {
+      await database.execAsync(schemaVersionFourteen);
+    },
+  },
+  {
+    version: 15,
+    async apply(database) {
+      await database.execAsync(schemaVersionFifteen);
     },
   },
 ];

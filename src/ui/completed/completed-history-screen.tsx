@@ -3,26 +3,55 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useOptionalAppServices } from '../../application/app-services-provider';
+import type { CompletedItem, CompletedItemKind } from '../../application/completed-use-cases';
+import type { TaskItem } from '../../domain/entities';
+import { ItemFormSheet } from '../backlog/item-form-sheet';
 import { designTokens } from '../design/tokens';
+import { PlanTaskActionsDialog, type PlanTaskAction } from '../plan/plan-task-actions-dialog';
 import { SurfaceCard } from '../primitives/surface-card';
+import { ContextMenuPressable } from '../primitives/context-menu-pressable';
 import { temporaryWebContentStyle } from '../screen-shell';
-
-import { completedDemoGroups, type CompletedDemoItem, type CompletedDemoKind } from './completed-demo-data';
 
 const periods = ['Сегодня', 'Неделя', 'Месяц', 'Год'] as const;
 type CompletedPeriod = (typeof periods)[number];
 
-const typeIcons: Record<CompletedDemoKind, keyof typeof Ionicons.glyphMap> = {
+type CompletedGroup = { id: string; title: string; items: readonly CompletedItem[] };
+
+const typeIcons: Record<CompletedItemKind, keyof typeof Ionicons.glyphMap> = {
   project: 'folder-outline',
   reminder: 'time-outline',
   task: 'checkmark',
+  subtask: 'checkmark-done-outline',
 };
 
 export function CompletedHistoryScreen() {
+  const services = useOptionalAppServices();
   const [period, setPeriod] = useState<CompletedPeriod>('Неделя');
   const [query, setQuery] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
-  const filteredGroups = useMemo(() => filterGroups(query), [query]);
+  const [selectedItem, setSelectedItem] = useState<CompletedItem | null>(null);
+  const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
+  const filteredGroups = useMemo(() => filterGroups(services?.completedItems ?? [], query, period), [period, query, services?.completedItems]);
+  const runAction = async (action: PlanTaskAction) => {
+    if (services === null || selectedItem === null) return;
+    if (action === 'returnToBacklog' && selectedItem.kind !== 'project') {
+      await services.planningActions.returnPlanItemToBacklog(selectedItem.kind === 'reminder'
+        ? { kind: 'reminder', id: selectedItem.id, occurrence: null, reason: null }
+        : { kind: selectedItem.kind, id: selectedItem.taskId ?? selectedItem.id, occurrence: selectedItem.occurrence, reason: null });
+      setFeedback(selectedItem.occurrence === null ? 'Дело возвращено в Backlog' : 'Экземпляр возвращён в Backlog');
+      setSelectedItem(null);
+      return;
+    }
+    if (selectedItem.occurrence !== null) {
+      if (action === 'resume' || action === 'plan') await services.planningActions.setRecurrenceOccurrenceState(selectedItem.occurrence.seriesId, selectedItem.occurrence.occursOn, 'active');
+    } else {
+      await services.backlogActions.resumeItem({ kind: selectedItem.kind, id: selectedItem.id });
+      if (action === 'plan') setEditingTask(await services.planningActions.getTaskItem(selectedItem.id));
+    }
+    if (action === 'resume') setFeedback('Дело возобновлено');
+    setSelectedItem(null);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -71,7 +100,7 @@ export function CompletedHistoryScreen() {
                 <CompletedRow
                   item={item}
                   key={item.id}
-                  onPressMore={() => setFeedback(`Действия для «${item.title}» доступны в демо-режиме`)}
+                  onPressMore={() => setSelectedItem(item)}
                   showDivider={index !== group.items.length - 1}
                 />
               ))}
@@ -84,52 +113,57 @@ export function CompletedHistoryScreen() {
         </View>
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
+      {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted itemKind={selectedItem.kind === 'reminder' ? 'reminder' : 'task'} onAction={(action) => void runAction(action)} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}
+      {editingTask === null ? null : <ItemFormSheet item={editingTask} mode="edit" onClose={() => setEditingTask(null)} onSaved={() => setEditingTask(null)} planningContext={{ defaultDate: new Date().toISOString().slice(0, 10) }} type={editingTask.kind} visible />}
     </SafeAreaView>
   );
 }
 
 function CompletedRow({ item, onPressMore, showDivider }: {
-  item: CompletedDemoItem;
+  item: CompletedItem;
   onPressMore: () => void;
   showDivider: boolean;
 }) {
   return (
-    <View style={[styles.row, showDivider && styles.rowDivider]}>
+    <ContextMenuPressable accessibilityLabel={`Действия: ${item.title}`} delayLongPress={350} onContextMenu={(event) => { event.preventDefault(); onPressMore(); }} onLongPress={onPressMore} style={[styles.row, showDivider && styles.rowDivider]}>
       <View style={[styles.typeIcon, item.kind === 'reminder' && styles.reminderIcon, item.kind === 'project' && styles.projectIcon]}>
         <Ionicons color={iconColor(item.kind)} name={typeIcons[item.kind]} size={17} />
       </View>
       <View style={styles.itemCopy}>
         <Text numberOfLines={1} style={styles.itemTitle}>{item.title}</Text>
-        <Text numberOfLines={1} style={styles.itemDetail}>{item.detail}</Text>
+        <Text numberOfLines={1} style={styles.itemDetail}>{item.occurrence === null ? 'Выполнено' : `Экземпляр от ${formatDate(item.occurrence.occursOn)}`}</Text>
       </View>
       <View style={styles.trailing}>
-        <Text style={styles.time}>{item.time}</Text>
-        <Pressable accessibilityLabel={`Действия: ${item.title}`} accessibilityRole="button" onPress={onPressMore} style={styles.moreButton}>
+        <Text style={styles.time}>{formatDate(item.completedAt)}</Text>
+        <Pressable accessibilityLabel={`Открыть действия: ${item.title}`} accessibilityRole="button" onPress={onPressMore} style={styles.moreButton}>
           <Ionicons color={designTokens.color.text.tertiary} name="ellipsis-horizontal" size={18} />
         </Pressable>
       </View>
-    </View>
+    </ContextMenuPressable>
   );
 }
 
-function filterGroups(query: string) {
+function filterGroups(items: readonly CompletedItem[], query: string, period: CompletedPeriod): readonly CompletedGroup[] {
   const normalizedQuery = query.trim().toLocaleLowerCase('ru-RU');
-
-  return completedDemoGroups
-    .map((group) => ({
-      ...group,
-      items: normalizedQuery.length === 0
-        ? group.items
-        : group.items.filter((item) => item.title.toLocaleLowerCase('ru-RU').includes(normalizedQuery)),
-    }))
-    .filter((group) => group.items.length > 0);
+  const earliest = Date.now() - ({ Сегодня: 1, Неделя: 7, Месяц: 31, Год: 366 }[period] * 24 * 60 * 60_000);
+  const groups = new Map<string, CompletedItem[]>();
+  for (const item of items) {
+    if (new Date(item.completedAt).getTime() < earliest || normalizedQuery.length > 0 && !item.title.toLocaleLowerCase('ru-RU').includes(normalizedQuery)) continue;
+    const key = item.completedAt.slice(0, 10);
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  return [...groups.entries()].sort(([left], [right]) => right.localeCompare(left)).map(([id, groupItems]) => ({ id, title: formatDate(id), items: groupItems }));
 }
 
 function formatElementCount(count: number) {
   return `${count} ${count === 1 ? 'элемент' : count >= 2 && count <= 4 ? 'элемента' : 'элементов'}`;
 }
 
-function iconColor(kind: CompletedDemoKind) {
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`));
+}
+
+function iconColor(kind: CompletedItemKind) {
   if (kind === 'project') {
     return designTokens.color.primaryStrong;
   }

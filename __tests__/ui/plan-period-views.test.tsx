@@ -156,10 +156,31 @@ describe('PlanScreen period views', () => {
     await source.saveScheduleBlock({ id: 'editable-plan-block', taskItemId: 'editable-plan-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
-    await waitFor(() => expect(view.getByText('Редактируемая задача')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Редактируемая задача'));
+    await waitFor(() => expect(view.getByLabelText('Редактируемая задача, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Редактируемая задача, 09:00–10:00, колонка 1 из 1'));
 
     await waitFor(() => expect(view.getByDisplayValue('Редактируемая задача')).toBeOnTheScreen());
+  });
+
+  test('opens a one-time reminder in the editor from the Day view', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveReminder({ id: 'editable-plan-reminder', title: 'Подтвердить бронирование', remindsOn: '2026-08-05', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Подтвердить бронирование')).toBeOnTheScreen());
+    fireEvent.press(view.getByText('Подтвердить бронирование'));
+
+    await waitFor(() => expect(view.getByDisplayValue('Подтвердить бронирование')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнить дело из редактора')).toBeOnTheScreen();
+    expect(view.getByLabelText('Удалить дело из редактора')).toBeOnTheScreen();
+    fireEvent.press(view.getByLabelText('Выполнить дело из редактора'));
+
+    await waitFor(async () => expect(await source.getReminder('editable-plan-reminder')).toMatchObject({ completedAt: expect.any(String) }));
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить бронирование, выполнено')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
+    fireEvent.press(view.getByLabelText('Без времени: Подтвердить бронирование, выполнено'));
+    await waitFor(() => expect(view.getByLabelText('Возобновить дело из редактора')).toBeOnTheScreen());
   });
 
   test('opens the task linked to a timeline block in the editor', async () => {
@@ -185,8 +206,8 @@ describe('PlanScreen period views', () => {
     await source.saveRecurrenceSeries({ id: 'recurring-plan-series', itemKind: 'task', itemId: 'recurring-plan-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-05', createdAt, updatedAt: createdAt, deletedAt: null });
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
-    await waitFor(() => expect(view.getByText('Повторяющаяся задача')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Повторяющаяся задача'));
+    await waitFor(() => expect(view.getByLabelText('Повторяющаяся задача, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Повторяющаяся задача, 09:00–10:00, колонка 1 из 1'));
     await waitFor(() => expect(view.getByLabelText('Редактировать повторение')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Редактировать повторение'));
     await waitFor(() => expect(view.getByText('К чему применить это изменение?')).toBeOnTheScreen());
@@ -210,8 +231,8 @@ describe('PlanScreen period views', () => {
     await source.saveScheduleBlock({ id: 'moved-plan-block', taskItemId: 'moved-plan-task', occurrenceId, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-06T09:00:00+03:00', endsAt: '2026-08-06T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-06" /></AppServicesProvider>);
 
-    await waitFor(() => expect(view.getByText('Перенесённая серия')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Перенесённая серия'));
+    await waitFor(() => expect(view.getByLabelText('Перенесённая серия, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Перенесённая серия, 09:00–10:00, колонка 1 из 1'));
     await waitFor(() => expect(view.getByLabelText('Редактировать повторение')).toBeOnTheScreen());
   });
 
