@@ -17,11 +17,12 @@ export function PlanTaskActionsDialog({ isCompleted = false, itemKind = 'task', 
   const isReminder = itemKind === 'reminder';
   const noun = isReminder ? 'напоминанием' : 'задачей';
   const nominativeNoun = isReminder ? 'напоминание' : 'задачу';
+  const returnToBacklogLabel = isReminder ? 'Вернуть напоминание в Backlog' : 'Вернуть задачу в Backlog';
   return <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible={visible}><View style={styles.overlay}><View accessibilityViewIsModal style={styles.dialog}>
     <Text style={styles.title}>Действия с {noun}</Text>
     <Text style={styles.description}>{taskTitle}</Text>
     {isCompleted ? <Pressable accessibilityLabel={`Возобновить ${nominativeNoun}`} accessibilityRole="button" onPress={() => onAction('resume')} style={[styles.action, styles.completeAction]}><Text style={styles.completeText}>Возобновить</Text></Pressable> : <Pressable accessibilityLabel={`Выполнить ${nominativeNoun}`} accessibilityRole="button" onPress={() => onAction('complete')} style={[styles.action, styles.completeAction]}><Text style={styles.completeText}>Выполнено</Text></Pressable>}
-    {!isReminder ? <Pressable accessibilityLabel="Вернуть задачу в Backlog" accessibilityRole="button" onPress={() => onAction('returnToBacklog')} style={[styles.action, styles.backlogAction]}><Text style={styles.backlogText}>Вернуть в Backlog</Text></Pressable> : null}
+    <Pressable accessibilityLabel={returnToBacklogLabel} accessibilityRole="button" onPress={() => onAction('returnToBacklog')} style={[styles.action, styles.backlogAction]}><Text style={styles.backlogText}>Вернуть в Backlog</Text></Pressable>
     {isCompleted && !isReminder ? <Pressable accessibilityLabel="Запланировать задачу" accessibilityRole="button" onPress={() => onAction('plan')} style={[styles.action, styles.backlogAction]}><Text style={styles.backlogText}>Запланировать</Text></Pressable> : <Pressable accessibilityLabel={`Удалить ${nominativeNoun}`} accessibilityRole="button" onPress={() => onAction('delete')} style={[styles.action, styles.deleteAction]}><Text style={styles.deleteText}>Удалить</Text></Pressable>}
     <Pressable accessibilityLabel={`Закрыть действия с ${noun}`} accessibilityRole="button" onPress={onRequestClose} style={styles.cancel}><Text style={styles.cancelText}>Отмена</Text></Pressable>
   </View></View></Modal>;

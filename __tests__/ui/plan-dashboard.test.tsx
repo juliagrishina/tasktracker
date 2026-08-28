@@ -134,6 +134,21 @@ describe('DayDashboard', () => {
     await waitFor(() => expect(view.getByText('Действия с напоминанием')).toBeOnTheScreen());
   });
 
+  test('returns a one-time reminder to Backlog from quick actions', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveReminder({ id: 'return-reminder', title: 'Выбрать подарок', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Выбрать подарок')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Выбрать подарок'), 'contextMenu', { preventDefault: jest.fn() });
+    await waitFor(() => expect(view.getByLabelText('Вернуть напоминание в Backlog')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Вернуть напоминание в Backlog'));
+
+    await waitFor(async () => expect(await source.getReminder('return-reminder')).toMatchObject({ remindsOn: null, periodStartOn: null, periodEndOn: null }));
+  });
+
   test('opens explicit actions for a scheduled task on a browser context-menu click', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';

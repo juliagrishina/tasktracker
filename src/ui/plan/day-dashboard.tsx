@@ -253,6 +253,10 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       if (occurrence !== null && scope === 'occurrence') await services.planningActions.setRecurrenceOccurrenceState(occurrence.seriesId, occurrence.occursOn, 'active');
       else await services.backlogActions.resumeItem({ kind: backlogItemKind, id: item.id });
     }
+    if (action === 'returnToBacklog' && itemKind === 'reminder') {
+      await services.backlogActions.resumeItem({ kind: 'reminder', id: item.id });
+      await services.backlogActions.updateReminder({ id: item.id, remindsOn: null, periodStartOn: null, periodEndOn: null });
+    }
     if (action === 'returnToBacklog' && itemKind === 'task') {
       if (occurrence !== null && scope === 'occurrence') {
         await services.planningActions.setRecurrenceOccurrenceState(occurrence.seriesId, occurrence.occursOn, 'active');
