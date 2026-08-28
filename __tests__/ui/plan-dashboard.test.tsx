@@ -104,6 +104,36 @@ describe('DayDashboard', () => {
     await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
   });
 
+  test('opens quick actions for a one-time reminder on a browser context-menu click', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveReminder({ id: 'context-menu-reminder', title: 'Подтвердить бронирование', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: 30, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить бронирование')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Подтвердить бронирование'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByText('Действия с напоминанием')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнить напоминание')).toBeOnTheScreen();
+    expect(view.getByLabelText('Удалить напоминание')).toBeOnTheScreen();
+    fireEvent.press(view.getByLabelText('Выполнить напоминание'));
+    await waitFor(async () => expect(await source.getReminder('context-menu-reminder')).toMatchObject({ completedAt: expect.any(String) }));
+  });
+
+  test('opens the same quick actions for a one-time reminder after a long press', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveReminder({ id: 'long-press-reminder', title: 'Подтвердить участие', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить участие')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Подтвердить участие'), 'longPress');
+
+    await waitFor(() => expect(view.getByText('Действия с напоминанием')).toBeOnTheScreen());
+  });
+
   test('opens explicit actions for a scheduled task on a browser context-menu click', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
