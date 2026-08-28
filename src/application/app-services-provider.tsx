@@ -24,6 +24,7 @@ import { createAppRepositories } from './app-services';
 import type {
   BacklogView,
   CompleteBacklogItemInput,
+  CreateFollowUpReminderInput,
   CreateProjectInput,
   CreateReminderInput,
   CreateSubtaskInput,
@@ -36,6 +37,7 @@ import type {
 } from './backlog-types';
 import {
   completeBacklogItem,
+  createFollowUpReminder,
   createProject,
   createReminder,
   createSubtask,
@@ -60,6 +62,7 @@ interface BacklogActions {
   createTask(input: CreateTaskInput): Promise<Extract<TaskItem, { kind: 'task' }>>;
   createSubtask(input: CreateSubtaskInput): Promise<Extract<TaskItem, { kind: 'subtask' }>>;
   createReminder(input: CreateReminderInput): Promise<Reminder>;
+  createFollowUpReminder(input: CreateFollowUpReminderInput): Promise<Reminder>;
   updateProject(input: UpdateProjectInput): Promise<Project>;
   updateTaskItem(input: UpdateTaskItemInput): Promise<TaskItem>;
   updateReminder(input: UpdateReminderInput): Promise<Reminder>;
@@ -161,6 +164,8 @@ export function AppServicesProvider({
         runBacklogAction(() => createSubtask(appSource, input)),
       createReminder: (input) =>
         runBacklogAction(() => createReminder(appSource, input)),
+      createFollowUpReminder: (input) =>
+        runBacklogAction(() => createFollowUpReminder(appSource, input)),
       updateProject: (input) =>
         runBacklogAction(() => updateProject(appSource, input)),
       updateTaskItem: (input) =>

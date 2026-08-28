@@ -325,6 +325,11 @@ const schemaVersionTwelve = `
   ALTER TABLE schedule_blocks ADD COLUMN notification_id TEXT;
 `;
 
+const schemaVersionThirteen = `
+  ALTER TABLE reminders ADD COLUMN linked_task_item_id TEXT;
+  ALTER TABLE reminders ADD COLUMN linked_occurrence_on TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -414,6 +419,12 @@ const migrations: readonly Migration[] = [
     version: 12,
     async apply(database) {
       await database.execAsync(schemaVersionTwelve);
+    },
+  },
+  {
+    version: 13,
+    async apply(database) {
+      await database.execAsync(schemaVersionThirteen);
     },
   },
 ];

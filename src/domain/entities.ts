@@ -53,6 +53,8 @@ export type TaskItem =
 export interface Reminder {
   id: EntityId;
   title: string;
+  linkedTaskItemId?: EntityId | null;
+  linkedOccurrenceOn?: string | null;
   remindsOn: string | null;
   periodStartOn: string | null;
   periodEndOn: string | null;

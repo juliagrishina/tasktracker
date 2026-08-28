@@ -33,6 +33,28 @@ describe('DayDashboard', () => {
     expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
   });
 
+  test('offers a linked follow-up reminder after completion and creates it for the chosen date', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'follow-up-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'follow-up-block', taskItemId: 'follow-up-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await waitFor(() => expect(view.getByText('Создать связанное напоминание?')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Напомнить через 3 дня'));
+
+    await waitFor(async () => expect(await source.listReminders()).toMatchObject([{
+      title: 'Проверить: Подготовить отчёт',
+      remindsOn: '2026-08-31',
+      linkedTaskItemId: 'follow-up-task',
+      linkedOccurrenceOn: null,
+    }]));
+  });
+
   test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';

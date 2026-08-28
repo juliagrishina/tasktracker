@@ -50,11 +50,22 @@ export interface CreateSubtaskInput {
 export interface CreateReminderInput {
   id: EntityId;
   title: string;
+  linkedTaskItemId?: EntityId | null;
+  linkedOccurrenceOn?: string | null;
   remindsOn?: string | null;
   periodStartOn?: string | null;
   periodEndOn?: string | null;
   repeatRule?: Reminder['repeatRule'];
   estimatedDurationMinutes?: number | null;
+  createdAt: string;
+}
+
+export interface CreateFollowUpReminderInput {
+  id: EntityId;
+  taskItemId: EntityId;
+  taskTitle: string;
+  linkedOccurrenceOn: string | null;
+  remindsOn: string;
   createdAt: string;
 }
 

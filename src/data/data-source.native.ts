@@ -56,6 +56,8 @@ interface TaskItemRow {
 interface ReminderRow {
   id: string;
   title: string;
+  linked_task_item_id: string | null;
+  linked_occurrence_on: string | null;
   reminds_on: string | null;
   period_start_on: string | null;
   period_end_on: string | null;
@@ -490,6 +492,8 @@ class NativeDataSource implements AppDataSource {
       `INSERT INTO reminders (
         id,
         title,
+        linked_task_item_id,
+        linked_occurrence_on,
         reminds_on,
         period_start_on,
         period_end_on,
@@ -500,9 +504,11 @@ class NativeDataSource implements AppDataSource {
         completed_at,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         title = excluded.title,
+        linked_task_item_id = excluded.linked_task_item_id,
+        linked_occurrence_on = excluded.linked_occurrence_on,
         reminds_on = excluded.reminds_on,
         period_start_on = excluded.period_start_on,
         period_end_on = excluded.period_end_on,
@@ -516,6 +522,8 @@ class NativeDataSource implements AppDataSource {
       [
         reminder.id,
         reminder.title,
+        reminder.linkedTaskItemId ?? null,
+        reminder.linkedOccurrenceOn ?? null,
         reminder.remindsOn,
         reminder.periodStartOn,
         reminder.periodEndOn,
@@ -534,7 +542,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const row = await database.getFirstAsync<ReminderRow>(
-      `SELECT id, title, reminds_on, period_start_on, period_end_on,
+      `SELECT id, title, linked_task_item_id, linked_occurrence_on, reminds_on, period_start_on, period_end_on,
         repeat_frequency, repeat_interval, repeat_weekdays_json, estimated_duration_minutes, completed_at, created_at, updated_at
       FROM reminders
       WHERE id = ? AND deleted_at IS NULL`,
@@ -546,6 +554,8 @@ class NativeDataSource implements AppDataSource {
       : {
           id: row.id,
           title: row.title,
+          linkedTaskItemId: row.linked_task_item_id,
+          linkedOccurrenceOn: row.linked_occurrence_on,
           remindsOn: row.reminds_on,
           periodStartOn: row.period_start_on,
           periodEndOn: row.period_end_on,
@@ -565,7 +575,7 @@ class NativeDataSource implements AppDataSource {
     await this.initialize();
     const database = await this.getDatabase();
     const rows = await database.getAllAsync<ReminderRow>(
-      `SELECT id, title, reminds_on, period_start_on, period_end_on,
+      `SELECT id, title, linked_task_item_id, linked_occurrence_on, reminds_on, period_start_on, period_end_on,
         repeat_frequency, repeat_interval, repeat_weekdays_json, estimated_duration_minutes, completed_at, created_at, updated_at
       FROM reminders
       WHERE deleted_at IS NULL
@@ -575,6 +585,8 @@ class NativeDataSource implements AppDataSource {
     return rows.map((row) => ({
       id: row.id,
       title: row.title,
+      linkedTaskItemId: row.linked_task_item_id,
+      linkedOccurrenceOn: row.linked_occurrence_on,
       remindsOn: row.reminds_on,
       periodStartOn: row.period_start_on,
       periodEndOn: row.period_end_on,

@@ -1,5 +1,6 @@
 import {
   completeBacklogItem,
+  createFollowUpReminder,
   createProject,
   createReminder,
   createSubtask,
@@ -170,6 +171,43 @@ describe('backlog use cases', () => {
     await expect(source.getTaskItem(unrelatedTask.id)).resolves.toMatchObject({
       completedAt: null,
     });
+  });
+
+  test('creates one linked follow-up reminder for a completed task and does not duplicate it', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, {
+      id: 'follow-up-task',
+      title: 'Подготовить отчёт',
+      createdAt,
+    });
+    await completeBacklogItem(source, { kind: 'task', id: task.id, completedAt });
+
+    const first = await createFollowUpReminder(source, {
+      id: 'follow-up-reminder-1',
+      taskItemId: task.id,
+      taskTitle: task.title,
+      linkedOccurrenceOn: null,
+      remindsOn: '2026-08-05',
+      createdAt: completedAt,
+    });
+    const repeated = await createFollowUpReminder(source, {
+      id: 'follow-up-reminder-2',
+      taskItemId: task.id,
+      taskTitle: task.title,
+      linkedOccurrenceOn: null,
+      remindsOn: '2026-08-05',
+      createdAt: completedAt,
+    });
+
+    expect(first).toMatchObject({
+      id: 'follow-up-reminder-1',
+      title: 'Проверить: Подготовить отчёт',
+      remindsOn: '2026-08-05',
+      linkedTaskItemId: task.id,
+      linkedOccurrenceOn: null,
+    });
+    expect(repeated.id).toBe(first.id);
+    await expect(source.listReminders()).resolves.toHaveLength(1);
   });
 
   test('cancels a task notification before marking the task complete', async () => {

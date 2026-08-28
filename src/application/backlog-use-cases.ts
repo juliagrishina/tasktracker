@@ -17,6 +17,7 @@ import type {
   BacklogTaskTree,
   BacklogView,
   CompleteBacklogItemInput,
+  CreateFollowUpReminderInput,
   CreateProjectInput,
   CreateReminderInput,
   CreateSubtaskInput,
@@ -245,6 +246,8 @@ export async function createReminder(
   const reminder: Reminder = {
     id: input.id,
     title: normalizeTitle(input.title),
+    linkedTaskItemId: input.linkedTaskItemId ?? null,
+    linkedOccurrenceOn: input.linkedOccurrenceOn ?? null,
     remindsOn: input.remindsOn ?? null,
     periodStartOn: input.periodStartOn ?? null,
     periodEndOn: input.periodEndOn ?? null,
@@ -260,6 +263,29 @@ export async function createReminder(
   await source.saveReminder(reminder);
   void recordEvent({ entityType: 'reminder', entityId: reminder.id, eventType: 'task_created' });
   return reminder;
+}
+
+export async function createFollowUpReminder(
+  source: AppDataSource,
+  input: CreateFollowUpReminderInput,
+): Promise<Reminder> {
+  const existing = (await source.listReminders()).find((reminder) =>
+    reminder.linkedTaskItemId === input.taskItemId
+    && (reminder.linkedOccurrenceOn ?? null) === input.linkedOccurrenceOn,
+  );
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  return createReminder(source, {
+    id: input.id,
+    title: `Проверить: ${input.taskTitle}`,
+    linkedTaskItemId: input.taskItemId,
+    linkedOccurrenceOn: input.linkedOccurrenceOn,
+    remindsOn: input.remindsOn,
+    createdAt: input.createdAt,
+  });
 }
 
 export async function updateProject(

@@ -6,12 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { designTokens } from '../design/tokens';
 import { useOptionalAppServices } from '../../application/app-services-provider';
 import { getDefaultSettings } from '../../data/default-settings';
-import { getDayLoadPercent, getPlanLoadTone, getTimeInTimeZone } from '../../domain/planning';
+import { getDateInTimeZone, getDayLoadPercent, getPlanLoadTone, getTimeInTimeZone } from '../../domain/planning';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { RecurrenceMoveDialog } from './recurrence-move-dialog';
 import { RecurrenceScopeDialog } from './recurrence-scope-dialog';
 import { CompletionDialog } from './completion-dialog';
+import { FollowUpReminderDialog } from './follow-up-reminder-dialog';
 import { UnfinishedTaskDialog } from './unfinished-task-dialog';
 
 import { ProgressRing } from './progress-ring';
@@ -54,6 +55,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
   const [completionCandidate, setCompletionCandidate] = useState<{ eligibility: import('../../application/completion-eligibility').CompletionEligibility; task: TaskItem } | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [isUnfinishedDialogVisible, setIsUnfinishedDialogVisible] = useState(false);
+  const [followUpCandidate, setFollowUpCandidate] = useState<{ task: TaskItem; linkedOccurrenceOn: string | null; completedOn: string } | null>(null);
   const [completedBlockIds, setCompletedBlockIds] = useState<ReadonlySet<string>>(new Set());
   const [completedUntimedTaskKeys, setCompletedUntimedTaskKeys] = useState<ReadonlySet<string>>(new Set());
   const [isCompleting, setIsCompleting] = useState(false);
@@ -153,8 +155,9 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
     setCompletionError(null);
     setIsCompleting(true);
     try {
+      const completedAt = (now ?? new Date()).toISOString();
       if (completionCandidate.eligibility.occurrence === null) {
-        await services.backlogActions.completeItem({ kind: completionCandidate.task.kind, id: completionCandidate.task.id, completedAt: (now ?? new Date()).toISOString() });
+        await services.backlogActions.completeItem({ kind: completionCandidate.task.kind, id: completionCandidate.task.id, completedAt });
       } else {
         await services.planningActions.setRecurrenceOccurrenceState(
           completionCandidate.eligibility.occurrence.seriesId,
@@ -174,10 +177,37 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
       setReminders(nextReminders);
       setUntimedTasks(nextUntimedTasks);
       setCompletionCandidate(null);
+      setFollowUpCandidate({
+        task: completionCandidate.task,
+        linkedOccurrenceOn: completionCandidate.eligibility.occurrence?.occursOn ?? null,
+        completedOn: getDateInTimeZone(completedAt, settings.timeZoneId),
+      });
       setFeedback('Дело завершено');
       onRefresh?.();
     } catch (caughtError) {
       setCompletionError(caughtError instanceof Error ? caughtError.message : 'Не удалось завершить дело');
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+  const createFollowUpReminder = async (remindsOn: string) => {
+    if (services === null || followUpCandidate === null) return;
+    setCompletionError(null);
+    setIsCompleting(true);
+    try {
+      await services.backlogActions.createFollowUpReminder({
+        id: `follow-up-${followUpCandidate.task.id}-${followUpCandidate.linkedOccurrenceOn ?? 'single'}`,
+        taskItemId: followUpCandidate.task.id,
+        taskTitle: followUpCandidate.task.title,
+        linkedOccurrenceOn: followUpCandidate.linkedOccurrenceOn,
+        remindsOn,
+        createdAt: (now ?? new Date()).toISOString(),
+      });
+      setFollowUpCandidate(null);
+      setFeedback('Связанное напоминание создано');
+      onRefresh?.();
+    } catch (caughtError) {
+      setCompletionError(caughtError instanceof Error ? caughtError.message : 'Не удалось создать напоминание');
     } finally {
       setIsCompleting(false);
     }
@@ -341,6 +371,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedRemoveDialogVisible(false); }} onRequestClose={() => setIsUntimedRemoveDialogVisible(false)} visible={isUntimedRemoveDialogVisible} />}
       {completionCandidate === null ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) setCompletionCandidate(null); }} onUnfinished={() => { if (!isCompleting) setIsUnfinishedDialogVisible(true); }} taskTitle={completionCandidate.task.title} visible={!isUnfinishedDialogVisible} />}
       {completionCandidate === null ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
+      {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
     </SafeAreaView>
   );
 }
