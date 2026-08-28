@@ -426,41 +426,42 @@ export async function syncReminderRecurrence(source: AppDataSource, reminderId: 
 export type PlanUntimedReminder = import('../domain/entities').Reminder & { seriesId: EntityId | null; occursOn: string | null };
 export type PlanUntimedTask = TaskItem & { seriesId: EntityId | null; occursOn: string | null };
 
+function hasPlanPlacement(item: Pick<TaskItem, 'scheduledOn' | 'periodStartOn' | 'periodEndOn'> | Pick<import('../domain/entities').Reminder, 'remindsOn' | 'periodStartOn' | 'periodEndOn'>, isoDate: string): boolean {
+  const plannedOn = 'scheduledOn' in item ? item.scheduledOn : item.remindsOn;
+  return plannedOn === isoDate || (item.periodStartOn !== null && item.periodEndOn !== null && item.periodStartOn <= isoDate && isoDate <= item.periodEndOn);
+}
+
 export async function getPlanUntimedReminders(source: AppDataSource, isoDate: string): Promise<readonly PlanUntimedReminder[]> {
   const [reminders, series] = await Promise.all([source.listReminders(), source.listRecurrenceSeries()]);
   const result: PlanUntimedReminder[] = [];
   for (const reminder of reminders) {
-    if (reminder.completedAt !== null) continue;
     const start = reminder.remindsOn ?? reminder.periodStartOn;
     if (start === null) continue;
     const recurrence = series.find((candidate) => candidate.itemKind === 'reminder' && candidate.itemId === reminder.id);
     if (recurrence !== undefined) {
+      if (reminder.completedAt !== null) continue;
       const occurrences = await source.listRecurrenceOccurrences(recurrence.id);
       const occurrence = occurrences.find((candidate) => candidate.occursOn === isoDate);
       if (getRecurrenceDates(recurrence, isoDate, isoDate).includes(isoDate) && !(occurrence?.cancelledAt !== null && occurrence?.cancelledAt !== undefined || occurrence?.completedAt !== null && occurrence?.completedAt !== undefined)) result.push({ ...reminder, ...(occurrence?.reminderPatch ?? {}), seriesId: recurrence.id, occursOn: isoDate });
       for (const moved of occurrences.filter((candidate) => candidate.reminderPatch?.remindsOn === isoDate && candidate.completedAt === null)) result.push({ ...reminder, ...(moved.reminderPatch ?? {}), seriesId: recurrence.id, occursOn: moved.occursOn });
       continue;
     }
-    if (reminder.remindsOn === isoDate || (reminder.periodStartOn !== null && reminder.periodEndOn !== null && reminder.periodStartOn <= isoDate && isoDate <= reminder.periodEndOn)) result.push({ ...reminder, seriesId: null, occursOn: null });
+    if (hasPlanPlacement(reminder, isoDate)) result.push({ ...reminder, seriesId: null, occursOn: null });
   }
   return result;
-}
-
-function hasPlacementOn(task: TaskItem, isoDate: string): boolean {
-  return task.scheduledOn === isoDate || (task.periodStartOn !== null && task.periodStartOn !== undefined && task.periodEndOn !== null && task.periodEndOn !== undefined && task.periodStartOn <= isoDate && isoDate <= task.periodEndOn);
 }
 
 export async function getPlanUntimedTasks(source: AppDataSource, isoDate: string): Promise<readonly PlanUntimedTask[]> {
   const initialTasks = await source.listTaskItems();
   for (const task of initialTasks) if (task.completedAt === null && task.periodEndOn !== null && task.periodEndOn !== undefined && task.periodEndOn < isoDate) await returnTaskToBacklog(source, { taskId: task.id, reason: null });
-  const [tasks, blocks, series, settings] = await Promise.all([source.listTaskItems(), source.listScheduleBlocks(), source.listRecurrenceSeries(), source.getSettings()]);
+  const [tasks, blocks, series] = await Promise.all([source.listTaskItems(), source.listScheduleBlocks(), source.listRecurrenceSeries()]);
   const taskIdsWithExactTime = new Set(blocks.map((block) => block.taskItemId));
   const result: PlanUntimedTask[] = [];
   for (const task of tasks) {
     if (taskIdsWithExactTime.has(task.id)) continue;
     const recurrence = series.find((candidate) => candidate.itemKind === 'task' && candidate.itemId === task.id);
     if (recurrence === undefined) {
-      if (hasPlacementOn(task, isoDate) && (task.completedAt === null || getDateInTimeZone(task.completedAt, settings.timeZoneId) === isoDate)) result.push({ ...task, seriesId: null, occursOn: null });
+      if (hasPlanPlacement(task, isoDate)) result.push({ ...task, seriesId: null, occursOn: null });
       continue;
     }
     const occurrences = await source.listRecurrenceOccurrences(recurrence.id);

@@ -165,13 +165,22 @@ describe('PlanScreen period views', () => {
   test('opens a one-time reminder in the editor from the Day view', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveReminder({ id: 'editable-plan-reminder', title: 'Подтвердить бронирование', remindsOn: '2026-08-05', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveReminder({ id: 'editable-plan-reminder', title: 'Подтвердить бронирование', remindsOn: '2026-08-05', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Подтвердить бронирование')).toBeOnTheScreen());
     fireEvent.press(view.getByText('Подтвердить бронирование'));
 
     await waitFor(() => expect(view.getByDisplayValue('Подтвердить бронирование')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнить дело из редактора')).toBeOnTheScreen();
+    expect(view.getByLabelText('Удалить дело из редактора')).toBeOnTheScreen();
+    fireEvent.press(view.getByLabelText('Выполнить дело из редактора'));
+
+    await waitFor(async () => expect(await source.getReminder('editable-plan-reminder')).toMatchObject({ completedAt: expect.any(String) }));
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить бронирование, выполнено')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
+    fireEvent.press(view.getByLabelText('Без времени: Подтвердить бронирование, выполнено'));
+    await waitFor(() => expect(view.getByLabelText('Возобновить дело из редактора')).toBeOnTheScreen());
   });
 
   test('opens the task linked to a timeline block in the editor', async () => {

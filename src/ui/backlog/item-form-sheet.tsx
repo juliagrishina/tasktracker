@@ -29,6 +29,7 @@ import { getInstantInTimeZone, getDateInTimeZone, getTimeInTimeZone } from '../.
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
 type FormItem = Project | TaskItem | Reminder;
+type ActionableItem = TaskItem | Reminder;
 type PendingConflict =
   | { kind: 'task'; input: SaveTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] }
   | { kind: 'timedReminder'; input: CreateTimedReminderTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] };
@@ -46,9 +47,9 @@ interface ItemFormSheetProps {
   parentTaskId?: string;
   projectId?: string | null;
   onSaved?: () => void;
-  onComplete?: (item: TaskItem) => Promise<void>;
-  onResume?: (item: TaskItem) => Promise<void>;
-  onDelete?: (item: TaskItem) => Promise<void>;
+  onComplete?: (item: ActionableItem) => Promise<void>;
+  onResume?: (item: ActionableItem) => Promise<void>;
+  onDelete?: (item: ActionableItem) => Promise<void>;
   occurrenceEdit?: {
     onSave: (input: { title: string; description: string; estimatedDurationMinutes: number | null }) => Promise<void>;
   };
@@ -73,6 +74,10 @@ function getInitialProjectId(item: FormItem | undefined, projectId: string | nul
   }
 
   return projectId ?? null;
+}
+
+function isActionableItem(item: FormItem): item is ActionableItem {
+  return 'kind' in item || 'remindsOn' in item;
 }
 
 function getInitialDescription(item: FormItem | undefined): string {
@@ -508,9 +513,9 @@ export function ItemFormSheet({
             <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>
               <Text style={styles.secondaryActionText}>Отмена</Text>
             </Pressable>
-            {mode === 'edit' && item !== undefined && 'kind' in item && item.completedAt === null && onComplete !== undefined ? <Pressable accessibilityLabel="Выполнить задачу из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onComplete(item))} style={[styles.action, styles.completeAction, isSaving && styles.disabledAction]}><Text style={styles.primaryActionText}>Выполнено</Text></Pressable> : null}
-            {mode === 'edit' && item !== undefined && 'kind' in item && item.completedAt !== null && onResume !== undefined ? <Pressable accessibilityLabel="Возобновить задачу из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onResume(item))} style={[styles.action, styles.completeAction, isSaving && styles.disabledAction]}><Text style={styles.primaryActionText}>Возобновить</Text></Pressable> : null}
-            {mode === 'edit' && item !== undefined && 'kind' in item && onDelete !== undefined ? <Pressable accessibilityLabel="Удалить задачу из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void (async () => { if (await confirmBacklogDeletion()) await onDelete(item); })()} style={[styles.action, styles.deleteAction, isSaving && styles.disabledAction]}><Text style={styles.deleteActionText}>Удалить</Text></Pressable> : null}
+            {mode === 'edit' && item !== undefined && isActionableItem(item) && item.completedAt === null && onComplete !== undefined ? <Pressable accessibilityLabel="Выполнить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onComplete(item))} style={[styles.action, styles.completeAction, isSaving && styles.disabledAction]}><Text style={styles.primaryActionText}>Выполнено</Text></Pressable> : null}
+            {mode === 'edit' && item !== undefined && isActionableItem(item) && item.completedAt !== null && onResume !== undefined ? <Pressable accessibilityLabel="Возобновить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onResume(item))} style={[styles.action, styles.completeAction, isSaving && styles.disabledAction]}><Text style={styles.primaryActionText}>Возобновить</Text></Pressable> : null}
+            {mode === 'edit' && item !== undefined && isActionableItem(item) && onDelete !== undefined ? <Pressable accessibilityLabel="Удалить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void (async () => { if (await confirmBacklogDeletion()) await onDelete(item); })()} style={[styles.action, styles.deleteAction, isSaving && styles.disabledAction]}><Text style={styles.deleteActionText}>Удалить</Text></Pressable> : null}
             <Pressable accessibilityState={{ disabled: isSaving }} onPress={() => void submit()} style={[styles.action, styles.primaryAction, isSaving && styles.disabledAction]}>
               <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? mode === 'create' ? 'Создать' : 'Сохранить' : 'Сохранить'}</Text>
             </Pressable>

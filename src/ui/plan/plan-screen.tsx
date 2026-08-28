@@ -34,6 +34,12 @@ interface RecurrenceTaskEditor {
   task: TaskItem;
 }
 
+type PlanActionableItem = TaskItem | Reminder;
+
+function getActionableItemKind(item: PlanActionableItem): 'task' | 'subtask' | 'reminder' {
+  return 'kind' in item ? item.kind : 'reminder';
+}
+
 function getCurrentLocalDate(now = new Date()): string {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -72,6 +78,24 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
   const selectDate = (isoDate: string) => {
     setSelectedDate(isoDate);
     setMode('day');
+  };
+
+  const completePlanItem = async (item: PlanActionableItem) => {
+    if (services === null) return;
+    await services.backlogActions.completeItem({ kind: getActionableItemKind(item), id: item.id, completedAt: new Date().toISOString() });
+  };
+
+  const resumePlanItem = async (item: PlanActionableItem) => {
+    if (services === null) return;
+    await services.backlogActions.resumeItem({ kind: getActionableItemKind(item), id: item.id });
+  };
+
+  const deletePlanItem = async (item: PlanActionableItem) => {
+    if (services === null) return;
+    await services.backlogActions.deleteItem({ kind: getActionableItemKind(item), id: item.id, confirmed: true });
+    setEditingTask(null);
+    setEditingReminder(null);
+    setRefreshToken((value) => value + 1);
   };
 
   return (
@@ -124,10 +148,10 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         <ItemFormSheet
           item={editingTask}
           mode="edit"
-          onComplete={async (task) => { if (services === null) return; await services.backlogActions.completeItem({ kind: task.kind, id: task.id, completedAt: new Date().toISOString() }); }}
-          onResume={async (task) => { if (services === null) return; await services.backlogActions.resumeItem({ kind: task.kind, id: task.id }); setRefreshToken((value) => value + 1); }}
+          onComplete={completePlanItem}
+          onResume={resumePlanItem}
           onClose={() => setEditingTask(null)}
-          onDelete={async (task) => { if (services === null) return; await services.backlogActions.deleteItem({ kind: task.kind, id: task.id, confirmed: true }); setEditingTask(null); setRefreshToken((value) => value + 1); }}
+          onDelete={deletePlanItem}
           planningContext={{ defaultDate: selectedDate }}
           onSaved={() => { setEditingTask(null); setRefreshToken((value) => value + 1); }}
           type={editingTask.kind}
@@ -138,7 +162,10 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         <ItemFormSheet
           item={editingReminder}
           mode="edit"
+          onComplete={completePlanItem}
+          onResume={resumePlanItem}
           onClose={() => setEditingReminder(null)}
+          onDelete={deletePlanItem}
           onSaved={() => { setEditingReminder(null); setRefreshToken((value) => value + 1); }}
           type="reminder"
           visible
