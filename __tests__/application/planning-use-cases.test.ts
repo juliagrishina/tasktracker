@@ -4,12 +4,118 @@ import * as planningUseCases from '../../src/application/planning-use-cases';
 import type { ScheduleBlock, TaskItem } from '../../src/domain/entities';
 import type { LocalNotificationScheduler } from '../../src/application/notification-scheduling';
 import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, returnIncompleteTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from '../../src/application/planning-use-cases';
+import { updatePlanningSettings } from '../../src/application/settings-use-cases';
+import { getDefaultSettings } from '../../src/data/default-settings';
 
 const createdAt = '2026-08-01T00:00:00.000Z';
 const task: TaskItem = { id: 'task-1', kind: 'task', projectId: null, parentTaskId: null, title: 'План', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null };
 const block: ScheduleBlock = { id: 'block-1', taskItemId: task.id, occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-03T09:00:00+03:00', endsAt: '2026-08-03T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null };
 
 describe('planning use cases', () => {
+  test('saves validated planning settings and recreates future notifications with the new lead time', async () => {
+    const source = createInMemoryDataSource();
+    const scheduler: LocalNotificationScheduler = {
+      schedule: jest.fn().mockResolvedValueOnce('new-block-notification').mockResolvedValueOnce('new-evening-notification'),
+      cancel: jest.fn(),
+    };
+    const futureBlock = {
+      ...block,
+      notificationId: 'old-block-notification',
+      startsAt: '2026-08-29T10:00:00+03:00',
+      endsAt: '2026-08-29T11:00:00+03:00',
+    };
+    await source.saveTaskItem(task);
+    await source.saveTaskItem({ ...task, id: 'today-task', title: 'На сегодня', scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null });
+    await source.saveScheduleBlock(futureBlock);
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual', eveningReviewNotificationId: 'old-evening-notification' });
+
+    await updatePlanningSettings(source, {
+      workdayStartsAt: '09:00',
+      workdayEndsAt: '18:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 30,
+    }, scheduler, new Date('2026-08-28T09:00:00.000Z'));
+
+    await expect(source.getSettings()).resolves.toMatchObject({
+      workdayStartsAt: '09:00',
+      workdayEndsAt: '18:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 30,
+      eveningReviewNotificationId: 'new-evening-notification',
+    });
+    await expect(source.getScheduleBlock(futureBlock.id)).resolves.toMatchObject({ notificationId: 'new-block-notification' });
+    expect(scheduler.cancel).toHaveBeenCalledWith('old-block-notification');
+    expect(scheduler.cancel).toHaveBeenCalledWith('old-evening-notification');
+    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.stringContaining('План'),
+      scheduledAt: '2026-08-29T06:30:00.000Z',
+    }));
+    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Вечерняя проверка',
+      scheduledAt: '2026-08-28T17:00:00.000Z',
+    }));
+  });
+
+  test('rejects invalid planning settings without changing stored values', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({ ...getDefaultSettings(), workdayStartsAt: '08:00', workdayEndsAt: '22:00' });
+
+    await expect(updatePlanningSettings(source, {
+      workdayStartsAt: '22:00',
+      workdayEndsAt: '08:00',
+      eveningReviewAt: '21:00',
+      notificationLeadMinutes: 10,
+    })).rejects.toThrow('Время окончания рабочего дня должно быть позже времени начала');
+    await expect(source.getSettings()).resolves.toMatchObject({ workdayStartsAt: '08:00', workdayEndsAt: '22:00' });
+  });
+
+  test('rebuilds future recurring instance notifications with the new lead time', async () => {
+    const source = createInMemoryDataSource();
+    const scheduler: LocalNotificationScheduler = {
+      schedule: jest.fn().mockResolvedValue('new-recurrence-notification'),
+      cancel: jest.fn(),
+    };
+    const recurringBlock = {
+      ...block,
+      startsAt: '2026-08-29T10:00:00+03:00',
+      endsAt: '2026-08-29T11:00:00+03:00',
+    };
+    await source.saveTaskItem(task);
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [recurringBlock],
+      recurrence: { id: 'settings-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-29', createdAt },
+    });
+    await source.saveRecurrenceOccurrence({
+      id: 'occurrence-settings-series-2026-08-29',
+      seriesId: 'settings-series',
+      occursOn: '2026-08-29',
+      cancelledAt: null,
+      completedAt: null,
+      blocksOverridden: false,
+      taskPatch: null,
+      reminderPatch: null,
+      notificationIds: ['old-recurrence-notification'],
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    });
+
+    await updatePlanningSettings(source, {
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '22:00',
+      eveningReviewAt: '21:00',
+      notificationLeadMinutes: 30,
+    }, scheduler, new Date('2026-08-28T09:00:00.000Z'));
+
+    expect(scheduler.cancel).toHaveBeenCalledWith('old-recurrence-notification');
+    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: '2026-08-29T06:30:00.000Z' }));
+    await expect(source.listRecurrenceOccurrences('settings-series')).resolves.toContainEqual(expect.objectContaining({
+      occursOn: '2026-08-29',
+      notificationIds: ['new-recurrence-notification'],
+    }));
+  });
+
   test('extends the final block of an unfinished task by 30 minutes', async () => {
     const source = createInMemoryDataSource();
     await source.saveTaskItem(task);

@@ -52,6 +52,25 @@ function TimeZoneModeProbe() {
   );
 }
 
+function PlanningSettingsProbe() {
+  const { isReady, settings, settingsActions } = useAppServices();
+
+  if (!isReady) {
+    return <Text>loading planning settings</Text>;
+  }
+
+  return (
+    <Pressable onPress={() => void settingsActions.updatePlanningSettings({
+      workdayStartsAt: '09:00',
+      workdayEndsAt: '18:00',
+      eveningReviewAt: '20:00',
+      notificationLeadMinutes: 30,
+    })}>
+      <Text>{`${settings.workdayStartsAt}-${settings.workdayEndsAt}:${settings.eveningReviewAt}:${settings.notificationLeadMinutes}`}</Text>
+    </Pressable>
+  );
+}
+
 describe('AppServicesProvider', () => {
   test('exposes seeded settings and Plan demo data after initialization', async () => {
     const view = await render(
@@ -109,6 +128,31 @@ describe('AppServicesProvider', () => {
     await waitFor(async () => {
       expect(view.getByText('device')).toBeOnTheScreen();
       await expect(source.getSettings()).resolves.toMatchObject({ timeZoneMode: 'device' });
+    });
+  });
+
+  test('exposes an action that persists planning settings', async () => {
+    const source = createInMemoryDataSource();
+    const notificationScheduler = { schedule: jest.fn(), cancel: jest.fn() };
+    const view = await render(
+      <AppServicesProvider source={source} seedDevelopmentData={false} notificationScheduler={notificationScheduler}>
+        <PlanningSettingsProbe />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText('08:00-22:00:21:00:10')).toBeOnTheScreen());
+    await act(async () => {
+      fireEvent.press(view.getByText('08:00-22:00:21:00:10'));
+    });
+
+    await waitFor(async () => {
+      expect(view.getByText('09:00-18:00:20:00:30')).toBeOnTheScreen();
+      await expect(source.getSettings()).resolves.toMatchObject({
+        workdayStartsAt: '09:00',
+        workdayEndsAt: '18:00',
+        eveningReviewAt: '20:00',
+        notificationLeadMinutes: 30,
+      });
     });
   });
 });

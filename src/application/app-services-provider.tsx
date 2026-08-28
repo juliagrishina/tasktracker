@@ -61,6 +61,7 @@ import { localNotificationScheduler } from './local-notification-scheduler';
 import type { LocalNotificationScheduler } from './notification-scheduling';
 import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
+import { updatePlanningSettings, type UpdatePlanningSettingsInput } from './settings-use-cases';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -105,6 +106,7 @@ interface PlanningActions {
 interface SettingsActions {
   updateTimeZone(timeZoneId: string): Promise<void>;
   useDeviceTimeZone(): Promise<void>;
+  updatePlanningSettings(input: UpdatePlanningSettingsInput): Promise<void>;
 }
 
 interface AppServicesContextValue {
@@ -251,8 +253,12 @@ export function AppServicesProvider({
         await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
       },
+      updatePlanningSettings: async (input) => {
+        const updatedSettings = await updatePlanningSettings(appSource, input, notificationScheduler);
+        setSettings(updatedSettings);
+      },
     }),
-    [appSource, settings],
+    [appSource, notificationScheduler, settings],
   );
 
   useEffect(() => {
