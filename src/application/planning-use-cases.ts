@@ -423,12 +423,17 @@ export async function syncReminderRecurrence(source: AppDataSource, reminderId: 
   await source.saveRecurrenceSeries({ id: current[0]?.id ?? `series-${reminderId}`, itemKind: 'reminder', itemId: reminderId, frequency: reminder.repeatRule.frequency, interval: reminder.repeatRule.interval, weekdays: reminder.repeatRule.weekdays, startsOn: reminder.remindsOn ?? reminder.periodStartOn!, createdAt: current[0]?.createdAt ?? now, updatedAt: now, deletedAt: null });
 }
 
-export type PlanUntimedReminder = import('../domain/entities').Reminder & { seriesId: EntityId | null; occursOn: string | null };
+export type PlanUntimedReminder = Reminder & { seriesId: EntityId | null; occursOn: string | null };
 export type PlanUntimedTask = TaskItem & { seriesId: EntityId | null; occursOn: string | null };
 
-function hasPlanPlacement(item: Pick<TaskItem, 'scheduledOn' | 'periodStartOn' | 'periodEndOn'> | Pick<import('../domain/entities').Reminder, 'remindsOn' | 'periodStartOn' | 'periodEndOn'>, isoDate: string): boolean {
-  const plannedOn = 'scheduledOn' in item ? item.scheduledOn : item.remindsOn;
-  return plannedOn === isoDate || (item.periodStartOn !== null && item.periodEndOn !== null && item.periodStartOn <= isoDate && isoDate <= item.periodEndOn);
+type PlanPlacement = {
+  plannedOn: string | null;
+  periodStartOn: string | null;
+  periodEndOn: string | null;
+};
+
+function hasPlanPlacement(item: PlanPlacement, isoDate: string): boolean {
+  return item.plannedOn === isoDate || (item.periodStartOn !== null && item.periodEndOn !== null && item.periodStartOn <= isoDate && isoDate <= item.periodEndOn);
 }
 
 export async function getPlanUntimedReminders(source: AppDataSource, isoDate: string): Promise<readonly PlanUntimedReminder[]> {
@@ -446,7 +451,7 @@ export async function getPlanUntimedReminders(source: AppDataSource, isoDate: st
       for (const moved of occurrences.filter((candidate) => candidate.reminderPatch?.remindsOn === isoDate && candidate.completedAt === null)) result.push({ ...reminder, ...(moved.reminderPatch ?? {}), seriesId: recurrence.id, occursOn: moved.occursOn });
       continue;
     }
-    if (hasPlanPlacement(reminder, isoDate)) result.push({ ...reminder, seriesId: null, occursOn: null });
+    if (hasPlanPlacement({ plannedOn: reminder.remindsOn, periodStartOn: reminder.periodStartOn, periodEndOn: reminder.periodEndOn }, isoDate)) result.push({ ...reminder, seriesId: null, occursOn: null });
   }
   return result;
 }
@@ -461,7 +466,7 @@ export async function getPlanUntimedTasks(source: AppDataSource, isoDate: string
     if (taskIdsWithExactTime.has(task.id)) continue;
     const recurrence = series.find((candidate) => candidate.itemKind === 'task' && candidate.itemId === task.id);
     if (recurrence === undefined) {
-      if (hasPlanPlacement(task, isoDate)) result.push({ ...task, seriesId: null, occursOn: null });
+      if (hasPlanPlacement({ plannedOn: task.scheduledOn ?? null, periodStartOn: task.periodStartOn ?? null, periodEndOn: task.periodEndOn ?? null }, isoDate)) result.push({ ...task, seriesId: null, occursOn: null });
       continue;
     }
     const occurrences = await source.listRecurrenceOccurrences(recurrence.id);

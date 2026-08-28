@@ -1,6 +1,7 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { AppServicesProvider } from '../../src/application/app-services-provider';
+import type { LocalNotificationScheduler } from '../../src/application/notification-scheduling';
 import { saveTaskPlanning } from '../../src/application/planning-use-cases';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { DayDashboard } from '../../src/ui/plan/day-dashboard';
@@ -8,6 +9,10 @@ import { DayDashboard } from '../../src/ui/plan/day-dashboard';
 describe('recurrence move', () => {
   test('asks whether to move only the selected instance or the full series', async () => {
     const source = createInMemoryDataSource();
+    const notificationScheduler: LocalNotificationScheduler = {
+      schedule: async () => 'notification-1',
+      cancel: async () => undefined,
+    };
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveTaskItem({ id: 'task-1', kind: 'task', projectId: null, parentTaskId: null, title: 'Повторяемая задача', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await saveTaskPlanning(source, {
@@ -16,9 +21,10 @@ describe('recurrence move', () => {
       recurrence: { id: 'series-1', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
     });
 
-    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
-    await waitFor(() => expect(view.getByText('Повторяемая задача')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Повторяемая задача'));
+    const view = await render(<AppServicesProvider notificationScheduler={notificationScheduler} source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
+    const recurringBlockLabel = 'Повторяемая задача, 09:00–10:00, колонка 1 из 1';
+    await waitFor(() => expect(view.getByLabelText(recurringBlockLabel)).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText(recurringBlockLabel));
     await waitFor(() => expect(view.getByLabelText('Перенести этот экземпляр')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Перенести этот экземпляр'));
 
