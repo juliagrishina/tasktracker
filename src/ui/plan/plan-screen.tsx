@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
 import { useOptionalAppServices } from '../../application/app-services-provider';
-import type { RecurrenceOccurrence, TaskItem } from '../../domain/entities';
+import type { RecurrenceOccurrence, Reminder, TaskItem } from '../../domain/entities';
 import { loadPlanReadModel, type PlanReadModel } from '../../application/plan-read-model';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { ItemFormSheet } from '../backlog/item-form-sheet';
@@ -48,6 +48,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
   const [selectedDate, setSelectedDate] = useState(() => initialDate ?? getCurrentLocalDate());
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [editingOccurrence, setEditingOccurrence] = useState<RecurrenceTaskEditor | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [planReadModel, setPlanReadModel] = useState<PlanReadModel | null>(null);
@@ -79,6 +80,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         <DayDashboard
           mode={mode}
           onCreateTask={() => setIsTaskSheetVisible(true)}
+          onEditReminder={setEditingReminder}
           onEditTask={setEditingTask}
           onEditRecurrence={(task, seriesId, occursOn) => {
             if (services === null) return;
@@ -129,6 +131,16 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           planningContext={{ defaultDate: selectedDate }}
           onSaved={() => { setEditingTask(null); setRefreshToken((value) => value + 1); }}
           type={editingTask.kind}
+          visible
+        />
+      ) : null}
+      {editingReminder !== null ? (
+        <ItemFormSheet
+          item={editingReminder}
+          mode="edit"
+          onClose={() => setEditingReminder(null)}
+          onSaved={() => { setEditingReminder(null); setRefreshToken((value) => value + 1); }}
+          type="reminder"
           visible
         />
       ) : null}

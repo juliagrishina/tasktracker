@@ -118,6 +118,40 @@ describe('DayDashboard', () => {
     await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
   });
 
+  test('shows resume for a completed recurring instance in plan actions', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'completed-recurring-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Завершённый повтор', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'completed-recurring-block', taskItemId: 'completed-recurring-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'completed-recurring-series', itemKind: 'task', itemId: 'completed-recurring-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceOccurrence({ id: 'completed-recurring-occurrence', seriesId: 'completed-recurring-series', occursOn: '2026-08-28', cancelledAt: null, completedAt: '2026-08-28T10:00:00.000Z', blocksOverridden: false, taskPatch: null, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Завершённый повтор, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Завершённый повтор, 09:00–10:00, выполнено, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+
+    await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
+  });
+
+  test('completes a recurring plan instance without asking for a series scope', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'quick-complete-recurring-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Повтор для завершения', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'quick-complete-recurring-block', taskItemId: 'quick-complete-recurring-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'quick-complete-recurring-series', itemKind: 'task', itemId: 'quick-complete-recurring-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Повтор для завершения, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Повтор для завершения, 09:00–10:00, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+    await waitFor(() => expect(view.getByLabelText('Выполнить задачу')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Выполнить задачу'));
+
+    await waitFor(async () => expect(await source.listRecurrenceOccurrences('quick-complete-recurring-series')).toMatchObject([{ occursOn: '2026-08-28', completedAt: expect.any(String) }]));
+    expect(view.queryByText('К чему применить это изменение?')).toBeNull();
+  });
+
   test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';

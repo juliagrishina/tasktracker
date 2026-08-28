@@ -22,13 +22,14 @@ import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
 import type { PlanViewMode } from './plan-period-model';
 import { DayTimeline } from './day-timeline';
-import type { ScheduleBlock, TaskItem } from '../../domain/entities';
+import type { Reminder, ScheduleBlock, TaskItem } from '../../domain/entities';
 import type { PlanDayReadModel } from '../../application/plan-read-model';
 import type { EveningReviewItem } from '../../application/evening-review';
 
 interface DayDashboardProps {
   mode?: PlanViewMode;
   onCreateTask?: () => void;
+  onEditReminder?: (reminder: Reminder) => void;
   onEditTask?: (task: TaskItem) => void;
   onEditRecurrence?: (task: TaskItem, seriesId: string, occursOn: string) => void;
   onRefresh?: () => void;
@@ -39,7 +40,7 @@ interface DayDashboardProps {
   now?: Date;
 }
 
-export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEditRecurrence, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
+export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, onEditTask, onEditRecurrence, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
   const services = useOptionalAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
@@ -65,7 +66,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
   const [isCompleting, setIsCompleting] = useState(false);
   const [eveningReviewItems, setEveningReviewItems] = useState<readonly EveningReviewItem[]>([]);
   const [isEveningReviewVisible, setIsEveningReviewVisible] = useState(false);
-  const [quickActionTarget, setQuickActionTarget] = useState<{ task: import('../../application/planning-use-cases').PlanUntimedTask | TaskItem; occurrence: { seriesId: string; occursOn: string } | null } | null>(null);
+  const [quickActionTarget, setQuickActionTarget] = useState<{ isCompleted: boolean; task: import('../../application/planning-use-cases').PlanUntimedTask | TaskItem; occurrence: { seriesId: string; occursOn: string } | null } | null>(null);
   const [pendingQuickAction, setPendingQuickAction] = useState<PlanTaskAction | null>(null);
   const [isQuickDeleteConfirmVisible, setIsQuickDeleteConfirmVisible] = useState(false);
   useEffect(() => {
@@ -275,7 +276,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
     onRefresh?.();
   };
   const chooseQuickAction = (action: PlanTaskAction) => {
-    if (quickActionTarget?.occurrence !== null && quickActionTarget?.occurrence !== undefined && action !== 'resume' && action !== 'plan') {
+    if (quickActionTarget?.occurrence !== null && quickActionTarget?.occurrence !== undefined && action !== 'complete' && action !== 'resume' && action !== 'plan') {
       setPendingQuickAction(action);
       return;
     }
@@ -380,11 +381,11 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
 
         <SectionHeader action={`${currentReminders.length + currentUntimedTasks.length}`} title="Без времени" />
         <View style={styles.list}>
-          {currentUntimedTasks.map((task) => { const key = `${task.id}-${task.occursOn ?? 'single'}`; return <PlanListRow completed={completedUntimedTaskKeys.has(key)} key={key} onLongPress={() => setQuickActionTarget({ task, occurrence: task.seriesId === null || task.occursOn === null ? null : { seriesId: task.seriesId, occursOn: task.occursOn } })} onPress={() => { if (task.seriesId === null && onEditTask !== undefined) onEditTask(task); else setSelectedUntimedTask(task); }} title={task.title} time="Без времени" />; })}
-          {currentReminders.map((reminder) => <PlanListRow key={reminder.id} onPress={() => setSelectedReminderOccurrence(reminder.seriesId === null || reminder.occursOn === null ? null : { seriesId: reminder.seriesId, occursOn: reminder.occursOn })} title={reminder.title} time="Без времени" />)}
+          {currentUntimedTasks.map((task) => { const key = `${task.id}-${task.occursOn ?? 'single'}`; const isCompleted = completedUntimedTaskKeys.has(key); return <PlanListRow completed={isCompleted} key={key} onLongPress={() => setQuickActionTarget({ isCompleted, task, occurrence: task.seriesId === null || task.occursOn === null ? null : { seriesId: task.seriesId, occursOn: task.occursOn } })} onPress={() => { if (task.seriesId === null && onEditTask !== undefined) onEditTask(task); else setSelectedUntimedTask(task); }} title={task.title} time="Без времени" />; })}
+          {currentReminders.map((reminder) => <PlanListRow key={reminder.id} onPress={() => { if (reminder.seriesId === null && onEditReminder !== undefined) onEditReminder(reminder); else if (reminder.seriesId !== null && reminder.occursOn !== null) setSelectedReminderOccurrence({ seriesId: reminder.seriesId, occursOn: reminder.occursOn }); }} title={reminder.title} time="Без времени" />)}
         </View>
         <SectionHeader action={`${currentBlocks.length} ${currentBlocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
-        <DayTimeline blocks={timelineBlocks} completedBlockIds={completedBlockIds} onLongPressBlock={(block) => { const task = currentBlockTasks.get(block.taskItemId); if (task === undefined) return; const virtual = block.occurrenceId?.split(':'); if (virtual?.[0] === 'virtual' && virtual[1] !== undefined && virtual[2] !== undefined) { setQuickActionTarget({ task, occurrence: { seriesId: virtual[1], occursOn: virtual[2] } }); return; } if (block.occurrenceId !== null) { void services?.planningActions.getRecurrenceOccurrenceById(block.occurrenceId).then((occurrence) => setQuickActionTarget({ task, occurrence: occurrence === null ? null : { seriesId: occurrence.seriesId, occursOn: occurrence.occursOn } })); return; } setQuickActionTarget({ task, occurrence: null }); }} onPressBlock={handleBlockPress} selectedDate={selectedDate} timeZoneId={settings.timeZoneId} titleByTaskId={timelineTitles} />
+        <DayTimeline blocks={timelineBlocks} completedBlockIds={completedBlockIds} onLongPressBlock={(block) => { const task = currentBlockTasks.get(block.taskItemId); if (task === undefined) return; const isCompleted = completedBlockIds.has(block.id); const virtual = block.occurrenceId?.split(':'); if (virtual?.[0] === 'virtual' && virtual[1] !== undefined && virtual[2] !== undefined) { setQuickActionTarget({ isCompleted, task, occurrence: { seriesId: virtual[1], occursOn: virtual[2] } }); return; } if (block.occurrenceId !== null) { void services?.planningActions.getRecurrenceOccurrenceById(block.occurrenceId).then((occurrence) => setQuickActionTarget({ isCompleted, task, occurrence: occurrence === null ? null : { seriesId: occurrence.seriesId, occursOn: occurrence.occursOn } })); return; } setQuickActionTarget({ isCompleted, task, occurrence: null }); }} onPressBlock={handleBlockPress} selectedDate={selectedDate} timeZoneId={settings.timeZoneId} titleByTaskId={timelineTitles} />
         {selectedUntimedTask === null ? null : <View style={styles.occurrenceActions}>
           <Text style={styles.sectionTitle}>Запланированная задача</Text>
           <Pressable accessibilityLabel="Вернуть задачу в Backlog" onPress={() => { if (services !== null) void services.planningActions.returnTaskToBacklog({ taskId: selectedUntimedTask.id, reason: null }).then(() => services.planningActions.getPlanUntimedTasks(selectedDate).then((nextTasks) => { setUntimedTasks(nextTasks); setSelectedUntimedTask(null); onRefresh?.(); })); }} style={styles.occurrenceButton}><Text style={styles.occurrenceText}>Вернуть в Backlog</Text></Pressable>
@@ -445,7 +446,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
       {completionCandidate === null ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
       {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
       <EveningReviewDialog items={eveningReviewItems} onRequestClose={() => setIsEveningReviewVisible(false)} visible={isEveningReviewVisible} />
-      {quickActionTarget === null ? null : <PlanTaskActionsDialog isCompleted={quickActionTarget.task.completedAt !== null} onAction={chooseQuickAction} onRequestClose={() => setQuickActionTarget(null)} taskTitle={quickActionTarget.task.title} visible={pendingQuickAction === null && !isQuickDeleteConfirmVisible} />}
+      {quickActionTarget === null ? null : <PlanTaskActionsDialog isCompleted={quickActionTarget.isCompleted} onAction={chooseQuickAction} onRequestClose={() => setQuickActionTarget(null)} taskTitle={quickActionTarget.task.title} visible={pendingQuickAction === null && !isQuickDeleteConfirmVisible} />}
       {quickActionTarget === null || pendingQuickAction === null ? null : <RecurrenceScopeDialog actionLabel={pendingQuickAction === 'complete' ? 'Выполнить повторение' : pendingQuickAction === 'delete' ? 'Удалить повторение' : 'Вернуть повторение в Backlog'} onChoose={async (scope) => { if (pendingQuickAction === 'delete' && scope === 'series') setIsQuickDeleteConfirmVisible(true); else await runQuickAction(pendingQuickAction, scope); }} onRequestClose={() => setPendingQuickAction(null)} visible />}
       {quickActionTarget === null ? null : <DeletePlanTaskDialog onConfirm={() => void runQuickAction('delete', quickActionTarget.occurrence === null ? 'series' : 'series')} onRequestClose={() => { setIsQuickDeleteConfirmVisible(false); setPendingQuickAction(null); }} visible={isQuickDeleteConfirmVisible} />}
     </SafeAreaView>
