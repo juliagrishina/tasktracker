@@ -75,6 +75,22 @@ describe('DayDashboard', () => {
     await expect(source.getReminder('review-reminder')).resolves.toMatchObject({ completedAt: null, remindsOn: '2026-08-28' });
   });
 
+  test('opens explicit actions for an untimed task after a long press', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'quick-actions-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить материалы', description: null, estimatedDurationMinutes: 30, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Подготовить материалы')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Подготовить материалы'), 'longPress');
+
+    await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
+    expect(view.getByLabelText('Выполнить задачу')).toBeOnTheScreen();
+    expect(view.getByLabelText('Вернуть задачу в Backlog')).toBeOnTheScreen();
+    expect(view.getByLabelText('Удалить задачу')).toBeOnTheScreen();
+  });
+
   test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';

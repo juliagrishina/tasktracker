@@ -122,7 +122,9 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         <ItemFormSheet
           item={editingTask}
           mode="edit"
+          onComplete={async (task) => { if (services === null) return; await services.backlogActions.completeItem({ kind: task.kind, id: task.id, completedAt: new Date().toISOString() }); }}
           onClose={() => setEditingTask(null)}
+          onDelete={async (task) => { if (services === null) return; await services.backlogActions.deleteItem({ kind: task.kind, id: task.id, confirmed: true }); setEditingTask(null); setRefreshToken((value) => value + 1); }}
           planningContext={{ defaultDate: selectedDate }}
           onSaved={() => { setEditingTask(null); setRefreshToken((value) => value + 1); }}
           type={editingTask.kind}
@@ -133,6 +135,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         <ItemFormSheet
           item={{ ...editingOccurrence.task, ...editingOccurrence.occurrence?.taskPatch }}
           mode="edit"
+          onComplete={async () => { if (services === null) return; await services.planningActions.setRecurrenceOccurrenceState(editingOccurrence.seriesId, editingOccurrence.occursOn, 'completed'); }}
           occurrenceEdit={{
             onSave: async ({ title, description, estimatedDurationMinutes }) => {
               if (services === null) return;
@@ -161,6 +164,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
             },
           }}
           onClose={() => setEditingOccurrence(null)}
+          onDelete={async () => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: editingOccurrence.seriesId, occursOn: editingOccurrence.occursOn, scope: 'occurrence' }); setEditingOccurrence(null); setRefreshToken((value) => value + 1); }}
           onSaved={() => { setEditingOccurrence(null); setRefreshToken((value) => value + 1); }}
           type={editingOccurrence.task.kind}
           visible

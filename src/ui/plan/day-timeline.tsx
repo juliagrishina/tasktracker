@@ -18,6 +18,7 @@ interface DayTimelineProps {
   completedBlockIds?: ReadonlySet<string>;
   now?: Date;
   onPressBlock?: (block: ScheduleBlock) => void;
+  onLongPressBlock?: (block: ScheduleBlock) => void;
   selectedDate: string;
   timeZoneId: string;
   titleByTaskId: ReadonlyMap<string, string>;
@@ -37,7 +38,7 @@ function formatTimeRange(block: ScheduleBlock, timeZoneId: string): string {
   return `${getTimeInTimeZone(block.startsAt, timeZoneId)}–${getTimeInTimeZone(block.endsAt, timeZoneId)}`;
 }
 
-export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new Date(), onPressBlock, selectedDate, timeZoneId, titleByTaskId }: DayTimelineProps) {
+export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new Date(), onLongPressBlock, onPressBlock, selectedDate, timeZoneId, titleByTaskId }: DayTimelineProps) {
   const scrollRef = useRef<ScrollView>(null);
   const layouts = getDayTimelineBlockLayouts(blocks, selectedDate, timeZoneId);
   const currentMinute = getCurrentMinute(selectedDate, timeZoneId, now);
@@ -72,6 +73,7 @@ export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new D
                 accessibilityRole="button"
                 disabled={isCompleted}
                 key={layout.blockId}
+                onLongPress={() => onLongPressBlock?.(layout.block)}
                 onPress={() => onPressBlock?.(layout.block)}
                 style={({ pressed }) => [
                   styles.block,
