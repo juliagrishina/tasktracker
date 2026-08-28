@@ -253,18 +253,10 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       if (occurrence !== null && scope === 'occurrence') await services.planningActions.setRecurrenceOccurrenceState(occurrence.seriesId, occurrence.occursOn, 'active');
       else await services.backlogActions.resumeItem({ kind: backlogItemKind, id: item.id });
     }
-    if (action === 'returnToBacklog' && itemKind === 'reminder') {
-      await services.backlogActions.resumeItem({ kind: 'reminder', id: item.id });
-      await services.backlogActions.updateReminder({ id: item.id, remindsOn: null, periodStartOn: null, periodEndOn: null });
-    }
-    if (action === 'returnToBacklog' && itemKind === 'task') {
-      if (occurrence !== null && scope === 'occurrence') {
-        await services.planningActions.setRecurrenceOccurrenceState(occurrence.seriesId, occurrence.occursOn, 'active');
-        await services.planningActions.returnIncompleteTaskToBacklog({ taskId: item.id, occurrence, reason: null });
-      } else {
-        await services.backlogActions.resumeItem({ kind: backlogItemKind, id: item.id });
-        await services.planningActions.returnTaskToBacklog({ taskId: item.id, reason: null });
-      }
+    if (action === 'returnToBacklog') {
+      await services.planningActions.returnPlanItemToBacklog(itemKind === 'reminder'
+        ? { kind: 'reminder', id: item.id, occurrence: null, reason: null }
+        : { kind: item.kind, id: item.id, occurrence: occurrence !== null && scope === 'occurrence' ? occurrence : null, reason: null });
     }
     if (action === 'plan' && itemKind === 'task') {
       if (occurrence !== null && scope === 'occurrence') {

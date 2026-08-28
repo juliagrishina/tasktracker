@@ -35,20 +35,21 @@ export function CompletedHistoryScreen() {
   const filteredGroups = useMemo(() => filterGroups(services?.completedItems ?? [], query, period), [period, query, services?.completedItems]);
   const runAction = async (action: PlanTaskAction) => {
     if (services === null || selectedItem === null) return;
+    if (action === 'returnToBacklog' && selectedItem.kind !== 'project') {
+      await services.planningActions.returnPlanItemToBacklog(selectedItem.kind === 'reminder'
+        ? { kind: 'reminder', id: selectedItem.id, occurrence: null, reason: null }
+        : { kind: selectedItem.kind, id: selectedItem.taskId ?? selectedItem.id, occurrence: selectedItem.occurrence, reason: null });
+      setFeedback(selectedItem.occurrence === null ? 'Дело возвращено в Backlog' : 'Экземпляр возвращён в Backlog');
+      setSelectedItem(null);
+      return;
+    }
     if (selectedItem.occurrence !== null) {
       if (action === 'resume' || action === 'plan') await services.planningActions.setRecurrenceOccurrenceState(selectedItem.occurrence.seriesId, selectedItem.occurrence.occursOn, 'active');
-      if (action === 'returnToBacklog' && selectedItem.taskId !== undefined) {
-        await services.planningActions.setRecurrenceOccurrenceState(selectedItem.occurrence.seriesId, selectedItem.occurrence.occursOn, 'active');
-        await services.planningActions.returnIncompleteTaskToBacklog({ taskId: selectedItem.taskId, occurrence: selectedItem.occurrence, reason: null });
-        setFeedback('Экземпляр возвращён в Backlog');
-      }
     } else {
       await services.backlogActions.resumeItem({ kind: selectedItem.kind, id: selectedItem.id });
-      if (action === 'returnToBacklog') await services.planningActions.returnTaskToBacklog({ taskId: selectedItem.id, reason: null });
       if (action === 'plan') setEditingTask(await services.planningActions.getTaskItem(selectedItem.id));
     }
     if (action === 'resume') setFeedback('Дело возобновлено');
-    if (action === 'returnToBacklog' && selectedItem.occurrence === null) setFeedback('Дело возвращено в Backlog');
     setSelectedItem(null);
   };
 
@@ -112,7 +113,7 @@ export function CompletedHistoryScreen() {
         </View>
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
-      {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted onAction={(action) => void runAction(action)} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}
+      {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted itemKind={selectedItem.kind === 'reminder' ? 'reminder' : 'task'} onAction={(action) => void runAction(action)} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}
       {editingTask === null ? null : <ItemFormSheet item={editingTask} mode="edit" onClose={() => setEditingTask(null)} onSaved={() => setEditingTask(null)} planningContext={{ defaultDate: new Date().toISOString().slice(0, 10) }} type={editingTask.kind} visible />}
     </SafeAreaView>
   );

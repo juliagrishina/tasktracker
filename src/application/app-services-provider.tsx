@@ -58,7 +58,7 @@ import { convertReminderToTask } from './convert-reminder-to-task';
 import { getCompletionEligibility, type CompletionEligibility } from './completion-eligibility';
 import { getEveningReviewItems, synchronizeEveningReviewNotification } from './evening-review';
 import { localNotificationScheduler } from './local-notification-scheduler';
-import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
+import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 
 interface BacklogActions {
@@ -90,6 +90,7 @@ interface PlanningActions {
   getEveningReviewItems(isoDate: string): ReturnType<typeof getEveningReviewItems>;
   continueIncompleteTask(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; now?: Date }): Promise<void>;
   returnIncompleteTaskToBacklog(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; reason: string | null }): Promise<void>;
+  returnPlanItemToBacklog(input: Parameters<typeof returnPlanItemToBacklog>[1]): Promise<void>;
   returnTaskToBacklog(input: { taskId: string; reason: string | null }): Promise<void>;
   syncReminderRecurrence(reminderId: string): Promise<void>;
   saveTaskPlanning(input: SaveTaskPlanningInput): Promise<SaveTaskPlanningResult>;
@@ -213,6 +214,7 @@ export function AppServicesProvider({
       getEveningReviewItems: (isoDate) => getEveningReviewItems(appSource, isoDate),
       continueIncompleteTask: (input) => continueIncompleteTask(appSource, input, localNotificationScheduler),
       returnIncompleteTaskToBacklog: (input) => runBacklogAction(() => returnIncompleteTaskToBacklog(appSource, input, localNotificationScheduler)),
+      returnPlanItemToBacklog: (input) => runBacklogAction(() => returnPlanItemToBacklog(appSource, input, localNotificationScheduler)),
       returnTaskToBacklog: (input) => runBacklogAction(() => returnTaskToBacklog(appSource, input, localNotificationScheduler)),
       syncReminderRecurrence: (reminderId) => syncReminderRecurrence(appSource, reminderId),
       saveTaskPlanning: (input) => saveTaskPlanning(appSource, input, localNotificationScheduler),

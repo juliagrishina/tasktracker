@@ -43,4 +43,18 @@ describe('CompletedHistoryScreen', () => {
 
     await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
   });
+
+  test('returns a completed one-time reminder to Backlog atomically', async () => {
+    const source = createInMemoryDataSource();
+    const completedAt = new Date().toISOString();
+    await source.saveReminder({ id: 'completed-reminder', title: 'Подтвердить бронирование', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt, createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
+    const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Действия: Подтвердить бронирование')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Действия: Подтвердить бронирование'), 'contextMenu', { preventDefault: jest.fn() });
+    await waitFor(() => expect(view.getByLabelText('Вернуть напоминание в Backlog')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Вернуть напоминание в Backlog'));
+
+    await waitFor(async () => expect(await source.getReminder('completed-reminder')).toMatchObject({ completedAt: null, remindsOn: null, periodStartOn: null, periodEndOn: null }));
+  });
 });

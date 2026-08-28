@@ -1,5 +1,5 @@
 import type { AppDataSource } from '../data/contracts';
-import type { EntityId, RecurrenceSeries, ScheduleBlock, TaskItem } from '../domain/entities';
+import type { EntityId, RecurrenceSeries, Reminder, ScheduleBlock, TaskItem } from '../domain/entities';
 import { assertPlanningDateRange, assertRecurrenceOccurrence, assertRecurrenceRule, doesScheduleBlockOverlapDate, findScheduleConflicts, getDateInTimeZone, getRecurrenceDates, shiftScheduleBlockToDate } from '../domain/planning';
 import { assertScheduleBlockShape } from '../domain/invariants';
 import { createReminder, createSubtask, createTask, updateTaskItem } from './backlog-use-cases';
@@ -477,13 +477,32 @@ export async function returnTaskToBacklog(source: AppDataSource, input: { taskId
   if (task === null) throw new Error('Задача для возврата в Backlog не найдена');
   const returnedAt = new Date().toISOString();
   await source.transaction(async () => {
-    await source.saveTaskItem({ ...task, scheduledOn: null, periodStartOn: null, periodEndOn: null });
+    await source.saveTaskItem({ ...task, completedAt: null, scheduledOn: null, periodStartOn: null, periodEndOn: null });
     for (const block of await source.listScheduleBlocksForTaskItem(task.id)) {
       if (scheduler !== undefined) await cancelScheduleBlockNotification(scheduler, block);
       await source.deleteScheduleBlock(block.id);
     }
     for (const series of await source.listRecurrenceSeries()) if (series.itemKind === 'task' && series.itemId === task.id) await source.deleteRecurrenceSeries(series.id);
     await source.saveTransferHistory({ id: `transfer-${task.id}-${returnedAt}`, taskItemId: task.id, reason: input.reason, returnedAt, createdAt: returnedAt });
+  });
+}
+
+export type ReturnPlanItemToBacklogInput =
+  | { kind: TaskItem['kind']; id: EntityId; occurrence: { seriesId: EntityId; occursOn: string } | null; reason: string | null }
+  | { kind: 'reminder'; id: EntityId; occurrence: null; reason: string | null };
+
+export async function returnPlanItemToBacklog(source: AppDataSource, input: ReturnPlanItemToBacklogInput, scheduler?: LocalNotificationScheduler): Promise<void> {
+  if (input.kind !== 'reminder') {
+    if (input.occurrence === null) await returnTaskToBacklog(source, { taskId: input.id, reason: input.reason }, scheduler);
+    else await returnIncompleteTaskToBacklog(source, { taskId: input.id, occurrence: input.occurrence, reason: input.reason }, scheduler);
+    return;
+  }
+
+  const reminder = await source.getReminder(input.id);
+  if (reminder === null) throw new Error('Напоминание для возврата в Backlog не найдено');
+  await source.transaction(async () => {
+    await source.saveReminder({ ...reminder, completedAt: null, remindsOn: null, periodStartOn: null, periodEndOn: null });
+    for (const series of await source.listRecurrenceSeries()) if (series.itemKind === 'reminder' && series.itemId === reminder.id) await source.deleteRecurrenceSeries(series.id);
   });
 }
 
