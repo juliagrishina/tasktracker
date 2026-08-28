@@ -334,6 +334,10 @@ const schemaVersionFourteen = `
   ALTER TABLE settings ADD COLUMN evening_review_notification_id TEXT;
 `;
 
+const schemaVersionFifteen = `
+  ALTER TABLE recurrence_occurrences ADD COLUMN notification_ids_json TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -435,6 +439,12 @@ const migrations: readonly Migration[] = [
     version: 14,
     async apply(database) {
       await database.execAsync(schemaVersionFourteen);
+    },
+  },
+  {
+    version: 15,
+    async apply(database) {
+      await database.execAsync(schemaVersionFifteen);
     },
   },
 ];
