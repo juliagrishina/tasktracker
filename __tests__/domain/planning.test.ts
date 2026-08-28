@@ -14,6 +14,7 @@ import {
 
 const settings: AppSettings = {
   timeZoneId: 'Europe/Moscow',
+  timeZoneMode: 'manual',
   workdayStartsAt: '09:00',
   workdayEndsAt: '17:00',
   eveningReviewAt: '17:15',

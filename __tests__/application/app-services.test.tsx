@@ -6,6 +6,7 @@ import {
   useAppServices,
 } from '../../src/application/app-services-provider';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import { getDefaultSettings } from '../../src/data/default-settings';
 import { createTask } from '../../src/application/backlog-use-cases';
 
 function ServicesProbe() {
@@ -34,6 +35,20 @@ function BacklogProbe({ onCreate }: { onCreate: () => Promise<unknown> }) {
         <Text>Создать задачу</Text>
       </Pressable>
     </View>
+  );
+}
+
+function TimeZoneModeProbe() {
+  const { isReady, settings, settingsActions } = useAppServices();
+
+  if (!isReady) {
+    return <Text>loading timezone</Text>;
+  }
+
+  return (
+    <Pressable onPress={() => void settingsActions.useDeviceTimeZone()}>
+      <Text>{settings.timeZoneMode}</Text>
+    </Pressable>
   );
 }
 
@@ -74,6 +89,26 @@ describe('AppServicesProvider', () => {
 
     await waitFor(() => {
       expect(view.getByText('unassigned:Новая задача')).toBeOnTheScreen();
+    });
+  });
+
+  test('returns a manual timezone preference to device mode', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Berlin', timeZoneMode: 'manual' });
+    const view = await render(
+      <AppServicesProvider source={source} seedDevelopmentData={false}>
+        <TimeZoneModeProbe />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText('manual')).toBeOnTheScreen());
+    await act(async () => {
+      fireEvent.press(view.getByText('manual'));
+    });
+
+    await waitFor(async () => {
+      expect(view.getByText('device')).toBeOnTheScreen();
+      await expect(source.getSettings()).resolves.toMatchObject({ timeZoneMode: 'device' });
     });
   });
 });

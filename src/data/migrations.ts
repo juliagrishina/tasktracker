@@ -4,7 +4,7 @@ import { getDefaultSettings } from './default-settings';
 
 interface Migration {
   version: number;
-  apply(database: SQLiteDatabase): Promise<void>;
+  apply(database: SQLiteDatabase, context: { previousVersion: number }): Promise<void>;
 }
 
 const schemaVersionTable = `
@@ -338,6 +338,11 @@ const schemaVersionFifteen = `
   ALTER TABLE recurrence_occurrences ADD COLUMN notification_ids_json TEXT;
 `;
 
+const schemaVersionSixteen = `
+  ALTER TABLE settings ADD COLUMN time_zone_mode TEXT NOT NULL DEFAULT 'device'
+    CHECK (time_zone_mode IN ('device', 'manual'));
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -447,6 +452,18 @@ const migrations: readonly Migration[] = [
       await database.execAsync(schemaVersionFifteen);
     },
   },
+  {
+    version: 16,
+    async apply(database, { previousVersion }) {
+      await database.execAsync(schemaVersionSixteen);
+      if (previousVersion >= 11) {
+        await database.runAsync(
+          "UPDATE settings SET time_zone_mode = 'manual' WHERE id = 1",
+          [],
+        );
+      }
+    },
+  },
 ];
 
 export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
@@ -464,7 +481,7 @@ export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
         continue;
       }
 
-      await migration.apply(database);
+      await migration.apply(database, { previousVersion: latestVersion });
       await database.runAsync(
         'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
         [migration.version, new Date().toISOString()],

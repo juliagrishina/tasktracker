@@ -117,6 +117,7 @@ export interface TransferHistory {
 
 export interface AppSettings {
   timeZoneId: string;
+  timeZoneMode?: 'device' | 'manual';
   workdayStartsAt: string;
   workdayEndsAt: string;
   eveningReviewAt: string;

@@ -16,7 +16,7 @@ import {
 } from '../domain/invariants';
 
 import type { AppDataSource } from './contracts';
-import { getDefaultSettings } from './default-settings';
+import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
 
 export interface InMemoryDataSource extends AppDataSource {
   debugSettingsRowCount(): number;
@@ -55,7 +55,8 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
 
   async getSettings(): Promise<AppSettings> {
     await this.initialize();
-    return this.settings ?? getDefaultSettings();
+    const settings = this.settings ?? getDefaultSettings();
+    return { ...settings, timeZoneId: resolveTimeZoneId(settings) };
   }
 
   async saveSettings(settings: AppSettings): Promise<void> {

@@ -115,6 +115,7 @@ const recurrenceOccurrence: RecurrenceOccurrence = {
 
 const changedSettings: AppSettings = {
   timeZoneId: 'Europe/Berlin',
+  timeZoneMode: 'manual',
   workdayStartsAt: '08:00',
   workdayEndsAt: '22:00',
   eveningReviewAt: '21:00',

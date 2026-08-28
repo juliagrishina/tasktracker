@@ -18,10 +18,12 @@ import {
 } from '../domain/invariants';
 
 import type { AppDataSource } from './contracts';
+import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
 import { migrateDatabase } from './migrations';
 
 interface SettingsRow {
   time_zone_id: string | null;
+  time_zone_mode: 'device' | 'manual' | null;
   workday_starts_at: string;
   workday_ends_at: string;
   evening_review_at: string;
@@ -135,6 +137,7 @@ class NativeDataSource implements AppDataSource {
     const row = await database.getFirstAsync<SettingsRow>(
       `SELECT
         time_zone_id,
+        time_zone_mode,
         workday_starts_at,
         workday_ends_at,
         evening_review_at,
@@ -148,14 +151,17 @@ class NativeDataSource implements AppDataSource {
       throw new Error('Не удалось загрузить настройки приложения');
     }
 
-    return {
-      timeZoneId: row.time_zone_id ?? 'UTC',
+    const settings: AppSettings = {
+      timeZoneId: row.time_zone_id ?? getDefaultSettings().timeZoneId,
+      timeZoneMode: row.time_zone_mode === 'manual' ? 'manual' : 'device',
       workdayStartsAt: row.workday_starts_at,
       workdayEndsAt: row.workday_ends_at,
       eveningReviewAt: row.evening_review_at,
       eveningReviewNotificationId: row.evening_review_notification_id,
       notificationLeadMinutes: row.notification_lead_minutes,
     };
+
+    return { ...settings, timeZoneId: resolveTimeZoneId(settings) };
   }
 
   async saveSettings(settings: AppSettings): Promise<void> {
@@ -164,6 +170,7 @@ class NativeDataSource implements AppDataSource {
     await database.runAsync(
       `UPDATE settings
       SET time_zone_id = ?,
+          time_zone_mode = ?,
           workday_starts_at = ?,
           workday_ends_at = ?,
           evening_review_at = ?,
@@ -172,6 +179,7 @@ class NativeDataSource implements AppDataSource {
       WHERE id = 1`,
       [
         settings.timeZoneId,
+        settings.timeZoneMode,
         settings.workdayStartsAt,
         settings.workdayEndsAt,
         settings.eveningReviewAt,

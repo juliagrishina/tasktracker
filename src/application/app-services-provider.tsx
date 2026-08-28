@@ -104,6 +104,7 @@ interface PlanningActions {
 
 interface SettingsActions {
   updateTimeZone(timeZoneId: string): Promise<void>;
+  useDeviceTimeZone(): Promise<void>;
 }
 
 interface AppServicesContextValue {
@@ -237,7 +238,16 @@ export function AppServicesProvider({
         } catch {
           throw new Error('Укажите корректный часовой пояс IANA, например Europe/Berlin');
         }
-        const updatedSettings = { ...settings, timeZoneId };
+        const updatedSettings = { ...settings, timeZoneId, timeZoneMode: 'manual' as const };
+        await appSource.saveSettings(updatedSettings);
+        setSettings(updatedSettings);
+      },
+      useDeviceTimeZone: async () => {
+        const updatedSettings = {
+          ...settings,
+          timeZoneId: getDefaultSettings().timeZoneId,
+          timeZoneMode: 'device' as const,
+        };
         await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
       },
