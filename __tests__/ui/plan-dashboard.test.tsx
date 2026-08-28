@@ -55,6 +55,26 @@ describe('DayDashboard', () => {
     }]));
   });
 
+  test('opens an evening review without changing unfinished items', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'review-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Отправить отчёт', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveReminder({ id: 'review-reminder', title: 'Проверить письмо', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T18:30:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Открыть вечернюю проверку')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
+    await waitFor(() => expect(view.getByText('Вечерняя проверка')).toBeOnTheScreen());
+    expect(view.getAllByText('Отправить отчёт')).toHaveLength(2);
+    expect(view.getAllByText('Проверить письмо')).toHaveLength(2);
+    fireEvent.press(view.getByLabelText('Закрыть вечернюю проверку'));
+
+    await expect(source.getTaskItem('review-task')).resolves.toMatchObject({ completedAt: null, scheduledOn: '2026-08-28' });
+    await expect(source.getReminder('review-reminder')).resolves.toMatchObject({ completedAt: null, remindsOn: '2026-08-28' });
+  });
+
   test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';

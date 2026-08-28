@@ -6,6 +6,7 @@ export function getDefaultSettings(): AppSettings {
     workdayStartsAt: '08:00',
     workdayEndsAt: '22:00',
     eveningReviewAt: '21:00',
+    eveningReviewNotificationId: null,
     notificationLeadMinutes: 10,
   };
 }

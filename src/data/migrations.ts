@@ -330,6 +330,10 @@ const schemaVersionThirteen = `
   ALTER TABLE reminders ADD COLUMN linked_occurrence_on TEXT;
 `;
 
+const schemaVersionFourteen = `
+  ALTER TABLE settings ADD COLUMN evening_review_notification_id TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -425,6 +429,12 @@ const migrations: readonly Migration[] = [
     version: 13,
     async apply(database) {
       await database.execAsync(schemaVersionThirteen);
+    },
+  },
+  {
+    version: 14,
+    async apply(database) {
+      await database.execAsync(schemaVersionFourteen);
     },
   },
 ];

@@ -25,6 +25,7 @@ interface SettingsRow {
   workday_starts_at: string;
   workday_ends_at: string;
   evening_review_at: string;
+  evening_review_notification_id: string | null;
   notification_lead_minutes: number;
 }
 
@@ -136,6 +137,7 @@ class NativeDataSource implements AppDataSource {
         workday_starts_at,
         workday_ends_at,
         evening_review_at,
+        evening_review_notification_id,
         notification_lead_minutes
       FROM settings
       WHERE id = 1`,
@@ -150,6 +152,7 @@ class NativeDataSource implements AppDataSource {
       workdayStartsAt: row.workday_starts_at,
       workdayEndsAt: row.workday_ends_at,
       eveningReviewAt: row.evening_review_at,
+      eveningReviewNotificationId: row.evening_review_notification_id,
       notificationLeadMinutes: row.notification_lead_minutes,
     };
   }
@@ -163,6 +166,7 @@ class NativeDataSource implements AppDataSource {
           workday_starts_at = ?,
           workday_ends_at = ?,
           evening_review_at = ?,
+          evening_review_notification_id = ?,
           notification_lead_minutes = ?
       WHERE id = 1`,
       [
@@ -170,6 +174,7 @@ class NativeDataSource implements AppDataSource {
         settings.workdayStartsAt,
         settings.workdayEndsAt,
         settings.eveningReviewAt,
+        settings.eveningReviewNotificationId ?? null,
         settings.notificationLeadMinutes,
       ],
     );

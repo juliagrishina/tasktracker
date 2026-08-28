@@ -14,6 +14,7 @@ import { RecurrenceScopeDialog } from './recurrence-scope-dialog';
 import { CompletionDialog } from './completion-dialog';
 import { FollowUpReminderDialog } from './follow-up-reminder-dialog';
 import { UnfinishedTaskDialog } from './unfinished-task-dialog';
+import { EveningReviewDialog } from './evening-review-dialog';
 
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
@@ -21,6 +22,7 @@ import type { PlanViewMode } from './plan-period-model';
 import { DayTimeline } from './day-timeline';
 import type { ScheduleBlock, TaskItem } from '../../domain/entities';
 import type { PlanDayReadModel } from '../../application/plan-read-model';
+import type { EveningReviewItem } from '../../application/evening-review';
 
 interface DayDashboardProps {
   mode?: PlanViewMode;
@@ -59,6 +61,8 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
   const [completedBlockIds, setCompletedBlockIds] = useState<ReadonlySet<string>>(new Set());
   const [completedUntimedTaskKeys, setCompletedUntimedTaskKeys] = useState<ReadonlySet<string>>(new Set());
   const [isCompleting, setIsCompleting] = useState(false);
+  const [eveningReviewItems, setEveningReviewItems] = useState<readonly EveningReviewItem[]>([]);
+  const [isEveningReviewVisible, setIsEveningReviewVisible] = useState(false);
   useEffect(() => {
     if (dayPlan !== undefined || services === null) return;
     let isCurrent = true;
@@ -220,6 +224,11 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
     if (eligibility.occurrence === null) onEditTask?.(task);
     else onEditRecurrence?.(task, eligibility.occurrence.seriesId, eligibility.occurrence.occursOn);
   };
+  const openEveningReview = async () => {
+    if (services === null) return;
+    setEveningReviewItems(await services.planningActions.getEveningReviewItems(selectedDate));
+    setIsEveningReviewVisible(true);
+  };
   const continueCandidate = async () => {
     if (services === null || completionCandidate === null) return;
     setCompletionError(null);
@@ -283,6 +292,13 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
               onPress={() => { onRefresh?.(); setFeedback('Данные плана обновлены'); }}
               style={({ pressed }) => [styles.refreshControl, pressed && styles.pressed]}>
               <Ionicons color={designTokens.color.text.primary} name="refresh" size={18} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Открыть вечернюю проверку"
+              accessibilityRole="button"
+              onPress={() => void openEveningReview()}
+              style={({ pressed }) => [styles.refreshControl, pressed && styles.pressed]}>
+              <Ionicons color={designTokens.color.text.primary} name="moon-outline" size={18} />
             </Pressable>
           </View>
         </View>
@@ -372,6 +388,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditTask, onEd
       {completionCandidate === null ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) setCompletionCandidate(null); }} onUnfinished={() => { if (!isCompleting) setIsUnfinishedDialogVisible(true); }} taskTitle={completionCandidate.task.title} visible={!isUnfinishedDialogVisible} />}
       {completionCandidate === null ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
       {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
+      <EveningReviewDialog items={eveningReviewItems} onRequestClose={() => setIsEveningReviewVisible(false)} visible={isEveningReviewVisible} />
     </SafeAreaView>
   );
 }

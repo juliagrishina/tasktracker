@@ -53,6 +53,7 @@ import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 import { convertReminderToTask } from './convert-reminder-to-task';
 import { getCompletionEligibility, type CompletionEligibility } from './completion-eligibility';
+import { getEveningReviewItems, synchronizeEveningReviewNotification } from './evening-review';
 import { localNotificationScheduler } from './local-notification-scheduler';
 import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
@@ -82,6 +83,7 @@ interface PlanningActions {
   setRecurrenceOccurrenceState(seriesId: string, occursOn: string, state: 'completed' | 'cancelled'): Promise<void>;
   getPlanUntimedReminders(isoDate: string): ReturnType<typeof getPlanUntimedReminders>;
   getPlanUntimedTasks(isoDate: string): ReturnType<typeof getPlanUntimedTasks>;
+  getEveningReviewItems(isoDate: string): ReturnType<typeof getEveningReviewItems>;
   continueIncompleteTask(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; now?: Date }): Promise<void>;
   returnIncompleteTaskToBacklog(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; reason: string | null }): Promise<void>;
   returnTaskToBacklog(input: { taskId: string; reason: string | null }): Promise<void>;
@@ -193,6 +195,7 @@ export function AppServicesProvider({
       setRecurrenceOccurrenceState: (seriesId, occursOn, state) => setRecurrenceOccurrenceState(appSource, seriesId, occursOn, state),
       getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
       getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
+      getEveningReviewItems: (isoDate) => getEveningReviewItems(appSource, isoDate),
       continueIncompleteTask: (input) => continueIncompleteTask(appSource, input, localNotificationScheduler),
       returnIncompleteTaskToBacklog: (input) => runBacklogAction(() => returnIncompleteTaskToBacklog(appSource, input, localNotificationScheduler)),
       returnTaskToBacklog: (input) => runBacklogAction(() => returnTaskToBacklog(appSource, input, localNotificationScheduler)),
@@ -242,6 +245,7 @@ export function AppServicesProvider({
           ? await loadDemoTaskGroups(appSource)
           : emptyDemoTaskGroups;
         const loadedBacklog = await getBacklogView(appSource);
+        void synchronizeEveningReviewNotification({ now: new Date(), scheduler: localNotificationScheduler, source: appSource }).catch(() => {});
 
         if (isMounted) {
           setSettings(loadedSettings);

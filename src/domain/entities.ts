@@ -119,5 +119,6 @@ export interface AppSettings {
   workdayStartsAt: string;
   workdayEndsAt: string;
   eveningReviewAt: string;
+  eveningReviewNotificationId?: string | null;
   notificationLeadMinutes: number;
 }
