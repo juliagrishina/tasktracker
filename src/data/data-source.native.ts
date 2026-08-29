@@ -179,7 +179,7 @@ class NativeDataSource implements AppDataSource {
       WHERE id = 1`,
       [
         settings.timeZoneId,
-        settings.timeZoneMode,
+        settings.timeZoneMode ?? 'device',
         settings.workdayStartsAt,
         settings.workdayEndsAt,
         settings.eveningReviewAt,
