@@ -1,6 +1,7 @@
-import { completeBacklogItem, createTask, resumeBacklogItem } from '../../src/application/backlog-use-cases';
+import { completeBacklogItem, createReminder, createTask, resumeBacklogItem } from '../../src/application/backlog-use-cases';
 import { getCompletedItems } from '../../src/application/completed-use-cases';
-import { saveTaskPlanning, setRecurrenceOccurrenceState } from '../../src/application/planning-use-cases';
+import { saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
+import { getDefaultSettings } from '../../src/data/default-settings';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 
 const createdAt = '2026-08-01T08:00:00.000Z';
@@ -35,5 +36,45 @@ describe('completed use cases', () => {
 
     await expect(source.getTaskItem(task.id)).resolves.toMatchObject({ completedAt: null });
     await expect(source.getScheduleBlock('block-1')).resolves.toMatchObject({ taskItemId: task.id });
+  });
+
+  test('lists completed standalone and recurring reminders', async () => {
+    const source = createInMemoryDataSource();
+    const standalone = await createReminder(source, { id: 'reminder-1', title: 'Отправить документы', createdAt });
+    await completeBacklogItem(source, { kind: 'reminder', id: standalone.id, completedAt: '2026-08-02T10:00:00.000Z' });
+    const recurring = await createReminder(source, {
+      id: 'reminder-2',
+      title: 'Полить цветы',
+      remindsOn: '2026-08-03',
+      repeatRule: { frequency: 'weekly', interval: 1 },
+      createdAt,
+    });
+    await syncReminderRecurrence(source, recurring.id);
+    const series = (await source.listRecurrenceSeries()).find((candidate) => candidate.itemId === recurring.id);
+    expect(series).toBeDefined();
+    await setRecurrenceOccurrenceState(source, series!.id, '2026-08-10', 'completed', undefined, new Date('2026-08-10T12:00:00.000Z'));
+
+    await expect(getCompletedItems(source)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: standalone.id, kind: 'reminder', title: 'Отправить документы', occurrence: null }),
+      expect.objectContaining({ id: `recurrence:${series!.id}:2026-08-10`, kind: 'reminder', title: 'Полить цветы', occurrence: { seriesId: series!.id, occursOn: '2026-08-10' } }),
+    ]));
+  });
+
+  test('filters archive periods by calendar dates in the saved timezone', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'America/Los_Angeles', timeZoneMode: 'manual' });
+    const localDecember = await createTask(source, { id: 'task-december', title: 'Завершено 31 декабря', createdAt });
+    const localJanuary = await createTask(source, { id: 'task-january', title: 'Завершено 1 января', createdAt });
+    await completeBacklogItem(source, { kind: 'task', id: localDecember.id, completedAt: '2026-01-01T00:30:00.000Z' });
+    await completeBacklogItem(source, { kind: 'task', id: localJanuary.id, completedAt: '2026-01-01T08:30:00.000Z' });
+    const now = new Date('2026-01-01T01:00:00.000Z');
+
+    await expect(getCompletedItems(source, { now, period: 'today' })).resolves.toMatchObject([{ id: localDecember.id }]);
+    await expect(getCompletedItems(source, { now, period: 'month' })).resolves.toMatchObject([{ id: localDecember.id }]);
+    await expect(getCompletedItems(source, { now, period: 'year' })).resolves.toMatchObject([{ id: localDecember.id }]);
+    await expect(getCompletedItems(source, { now, period: 'week' })).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: localDecember.id }),
+      expect.objectContaining({ id: localJanuary.id }),
+    ]));
   });
 });
