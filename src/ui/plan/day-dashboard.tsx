@@ -154,12 +154,12 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
     const parts = block.occurrenceId?.split(':');
     const task = currentBlockTasks.get(block.taskItemId);
     if (parts?.[0] === 'virtual' && parts[1] !== undefined && parts[2] !== undefined && task !== undefined) {
-      setSelectedOccurrence({ seriesId: parts[1], occursOn: parts[2], task });
+      onEditRecurrence?.(task, parts[1], parts[2]);
       return;
     }
     if (block.occurrenceId !== null && task !== undefined) {
       void services?.planningActions.getRecurrenceOccurrenceById(block.occurrenceId).then((occurrence) => {
-        if (occurrence !== null && occurrence !== undefined) setSelectedOccurrence({ seriesId: occurrence.seriesId, occursOn: occurrence.occursOn, task });
+        if (occurrence !== null && occurrence !== undefined) onEditRecurrence?.(task, occurrence.seriesId, occurrence.occursOn);
         else onEditTask?.(task);
       });
       return;
@@ -382,7 +382,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
 
         <SectionHeader action={`${currentReminders.length + currentUntimedTasks.length}`} title="Без времени" />
         <View style={styles.list}>
-          {currentUntimedTasks.map((task) => { const key = `${task.id}-${task.occursOn ?? 'single'}`; const isCompleted = completedUntimedTaskKeys.has(key); return <PlanListRow allowCompletedPress={task.seriesId === null} completed={isCompleted} key={key} onLongPress={() => setQuickActionTarget({ isCompleted, item: task, itemKind: 'task', occurrence: task.seriesId === null || task.occursOn === null ? null : { seriesId: task.seriesId, occursOn: task.occursOn } })} onPress={() => { if (task.seriesId === null && onEditTask !== undefined) onEditTask(task); else setSelectedUntimedTask(task); }} title={task.title} time="Без времени" />; })}
+          {currentUntimedTasks.map((task) => { const key = `${task.id}-${task.occursOn ?? 'single'}`; const isCompleted = completedUntimedTaskKeys.has(key); return <PlanListRow allowCompletedPress={task.seriesId === null} completed={isCompleted} key={key} onLongPress={() => setQuickActionTarget({ isCompleted, item: task, itemKind: 'task', occurrence: task.seriesId === null || task.occursOn === null ? null : { seriesId: task.seriesId, occursOn: task.occursOn } })} onPress={() => { if (task.seriesId === null && onEditTask !== undefined) onEditTask(task); else if (task.seriesId !== null && task.occursOn !== null) onEditRecurrence?.(task, task.seriesId, task.occursOn); }} title={task.title} time="Без времени" />; })}
           {currentReminders.map((reminder) => <PlanListRow allowCompletedPress={reminder.seriesId === null} completed={reminder.completedAt !== null} key={reminder.id} onLongPress={() => setQuickActionTarget({ isCompleted: reminder.completedAt !== null, item: reminder, itemKind: 'reminder', occurrence: reminder.seriesId === null || reminder.occursOn === null ? null : { seriesId: reminder.seriesId, occursOn: reminder.occursOn } })} onPress={() => { if (reminder.seriesId === null && onEditReminder !== undefined) onEditReminder(reminder); else if (reminder.seriesId !== null && reminder.occursOn !== null) setSelectedReminderOccurrence({ seriesId: reminder.seriesId, occursOn: reminder.occursOn }); }} title={reminder.title} time="Без времени" />)}
         </View>
         <SectionHeader action={`${currentBlocks.length} ${currentBlocks.length === 1 ? 'блок' : 'блоков'}`} title="Расписание" />
@@ -448,8 +448,8 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
       <EveningReviewDialog items={eveningReviewItems} onRequestClose={() => setIsEveningReviewVisible(false)} visible={isEveningReviewVisible} />
       {quickActionTarget === null ? null : <PlanTaskActionsDialog isCompleted={quickActionTarget.isCompleted} itemKind={quickActionTarget.itemKind} onAction={chooseQuickAction} onRequestClose={() => setQuickActionTarget(null)} taskTitle={quickActionTarget.item.title} visible={pendingQuickAction === null && !isQuickDeleteConfirmVisible} />}
-      {quickActionTarget === null || pendingQuickAction === null ? null : <RecurrenceScopeDialog actionLabel={pendingQuickAction === 'complete' ? 'Выполнить повторение' : pendingQuickAction === 'delete' ? 'Удалить повторение' : 'Вернуть повторение в Backlog'} onChoose={async (scope) => { if (pendingQuickAction === 'delete' && scope === 'series') setIsQuickDeleteConfirmVisible(true); else await runQuickAction(pendingQuickAction, scope); }} onRequestClose={() => setPendingQuickAction(null)} visible />}
-      {quickActionTarget === null ? null : <DeletePlanTaskDialog deletesSeries={quickActionTarget.occurrence !== null && pendingQuickAction === 'delete'} itemKind={quickActionTarget.itemKind} onConfirm={() => void runQuickAction('delete', 'series')} onRequestClose={() => { setIsQuickDeleteConfirmVisible(false); setPendingQuickAction(null); }} visible={isQuickDeleteConfirmVisible} />}
+      {quickActionTarget === null || pendingQuickAction === null ? null : <RecurrenceScopeDialog actionLabel={pendingQuickAction === 'complete' ? 'Выполнить повторение' : pendingQuickAction === 'delete' ? 'Удалить повторение' : 'Вернуть повторение в Backlog'} onChoose={async (scope) => { if (pendingQuickAction === 'delete' && scope === 'series') { setPendingQuickAction(null); setIsQuickDeleteConfirmVisible(true); } else await runQuickAction(pendingQuickAction, scope); }} onRequestClose={() => setPendingQuickAction(null)} visible />}
+      {quickActionTarget === null ? null : <DeletePlanTaskDialog deletesSeries={quickActionTarget.occurrence !== null} itemKind={quickActionTarget.itemKind} onConfirm={() => void runQuickAction('delete', 'series')} onRequestClose={() => { setIsQuickDeleteConfirmVisible(false); setPendingQuickAction(null); }} visible={isQuickDeleteConfirmVisible} />}
     </SafeAreaView>
   );
 }

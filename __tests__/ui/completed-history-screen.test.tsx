@@ -74,8 +74,8 @@ describe('CompletedHistoryScreen', () => {
 
     await waitFor(() => expect(view.getByLabelText('Открыть действия: Старый черновик')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Открыть действия: Старый черновик'));
-    await waitFor(() => expect(view.getByLabelText('Удалить из архива безвозвратно')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Удалить из архива безвозвратно'));
+    await waitFor(() => expect(view.getByLabelText('Удалить экземпляр')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Удалить экземпляр'));
 
     await waitFor(() => expect(view.getByText('Удалить безвозвратно?')).toBeOnTheScreen());
     await expect(source.getTaskItem('permanent-delete-task')).resolves.toMatchObject({ id: 'permanent-delete-task' });

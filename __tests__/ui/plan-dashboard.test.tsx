@@ -212,9 +212,26 @@ describe('DayDashboard', () => {
     fireEvent.press(view.getByText('Всю серию'));
 
     await waitFor(() => expect(view.getByText('Удалить всю серию?')).toBeOnTheScreen());
+    expect(view.queryByText('К чему применить это изменение?')).toBeNull();
     await expect(source.getReminder('active-recurring-reminder')).resolves.toMatchObject({ id: 'active-recurring-reminder' });
     fireEvent.press(view.getByLabelText('Подтвердить удаление всей серии'));
     await waitFor(async () => expect(await source.getReminder('active-recurring-reminder')).toBeNull());
+  });
+
+  test('opens an occurrence editor when an active recurring plan instance is pressed', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    const onEditRecurrence = jest.fn();
+    await source.saveTaskItem({ id: 'editable-recurring-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Редактируемый повтор', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'editable-recurring-block', taskItemId: 'editable-recurring-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'editable-recurring-series', itemKind: 'task', itemId: 'editable-recurring-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard onEditRecurrence={onEditRecurrence} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Редактируемый повтор, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Редактируемый повтор, 09:00–10:00, колонка 1 из 1'));
+
+    await waitFor(() => expect(onEditRecurrence).toHaveBeenCalledWith(expect.objectContaining({ id: 'editable-recurring-task' }), 'editable-recurring-series', '2026-08-28'));
   });
 
   test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
