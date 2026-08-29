@@ -1,6 +1,6 @@
 import { completeBacklogItem, createReminder, createTask, resumeBacklogItem } from '../../src/application/backlog-use-cases';
 import { getCompletedItemDetails, getCompletedItems, permanentlyDeleteCompletedItem } from '../../src/application/completed-use-cases';
-import { saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
+import { getPlanUntimedTasks, saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 
@@ -137,6 +137,7 @@ describe('completed use cases', () => {
     await expect(getCompletedItems(source)).resolves.not.toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'recurrence:delete-occurrence-series:2026-08-10' }),
     ]));
+    await expect(getPlanUntimedTasks(source, '2026-08-10')).resolves.toEqual([]);
     await expect(source.getTaskItem(task.id)).resolves.toMatchObject({ id: task.id });
   });
 

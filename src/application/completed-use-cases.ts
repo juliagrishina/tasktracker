@@ -3,6 +3,7 @@ import type { EntityId } from '../domain/entities';
 import { getDateInTimeZone } from '../domain/planning';
 import type { LocalNotificationScheduler } from './notification-scheduling';
 import { deleteBacklogItem } from './backlog-use-cases';
+import { setRecurrenceOccurrenceState } from './planning-use-cases';
 
 export type CompletedItemKind = 'project' | 'reminder' | 'task' | 'subtask';
 export type CompletedPeriod = 'today' | 'week' | 'month' | 'year';
@@ -123,7 +124,7 @@ export async function permanentlyDeleteCompletedItem(source: AppDataSource, item
   if (item.occurrence !== null) {
     const occurrence = (await source.listRecurrenceOccurrences(item.occurrence.seriesId)).find((candidate) => candidate.occursOn === item.occurrence!.occursOn);
     if (occurrence === undefined || occurrence.completedAt === null) throw new Error('Завершённый экземпляр не найден');
-    await source.transaction(async () => { await source.deleteRecurrenceOccurrence(occurrence.id); });
+    await setRecurrenceOccurrenceState(source, item.occurrence.seriesId, item.occurrence.occursOn, 'cancelled', scheduler);
     return;
   }
 
