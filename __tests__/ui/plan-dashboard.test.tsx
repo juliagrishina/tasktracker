@@ -197,6 +197,26 @@ describe('DayDashboard', () => {
     expect(view.queryByText('К чему применить это изменение?')).toBeNull();
   });
 
+  test('requires an explicit whole-series confirmation before deleting an active recurring reminder', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveReminder({ id: 'active-recurring-reminder', title: 'Полить цветы', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: { frequency: 'weekly', interval: 1 }, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'active-recurring-reminder-series', itemKind: 'reminder', itemId: 'active-recurring-reminder', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Без времени: Полить цветы')).toBeOnTheScreen());
+    fireEvent(view.getByLabelText('Без времени: Полить цветы'), 'contextMenu', { preventDefault: jest.fn() });
+    await waitFor(() => expect(view.getByLabelText('Удалить напоминание')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Удалить напоминание'));
+    await waitFor(() => expect(view.getByText('Всю серию')).toBeOnTheScreen());
+    fireEvent.press(view.getByText('Всю серию'));
+
+    await waitFor(() => expect(view.getByText('Удалить всю серию?')).toBeOnTheScreen());
+    await expect(source.getReminder('active-recurring-reminder')).resolves.toMatchObject({ id: 'active-recurring-reminder' });
+    fireEvent.press(view.getByLabelText('Подтвердить удаление всей серии'));
+    await waitFor(async () => expect(await source.getReminder('active-recurring-reminder')).toBeNull());
+  });
+
   test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';

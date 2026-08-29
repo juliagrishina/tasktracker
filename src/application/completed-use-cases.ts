@@ -132,6 +132,22 @@ export async function permanentlyDeleteCompletedItem(source: AppDataSource, item
   await deleteBacklogItem(source, { kind: item.kind, id: item.id, confirmed: true }, scheduler);
 }
 
+export async function permanentlyDeleteCompletedSeries(source: AppDataSource, item: CompletedItem, scheduler?: LocalNotificationScheduler): Promise<void> {
+  if (item.occurrence === null) throw new Error('Серия повторения не найдена');
+  const [series, occurrence] = await Promise.all([
+    source.getRecurrenceSeries(item.occurrence.seriesId),
+    source.listRecurrenceOccurrences(item.occurrence.seriesId).then((occurrences) => occurrences.find((candidate) => candidate.occursOn === item.occurrence!.occursOn)),
+  ]);
+  if (series === null || occurrence === undefined || occurrence.completedAt === null) throw new Error('Завершённый экземпляр не найден');
+  if (series.itemKind === 'reminder') {
+    await deleteBacklogItem(source, { kind: 'reminder', id: series.itemId, confirmed: true }, scheduler);
+    return;
+  }
+  const task = await source.getTaskItem(series.itemId);
+  if (task === null) throw new Error('Задача серии не найдена');
+  await deleteBacklogItem(source, { kind: task.kind, id: task.id, confirmed: true }, scheduler);
+}
+
 function createDetails(
   item: CompletedItem,
   typeLabel: CompletedItemDetails['typeLabel'],

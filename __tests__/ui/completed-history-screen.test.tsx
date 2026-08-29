@@ -85,6 +85,26 @@ describe('CompletedHistoryScreen', () => {
     await waitFor(async () => expect(await source.getTaskItem('permanent-delete-task')).toBeNull());
   });
 
+  test('offers a separate confirmed deletion for the entire recurrence series', async () => {
+    const source = createInMemoryDataSource();
+    const completedAt = new Date().toISOString();
+    await source.saveTaskItem({ id: 'delete-series-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Еженедельный обзор', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'delete-series-id', itemKind: 'task', itemId: 'delete-series-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-01', createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
+    await source.saveRecurrenceOccurrence({ id: 'delete-series-occurrence', seriesId: 'delete-series-id', occursOn: new Date().toISOString().slice(0, 10), cancelledAt: null, completedAt, blocksOverridden: false, taskPatch: null, reminderPatch: null, createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
+    const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Открыть действия: Еженедельный обзор')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Открыть действия: Еженедельный обзор'));
+    await waitFor(() => expect(view.getByLabelText('Удалить всю серию')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Удалить всю серию'));
+
+    await waitFor(() => expect(view.getByText('Удалить всю серию?')).toBeOnTheScreen());
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Подтвердить удаление всей серии'));
+    });
+    await waitFor(async () => expect(await source.getTaskItem('delete-series-task')).toBeNull());
+  });
+
   test('returns a completed one-time reminder to Backlog atomically', async () => {
     const source = createInMemoryDataSource();
     const completedAt = new Date().toISOString();

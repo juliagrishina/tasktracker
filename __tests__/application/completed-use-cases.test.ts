@@ -1,5 +1,5 @@
 import { completeBacklogItem, createReminder, createTask, resumeBacklogItem } from '../../src/application/backlog-use-cases';
-import { getCompletedItemDetails, getCompletedItems, permanentlyDeleteCompletedItem } from '../../src/application/completed-use-cases';
+import { getCompletedItemDetails, getCompletedItems, permanentlyDeleteCompletedItem, permanentlyDeleteCompletedSeries } from '../../src/application/completed-use-cases';
 import { getPlanUntimedTasks, saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
@@ -145,5 +145,45 @@ describe('completed use cases', () => {
     const source = createInMemoryDataSource();
 
     await expect(permanentlyDeleteCompletedItem(source, { id: 'missing-task', kind: 'task', title: 'Несуществующая задача', completedAt: '2026-08-20T10:00:00.000Z', occurrence: null })).rejects.toThrow('Можно удалить только завершённый элемент');
+  });
+
+  test('permanently deletes the source item and every occurrence when deleting an entire completed series', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, { id: 'delete-series-task', title: 'Еженедельный обзор', createdAt });
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [],
+      placement: { scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null },
+      recurrence: { id: 'delete-series-id', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
+    });
+    await setRecurrenceOccurrenceState(source, 'delete-series-id', '2026-08-10', 'completed', undefined, new Date('2026-08-10T12:00:00.000Z'));
+    await setRecurrenceOccurrenceState(source, 'delete-series-id', '2026-08-17', 'completed', undefined, new Date('2026-08-17T12:00:00.000Z'));
+
+    await permanentlyDeleteCompletedSeries(source, { id: 'recurrence:delete-series-id:2026-08-10', taskId: task.id, kind: 'task', title: task.title, completedAt: '2026-08-10T12:00:00.000Z', occurrence: { seriesId: 'delete-series-id', occursOn: '2026-08-10' } });
+
+    await expect(source.getTaskItem(task.id)).resolves.toBeNull();
+    await expect(source.listRecurrenceSeries()).resolves.toEqual([]);
+    await expect(getCompletedItems(source)).resolves.toEqual([]);
+  });
+
+  test('permanently deletes a recurring reminder and every occurrence when deleting its completed series', async () => {
+    const source = createInMemoryDataSource();
+    const reminder = await createReminder(source, {
+      id: 'delete-reminder-series',
+      title: 'Полить цветы',
+      remindsOn: '2026-08-03',
+      repeatRule: { frequency: 'weekly', interval: 1 },
+      createdAt,
+    });
+    await syncReminderRecurrence(source, reminder.id);
+    const series = (await source.listRecurrenceSeries()).find((candidate) => candidate.itemId === reminder.id);
+    if (series === undefined) throw new Error('Серия напоминания не создана');
+    await setRecurrenceOccurrenceState(source, series.id, '2026-08-10', 'completed', undefined, new Date('2026-08-10T12:00:00.000Z'));
+
+    await permanentlyDeleteCompletedSeries(source, { id: `recurrence:${series.id}:2026-08-10`, kind: 'reminder', title: reminder.title, completedAt: '2026-08-10T12:00:00.000Z', occurrence: { seriesId: series.id, occursOn: '2026-08-10' } });
+
+    await expect(source.getReminder(reminder.id)).resolves.toBeNull();
+    await expect(source.listRecurrenceSeries()).resolves.toEqual([]);
+    await expect(getCompletedItems(source)).resolves.toEqual([]);
   });
 });

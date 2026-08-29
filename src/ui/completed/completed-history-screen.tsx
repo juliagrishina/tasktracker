@@ -34,7 +34,7 @@ export function CompletedHistoryScreen() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<CompletedItem | null>(null);
   const [itemDetails, setItemDetails] = useState<CompletedItemDetails | null>(null);
-  const [itemPendingPermanentDeletion, setItemPendingPermanentDeletion] = useState<CompletedItem | null>(null);
+  const [itemPendingPermanentDeletion, setItemPendingPermanentDeletion] = useState<{ item: CompletedItem; scope: 'item' | 'series' } | null>(null);
   const [permanentDeletionError, setPermanentDeletionError] = useState<string | null>(null);
   const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
@@ -68,8 +68,9 @@ export function CompletedHistoryScreen() {
     setIsPermanentlyDeleting(true);
     setPermanentDeletionError(null);
     try {
-      await services.deleteCompletedItem(itemPendingPermanentDeletion);
-      setFeedback('Элемент удалён из архива');
+      if (itemPendingPermanentDeletion.scope === 'series') await services.deleteCompletedSeries(itemPendingPermanentDeletion.item);
+      else await services.deleteCompletedItem(itemPendingPermanentDeletion.item);
+      setFeedback(itemPendingPermanentDeletion.scope === 'series' ? 'Серия удалена' : 'Элемент удалён из архива');
       setItemPendingPermanentDeletion(null);
     } catch (error) {
       setPermanentDeletionError(error instanceof Error ? error.message : 'Не удалось удалить элемент из архива');
@@ -139,8 +140,8 @@ export function CompletedHistoryScreen() {
         </View>
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
-      {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted itemKind={selectedItem.kind === 'reminder' ? 'reminder' : 'task'} onAction={(action) => void runAction(action)} onDeletePermanently={() => { setItemPendingPermanentDeletion(selectedItem); setSelectedItem(null); }} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}
-      {itemPendingPermanentDeletion === null ? null : <PermanentDeleteCompletedItemDialog error={permanentDeletionError} isDeleting={isPermanentlyDeleting} itemTitle={itemPendingPermanentDeletion.title} onConfirm={() => void permanentlyDeleteSelectedItem()} onRequestClose={() => { if (!isPermanentlyDeleting) { setPermanentDeletionError(null); setItemPendingPermanentDeletion(null); } }} visible />}
+      {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted itemKind={selectedItem.kind === 'reminder' ? 'reminder' : 'task'} onAction={(action) => void runAction(action)} onDeletePermanently={() => { setItemPendingPermanentDeletion({ item: selectedItem, scope: 'item' }); setSelectedItem(null); }} onDeleteSeries={selectedItem.occurrence === null ? undefined : () => { setItemPendingPermanentDeletion({ item: selectedItem, scope: 'series' }); setSelectedItem(null); }} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}
+      {itemPendingPermanentDeletion === null ? null : <PermanentDeleteCompletedItemDialog error={permanentDeletionError} isDeleting={isPermanentlyDeleting} itemTitle={itemPendingPermanentDeletion.item.title} onConfirm={() => void permanentlyDeleteSelectedItem()} onRequestClose={() => { if (!isPermanentlyDeleting) { setPermanentDeletionError(null); setItemPendingPermanentDeletion(null); } }} scope={itemPendingPermanentDeletion.scope} visible />}
       {itemDetails === null ? null : <CompletedItemDetailsSheet details={itemDetails} onRequestClose={() => setItemDetails(null)} timeZoneId={services?.settings.timeZoneId ?? 'UTC'} visible />}
       {editingTask === null ? null : <ItemFormSheet item={editingTask} mode="edit" onClose={() => setEditingTask(null)} onSaved={() => setEditingTask(null)} planningContext={{ defaultDate: new Date().toISOString().slice(0, 10) }} type={editingTask.kind} visible />}
     </SafeAreaView>
