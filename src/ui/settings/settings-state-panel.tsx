@@ -9,7 +9,9 @@ import {
   type NotificationPermissionStatus,
   type WebNotificationPermissionGateway,
 } from '../../application/notification-permissions';
+import type { UpdatePlanningSettingsInput } from '../../application/settings-use-cases';
 import type { AppSettings } from '../../domain/entities';
+import { PlanningValuePicker } from '../backlog/planning-value-picker';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
 import { StatusPill } from '../primitives/status-pill';
@@ -17,20 +19,25 @@ import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 
 import { settingsDemoState } from './settings-demo-state';
+import { TimeZonePicker } from './time-zone-picker';
 
 interface SettingsStatePanelProps {
   notificationPermissions?: NotificationPermissionGateway;
+  onPlanningSettingsChange?: (input: UpdatePlanningSettingsInput) => Promise<void>;
   onTimeZoneChange?: (timeZoneId: string) => Promise<void>;
+  onUseDeviceTimeZone?: () => Promise<void>;
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ notificationPermissions, onTimeZoneChange, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ notificationPermissions, onPlanningSettingsChange, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<NotificationPermissionStatus>('undetermined');
   const [syncLabel, setSyncLabel] = useState<string>(settingsDemoState.initialSyncLabel);
-  const [isTimeZoneEditorVisible, setIsTimeZoneEditorVisible] = useState(false);
-  const [timeZoneId, setTimeZoneId] = useState(settings.timeZoneId);
+  const [isTimeZonePickerVisible, setIsTimeZonePickerVisible] = useState(false);
+  const [isPlanEditorVisible, setIsPlanEditorVisible] = useState(false);
+  const [isSavingPlanningSettings, setIsSavingPlanningSettings] = useState(false);
+  const [planningSettings, setPlanningSettings] = useState<UpdatePlanningSettingsInput>(() => getPlanningSettings(settings));
   const notificationPermissionService = useMemo(
     () => notificationPermissions === undefined ? undefined : createNotificationPermissionService(notificationPermissions),
     [notificationPermissions],
@@ -46,14 +53,35 @@ export function SettingsStatePanel({ notificationPermissions, onTimeZoneChange, 
     setSyncLabel('синхр. только что');
     setFeedback('Статус обновлён в демо-режиме');
   };
-  const saveTimeZone = async () => {
+  const selectTimeZone = async (timeZoneId: string) => {
     if (onTimeZoneChange === undefined) return;
     try {
-      await onTimeZoneChange(timeZoneId.trim());
-      setIsTimeZoneEditorVisible(false);
+      await onTimeZoneChange(timeZoneId);
       setFeedback('Часовой пояс плана обновлён');
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'Не удалось обновить часовой пояс');
+    }
+  };
+  const useDeviceTimeZone = async () => {
+    if (onUseDeviceTimeZone === undefined) return;
+    try {
+      await onUseDeviceTimeZone();
+      setFeedback('Используется часовой пояс устройства');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Не удалось переключиться на пояс устройства');
+    }
+  };
+  const savePlanningSettings = async () => {
+    if (onPlanningSettingsChange === undefined) return;
+    setIsSavingPlanningSettings(true);
+    try {
+      await onPlanningSettingsChange(planningSettings);
+      setIsPlanEditorVisible(false);
+      setFeedback('Параметры плана обновлены');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Не удалось обновить параметры плана');
+    } finally {
+      setIsSavingPlanningSettings(false);
     }
   };
   const requestNotificationPermission = async () => {
@@ -105,11 +133,27 @@ export function SettingsStatePanel({ notificationPermissions, onTimeZoneChange, 
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
-          <CardTitle action="Изменить" onAction={() => setFeedback('Параметры плана доступны для просмотра в демо-режиме')} title="План дня" />
+          <CardTitle action="Изменить" onAction={() => { setPlanningSettings(getPlanningSettings(settings)); setIsPlanEditorVisible(true); setFeedback(null); }} title="План дня" />
           <SettingsRow description="Знаменатель загрузки" label="Рабочий диапазон" value={`${settings.workdayStartsAt}–${settings.workdayEndsAt}`} />
           <SettingsRow description="Дела без времени" label="Вечерняя проверка" value={settings.eveningReviewAt} />
-          <SettingsRow description="Карточки показывают тот же момент времени в этом поясе" label="Часовой пояс" onPress={() => setIsTimeZoneEditorVisible(true)} value={settings.timeZoneId} />
-          {isTimeZoneEditorVisible ? <View style={styles.timeZoneEditor}><Text style={styles.settingDescription}>Формат IANA, например Europe/Berlin</Text><TextInput accessibilityLabel="Часовой пояс IANA" autoCapitalize="none" autoCorrect={false} onChangeText={setTimeZoneId} style={styles.timeZoneInput} value={timeZoneId} /><Pressable accessibilityRole="button" onPress={() => void saveTimeZone()} style={styles.timeZoneSave}><Text style={styles.timeZoneSaveText}>Сохранить часовой пояс</Text></Pressable></View> : null}
+          <SettingsRow description={settings.timeZoneMode === 'manual' ? 'Выбран вручную из списка IANA' : 'Определяется автоматически устройством'} label="Часовой пояс" onPress={() => setIsTimeZonePickerVisible(true)} value={settings.timeZoneId} />
+          {settings.timeZoneMode === 'manual' ? <View style={styles.deviceTimeZoneAction}><ActionButton label="Использовать пояс устройства" onPress={() => void useDeviceTimeZone()} tone="soft" /></View> : <Text style={styles.settingDescription}>Сейчас используется пояс устройства: {settings.timeZoneId}</Text>}
+          {isPlanEditorVisible ? <View style={styles.planEditor}>
+            <Text style={styles.editorTitle}>Параметры плана</Text>
+            <Text style={styles.fieldLabel}>Рабочий диапазон</Text>
+            <View style={styles.pickerRow}>
+              <View style={styles.pickerColumn}><Text style={styles.fieldHint}>Начало</Text><PlanningValuePicker accessibilityLabel="Начало рабочего дня" onChange={(workdayStartsAt) => setPlanningSettings((current) => ({ ...current, workdayStartsAt }))} options={timeOptions} title="Начало рабочего дня" value={planningSettings.workdayStartsAt} /></View>
+              <View style={styles.pickerColumn}><Text style={styles.fieldHint}>Конец</Text><PlanningValuePicker accessibilityLabel="Конец рабочего дня" onChange={(workdayEndsAt) => setPlanningSettings((current) => ({ ...current, workdayEndsAt }))} options={timeOptions} title="Конец рабочего дня" value={planningSettings.workdayEndsAt} /></View>
+            </View>
+            <Text style={styles.fieldLabel}>Вечерняя проверка</Text>
+            <PlanningValuePicker accessibilityLabel="Время вечерней проверки" onChange={(eveningReviewAt) => setPlanningSettings((current) => ({ ...current, eveningReviewAt }))} options={timeOptions} title="Время вечерней проверки" value={planningSettings.eveningReviewAt} />
+            <Text style={styles.fieldLabel}>Предварительное уведомление</Text>
+            <PlanningValuePicker accessibilityLabel="Интервал уведомления" onChange={(notificationLeadMinutes) => setPlanningSettings((current) => ({ ...current, notificationLeadMinutes: Number(notificationLeadMinutes) }))} options={notificationLeadOptions} title="Интервал уведомления" value={String(planningSettings.notificationLeadMinutes)} />
+            <View style={styles.buttonRow}>
+              <View style={styles.actionWrap}><ActionButton label="Отмена" onPress={() => setIsPlanEditorVisible(false)} tone="secondary" /></View>
+              <View style={styles.actionWrap}><ActionButton disabled={isSavingPlanningSettings} label="Сохранить параметры плана" onPress={() => void savePlanningSettings()} tone="primary" /></View>
+            </View>
+          </View> : null}
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
@@ -141,9 +185,31 @@ export function SettingsStatePanel({ notificationPermissions, onTimeZoneChange, 
         <Text style={styles.footer}>{settingsDemoState.version} · Часовой пояс плана: {settings.timeZoneId}</Text>
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
+      <TimeZonePicker onRequestClose={() => setIsTimeZonePickerVisible(false)} onSelect={(timeZoneId) => void selectTimeZone(timeZoneId)} selectedTimeZoneId={settings.timeZoneId} visible={isTimeZonePickerVisible} />
     </SafeAreaView>
   );
 }
+
+function getPlanningSettings(settings: AppSettings): UpdatePlanningSettingsInput {
+  return {
+    workdayStartsAt: settings.workdayStartsAt,
+    workdayEndsAt: settings.workdayEndsAt,
+    eveningReviewAt: settings.eveningReviewAt,
+    notificationLeadMinutes: settings.notificationLeadMinutes,
+  };
+}
+
+const timeOptions = Array.from({ length: 96 }, (_, index) => {
+  const hours = Math.floor(index / 4);
+  const minutes = (index % 4) * 15;
+  const value = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return { label: value, value };
+});
+
+const notificationLeadOptions = Array.from({ length: 25 }, (_, index) => {
+  const value = String(index * 5);
+  return { label: `${value} минут`, value };
+});
 
 function notificationPermissionAction(status: NotificationPermissionStatus): { label: string; tone: 'default' | 'success' } {
   if (status === 'granted') return { label: 'Разрешены', tone: 'success' };
@@ -364,10 +430,13 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.meta,
     lineHeight: designTokens.typography.lineHeight.meta,
   },
-  timeZoneEditor: { gap: designTokens.space[8], marginTop: designTokens.space[12] },
-  timeZoneInput: { backgroundColor: designTokens.color.surface.raised, borderColor: designTokens.color.border.subtle, borderRadius: designTokens.radius.control, borderWidth: 1, color: designTokens.color.text.primary, minHeight: designTokens.size.touchTargetMin, paddingHorizontal: designTokens.space[12] },
-  timeZoneSave: { alignItems: 'center', backgroundColor: designTokens.color.primary, borderRadius: designTokens.radius.control, justifyContent: 'center', minHeight: designTokens.size.touchTargetMin },
-  timeZoneSaveText: { color: designTokens.color.text.inverse, fontWeight: designTokens.typography.weight.bold },
+  deviceTimeZoneAction: { marginTop: designTokens.space[8] },
+  planEditor: { borderTopColor: designTokens.color.border.subtle, borderTopWidth: 1, gap: designTokens.space[8], marginTop: designTokens.space[12], paddingTop: designTokens.space[12] },
+  editorTitle: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.label, fontWeight: designTokens.typography.weight.bold, lineHeight: designTokens.typography.lineHeight.label },
+  fieldLabel: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.meta, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.meta, marginTop: designTokens.space[4] },
+  fieldHint: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.micro, lineHeight: designTokens.typography.lineHeight.micro, marginBottom: designTokens.space[4] },
+  pickerRow: { flexDirection: 'row', gap: designTokens.space[8] },
+  pickerColumn: { flex: 1 },
   dangerText: {
     color: designTokens.color.feedback.danger.foreground,
   },

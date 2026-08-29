@@ -5,17 +5,52 @@ import type { NotificationPermissionGateway } from '../../src/application/notifi
 import { SettingsStatePanel } from '../../src/ui/settings/settings-state-panel';
 
 describe('SettingsStatePanel', () => {
-  test('saves the selected IANA timezone for all plan cards', async () => {
+  test('selects a manual IANA timezone from the searchable list and can return to the device timezone', async () => {
     const onTimeZoneChange = jest.fn().mockResolvedValue(undefined);
-    const view = await render(<SettingsStatePanel onTimeZoneChange={onTimeZoneChange} settings={getDefaultSettings()} />);
+    const onUseDeviceTimeZone = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel onTimeZoneChange={onTimeZoneChange} onUseDeviceTimeZone={onUseDeviceTimeZone} settings={{ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' }} />);
 
     fireEvent.press(view.getByLabelText('Часовой пояс'));
-    await waitFor(() => expect(view.getByLabelText('Часовой пояс IANA')).toBeOnTheScreen());
-    fireEvent.changeText(view.getByLabelText('Часовой пояс IANA'), 'Europe/Berlin');
-    await waitFor(() => expect(view.getByLabelText('Часовой пояс IANA').props.value).toBe('Europe/Berlin'));
-    fireEvent.press(view.getByRole('button', { name: 'Сохранить часовой пояс' }));
+    await waitFor(() => expect(view.getByLabelText('Поиск часового пояса')).toBeOnTheScreen());
+    fireEvent.changeText(view.getByLabelText('Поиск часового пояса'), 'berlin');
+    await waitFor(() => expect(view.getByRole('button', { name: 'Europe/Berlin' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: 'Europe/Berlin' }));
 
     await waitFor(() => expect(onTimeZoneChange).toHaveBeenCalledWith('Europe/Berlin'));
+    fireEvent.press(view.getByRole('button', { name: 'Использовать пояс устройства' }));
+    await waitFor(() => expect(onUseDeviceTimeZone).toHaveBeenCalledTimes(1));
+  });
+
+  test('saves editable planning settings from the settings screen', async () => {
+    const onPlanningSettingsChange = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel onPlanningSettingsChange={onPlanningSettingsChange} settings={getDefaultSettings()} />);
+
+    fireEvent.press(view.getByRole('button', { name: 'Изменить' }));
+    await waitFor(() => expect(view.getByLabelText('Начало рабочего дня')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Начало рабочего дня'));
+    await waitFor(() => expect(view.getByRole('button', { name: '01:00' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: '01:00' }));
+    await waitFor(() => expect(view.getByText('01:00')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Конец рабочего дня'));
+    await waitFor(() => expect(view.getByRole('button', { name: '02:00' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: '02:00' }));
+    await waitFor(() => expect(view.getByText('02:00')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Время вечерней проверки'));
+    await waitFor(() => expect(view.getByRole('button', { name: '03:00' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: '03:00' }));
+    await waitFor(() => expect(view.getByText('03:00')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Интервал уведомления'));
+    await waitFor(() => expect(view.getByRole('button', { name: '30 минут' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: '30 минут' }));
+    await waitFor(() => expect(view.getByText('30 минут')).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: 'Сохранить параметры плана' }));
+
+    await waitFor(() => expect(onPlanningSettingsChange).toHaveBeenCalledWith({
+      workdayStartsAt: '01:00',
+      workdayEndsAt: '02:00',
+      eveningReviewAt: '03:00',
+      notificationLeadMinutes: 30,
+    }));
   });
 
   test('renders the approved Settings 2 state cards', async () => {
