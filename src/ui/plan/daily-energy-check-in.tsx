@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
@@ -25,6 +25,7 @@ export function DailyEnergyCheckIn({
   const [selectedEnergyPercent, setSelectedEnergyPercent] = useState(
     initialEnergyPercent ?? defaultEnergyPercent,
   );
+  const pickerRef = useRef<ScrollView>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +33,10 @@ export function DailyEnergyCheckIn({
     if (visible) {
       setSelectedEnergyPercent(initialEnergyPercent ?? defaultEnergyPercent);
       setError(null);
+      pickerRef.current?.scrollTo({
+        animated: false,
+        y: Math.max(0, energyValues.indexOf(initialEnergyPercent ?? defaultEnergyPercent) * pickerRowHeight - pickerRowHeight),
+      });
     }
   }, [initialEnergyPercent, visible]);
 
@@ -73,12 +78,12 @@ export function DailyEnergyCheckIn({
           <Text style={styles.description}>Выберите уровень энергии. Это не изменит ваш план.</Text>
           <View accessibilityLabel="Вертикальный выбор энергии" style={styles.pickerFrame}>
             <ScrollView
-              contentOffset={{ x: 0, y: Math.max(0, energyValues.indexOf(selectedEnergyPercent) * pickerRowHeight - pickerRowHeight) }}
               decelerationRate="fast"
               onMomentumScrollEnd={(event) => {
                 const index = Math.max(0, Math.min(energyValues.length - 1, Math.round(event.nativeEvent.contentOffset.y / pickerRowHeight)));
                 setSelectedEnergyPercent(energyValues[index]);
               }}
+              ref={pickerRef}
               showsVerticalScrollIndicator={false}
               snapToInterval={pickerRowHeight}>
               {energyValues.map((value) => {
