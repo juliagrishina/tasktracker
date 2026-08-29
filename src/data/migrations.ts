@@ -356,6 +356,10 @@ const schemaVersionSeventeen = `
   );
 `;
 
+const schemaVersionEighteen = `
+  ALTER TABLE settings ADD COLUMN completion_prompt_deferred_on TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -481,6 +485,12 @@ const migrations: readonly Migration[] = [
     version: 17,
     async apply(database) {
       await database.execAsync(schemaVersionSeventeen);
+    },
+  },
+  {
+    version: 18,
+    async apply(database) {
+      await database.execAsync(schemaVersionEighteen);
     },
   },
 ];

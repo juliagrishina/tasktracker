@@ -62,6 +62,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
   const [selectedReminderOccurrence, setSelectedReminderOccurrence] = useState<{ seriesId: string; occursOn: string } | null>(null);
   const [isReminderMoveDialogVisible, setIsReminderMoveDialogVisible] = useState(false);
   const [isReminderRemoveDialogVisible, setIsReminderRemoveDialogVisible] = useState(false);
+  const [isCompletionPromptDeferredLocally, setIsCompletionPromptDeferredLocally] = useState(false);
   const [completionCandidate, setCompletionCandidate] = useState<{ eligibility: import('../../application/completion-eligibility').CompletionEligibility; task: TaskItem } | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [isUnfinishedDialogVisible, setIsUnfinishedDialogVisible] = useState(false);
@@ -74,6 +75,12 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
   const [quickActionTarget, setQuickActionTarget] = useState<QuickActionTarget | null>(null);
   const [pendingQuickAction, setPendingQuickAction] = useState<PlanTaskAction | null>(null);
   const [isQuickDeleteConfirmVisible, setIsQuickDeleteConfirmVisible] = useState(false);
+  const settings = services?.settings ?? getDefaultSettings();
+  const completionPromptDate = getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId);
+  const isCompletionPromptDeferred = isCompletionPromptDeferredLocally || settings.completionPromptDeferredOn === completionPromptDate;
+  useEffect(() => {
+    setIsCompletionPromptDeferredLocally(false);
+  }, [completionPromptDate]);
   useEffect(() => {
     if (dayPlan !== undefined || services === null) return;
     let isCurrent = true;
@@ -94,6 +101,10 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
   }, [dayPlan, refreshToken, services, selectedDate]);
   useEffect(() => {
     if (services === null) return;
+    if (isCompletionPromptDeferred) {
+      setCompletionCandidate(null);
+      return;
+    }
     let isCurrent = true;
     void services.planningActions.getCompletionEligibility(now).then(async (eligible) => {
       const first = eligible[0];
@@ -105,7 +116,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       if (isCurrent && task !== null) setCompletionCandidate({ eligibility: first, task });
     });
     return () => { isCurrent = false; };
-  }, [now, refreshToken, services]);
+  }, [isCompletionPromptDeferred, now, refreshToken, services]);
   const currentBlocks = useMemo(() => dayPlan === undefined ? blocks : dayPlan?.blocks ?? [], [blocks, dayPlan]);
   const currentBlockTasks = useMemo(() => dayPlan === undefined ? blockTasks : dayPlan?.taskById ?? new Map(), [blockTasks, dayPlan]);
   const currentReminders = useMemo(() => dayPlan === undefined ? reminders : dayPlan?.untimedReminders ?? [], [dayPlan, reminders]);
@@ -140,7 +151,6 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
     });
     return () => { isCurrent = false; };
   }, [currentUntimedTasks, services]);
-  const settings = services?.settings ?? getDefaultSettings();
   const estimatedMinutes = useMemo(() => [...currentReminders, ...currentUntimedTasks].reduce((total, item) => total + (item.estimatedDurationMinutes ?? 0), 0), [currentReminders, currentUntimedTasks]);
   const calculatedLoadPercent = useMemo(() => getDayLoadPercent(settings, currentBlocks, selectedDate, estimatedMinutes), [currentBlocks, estimatedMinutes, selectedDate, settings]);
   const loadPercent = dayPlan?.loadPercent ?? calculatedLoadPercent;
@@ -444,7 +454,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       {selectedReminderOccurrence === null ? null : <RecurrenceMoveDialog key={`reminder-${selectedReminderOccurrence.occursOn}`} occursOn={selectedReminderOccurrence.occursOn} onMove={async (targetDate, scope) => { if (services === null) return; await services.planningActions.moveRecurrenceOccurrence({ ...selectedReminderOccurrence, targetDate, scope }); setReminders(await services.planningActions.getPlanUntimedReminders(selectedDate)); onRefresh?.(); setSelectedReminderOccurrence(null); setIsReminderMoveDialogVisible(false); }} onRequestClose={() => setIsReminderMoveDialogVisible(false)} visible={isReminderMoveDialogVisible} />}
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceMoveDialog key={`untimed-${selectedUntimedTask.occursOn}`} occursOn={selectedUntimedTask.occursOn} onMove={async (targetDate, scope) => { if (services === null) return; await services.planningActions.moveRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, targetDate, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedMoveDialogVisible(false); }} onRequestClose={() => setIsUntimedMoveDialogVisible(false)} visible={isUntimedMoveDialogVisible} />}
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedRemoveDialogVisible(false); }} onRequestClose={() => setIsUntimedRemoveDialogVisible(false)} visible={isUntimedRemoveDialogVisible} />}
-      {completionCandidate === null ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) setCompletionCandidate(null); }} onUnfinished={() => { if (!isCompleting) setIsUnfinishedDialogVisible(true); }} taskTitle={completionCandidate.task.title} visible={!isUnfinishedDialogVisible} />}
+      {completionCandidate === null ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) { setIsCompletionPromptDeferredLocally(true); setCompletionCandidate(null); void services?.settingsActions.deferCompletionPromptsUntil(completionPromptDate); } }} onUnfinished={() => { if (!isCompleting) setIsUnfinishedDialogVisible(true); }} taskTitle={completionCandidate.task.title} visible={!isUnfinishedDialogVisible} />}
       {completionCandidate === null ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
       {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
       <EveningReviewDialog energy={services?.dailyEnergy ?? null} items={eveningReviewItems} onEditEnergy={onEditDailyEnergy} onRequestClose={() => setIsEveningReviewVisible(false)} visible={isEveningReviewVisible} />

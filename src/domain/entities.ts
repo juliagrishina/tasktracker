@@ -131,4 +131,5 @@ export interface AppSettings {
   eveningReviewAt: string;
   eveningReviewNotificationId?: string | null;
   notificationLeadMinutes: number;
+  completionPromptDeferredOn?: string | null;
 }

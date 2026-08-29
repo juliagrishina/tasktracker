@@ -20,5 +20,6 @@ export function getDefaultSettings(): AppSettings {
     eveningReviewAt: '21:00',
     eveningReviewNotificationId: null,
     notificationLeadMinutes: 10,
+    completionPromptDeferredOn: null,
   };
 }

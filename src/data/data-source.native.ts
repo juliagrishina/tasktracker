@@ -30,6 +30,7 @@ interface SettingsRow {
   evening_review_at: string;
   evening_review_notification_id: string | null;
   notification_lead_minutes: number;
+  completion_prompt_deferred_on: string | null;
 }
 
 interface DailyEnergyEntryRow {
@@ -150,7 +151,8 @@ class NativeDataSource implements AppDataSource {
         workday_ends_at,
         evening_review_at,
         evening_review_notification_id,
-        notification_lead_minutes
+        notification_lead_minutes,
+        completion_prompt_deferred_on
       FROM settings
       WHERE id = 1`,
     );
@@ -167,6 +169,7 @@ class NativeDataSource implements AppDataSource {
       eveningReviewAt: row.evening_review_at,
       eveningReviewNotificationId: row.evening_review_notification_id,
       notificationLeadMinutes: row.notification_lead_minutes,
+      completionPromptDeferredOn: row.completion_prompt_deferred_on,
     };
 
     return { ...settings, timeZoneId: resolveTimeZoneId(settings) };
@@ -183,7 +186,8 @@ class NativeDataSource implements AppDataSource {
           workday_ends_at = ?,
           evening_review_at = ?,
           evening_review_notification_id = ?,
-          notification_lead_minutes = ?
+          notification_lead_minutes = ?,
+          completion_prompt_deferred_on = ?
       WHERE id = 1`,
       [
         settings.timeZoneId,
@@ -193,6 +197,7 @@ class NativeDataSource implements AppDataSource {
         settings.eveningReviewAt,
         settings.eveningReviewNotificationId ?? null,
         settings.notificationLeadMinutes,
+        settings.completionPromptDeferredOn ?? null,
       ],
     );
   }

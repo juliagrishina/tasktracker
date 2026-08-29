@@ -108,6 +108,7 @@ interface SettingsActions {
   updateTimeZone(timeZoneId: string): Promise<void>;
   useDeviceTimeZone(): Promise<void>;
   updatePlanningSettings(input: UpdatePlanningSettingsInput): Promise<void>;
+  deferCompletionPromptsUntil(isoDate: string): Promise<void>;
 }
 
 interface EnergyActions {
@@ -277,6 +278,11 @@ export function AppServicesProvider({
       },
       updatePlanningSettings: async (input) => {
         const updatedSettings = await updatePlanningSettings(appSource, input, notificationScheduler);
+        setSettings(updatedSettings);
+      },
+      deferCompletionPromptsUntil: async (isoDate) => {
+        const updatedSettings = { ...settings, completionPromptDeferredOn: isoDate };
+        await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
       },
     }),
