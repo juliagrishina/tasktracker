@@ -1,6 +1,8 @@
 import type { AppDataSource } from '../data/contracts';
 import type { EntityId } from '../domain/entities';
 import { getDateInTimeZone } from '../domain/planning';
+import type { LocalNotificationScheduler } from './notification-scheduling';
+import { deleteBacklogItem } from './backlog-use-cases';
 
 export type CompletedItemKind = 'project' | 'reminder' | 'task' | 'subtask';
 export type CompletedPeriod = 'today' | 'week' | 'month' | 'year';
@@ -117,6 +119,18 @@ export async function getCompletedItemDetails(source: AppDataSource, item: Compl
   return createDetails(item, 'Задача', description, project === null ? null : { label: 'Проект', title: project.title });
 }
 
+export async function permanentlyDeleteCompletedItem(source: AppDataSource, item: CompletedItem, scheduler?: LocalNotificationScheduler): Promise<void> {
+  if (item.occurrence !== null) {
+    const occurrence = (await source.listRecurrenceOccurrences(item.occurrence.seriesId)).find((candidate) => candidate.occursOn === item.occurrence!.occursOn);
+    if (occurrence === undefined || occurrence.completedAt === null) throw new Error('Завершённый экземпляр не найден');
+    await source.transaction(async () => { await source.deleteRecurrenceOccurrence(occurrence.id); });
+    return;
+  }
+
+  if (!await isCompletedArchiveItem(source, item)) throw new Error('Можно удалить только завершённый элемент');
+  await deleteBacklogItem(source, { kind: item.kind, id: item.id, confirmed: true }, scheduler);
+}
+
 function createDetails(
   item: CompletedItem,
   typeLabel: CompletedItemDetails['typeLabel'],
@@ -143,4 +157,10 @@ async function getReminderForCompletedItem(source: AppDataSource, item: Complete
   if (item.occurrence === null) return source.getReminder(item.id);
   const series = await source.getRecurrenceSeries(item.occurrence.seriesId);
   return series === null ? null : source.getReminder(series.itemId);
+}
+
+async function isCompletedArchiveItem(source: AppDataSource, item: CompletedItem): Promise<boolean> {
+  if (item.kind === 'project') return (await source.getProject(item.id))?.completedAt != null;
+  if (item.kind === 'reminder') return (await source.getReminder(item.id))?.completedAt != null;
+  return (await source.getTaskItem(item.id))?.completedAt != null;
 }

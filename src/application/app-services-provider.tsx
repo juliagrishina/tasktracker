@@ -51,7 +51,7 @@ import {
   updateReminder,
   updateTaskItem,
 } from './backlog-use-cases';
-import { getCompletedItemDetails, getCompletedItems, type CompletedItem, type CompletedItemDetails } from './completed-use-cases';
+import { getCompletedItemDetails, getCompletedItems, permanentlyDeleteCompletedItem, type CompletedItem, type CompletedItemDetails } from './completed-use-cases';
 import { loadDemoTaskGroups, seedDemoData } from './demo-data';
 import { runPersistenceDiagnostic } from './persistence-diagnostic';
 import { convertReminderToTask } from './convert-reminder-to-task';
@@ -118,6 +118,7 @@ interface AppServicesContextValue {
   backlog: BacklogView;
   completedItems: readonly CompletedItem[];
   getCompletedItemDetails(item: CompletedItem): Promise<CompletedItemDetails | null>;
+  deleteCompletedItem(item: CompletedItem): Promise<void>;
   backlogActions: BacklogActions;
   planningActions: PlanningActions;
   refreshBacklog(): Promise<void>;
@@ -324,6 +325,7 @@ export function AppServicesProvider({
         backlog,
         completedItems,
         getCompletedItemDetails: (item) => getCompletedItemDetails(appSource, item),
+        deleteCompletedItem: (item) => runBacklogAction(() => permanentlyDeleteCompletedItem(appSource, item, notificationScheduler)),
         backlogActions,
         planningActions,
         refreshBacklog,

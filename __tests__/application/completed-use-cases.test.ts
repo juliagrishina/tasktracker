@@ -1,5 +1,5 @@
 import { completeBacklogItem, createReminder, createTask, resumeBacklogItem } from '../../src/application/backlog-use-cases';
-import { getCompletedItemDetails, getCompletedItems } from '../../src/application/completed-use-cases';
+import { getCompletedItemDetails, getCompletedItems, permanentlyDeleteCompletedItem } from '../../src/application/completed-use-cases';
 import { saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
@@ -115,5 +115,34 @@ describe('completed use cases', () => {
       description: 'Описание этого экземпляра',
       completionContext: 'Экземпляр серии от 2026-08-10',
     });
+  });
+
+  test('permanently deletes only the selected completed recurrence occurrence from the archive', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, { id: 'delete-occurrence-task', title: 'Еженедельный обзор', createdAt });
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [],
+      placement: { scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null },
+      recurrence: { id: 'delete-occurrence-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
+    });
+    await source.saveRecurrenceOccurrence({ id: 'delete-occurrence-first', seriesId: 'delete-occurrence-series', occursOn: '2026-08-10', cancelledAt: null, completedAt: '2026-08-10T12:00:00.000Z', blocksOverridden: false, taskPatch: null, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceOccurrence({ id: 'delete-occurrence-second', seriesId: 'delete-occurrence-series', occursOn: '2026-08-17', cancelledAt: null, completedAt: '2026-08-17T12:00:00.000Z', blocksOverridden: false, taskPatch: null, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    await permanentlyDeleteCompletedItem(source, { id: 'recurrence:delete-occurrence-series:2026-08-10', taskId: task.id, kind: 'task', title: task.title, completedAt: '2026-08-10T12:00:00.000Z', occurrence: { seriesId: 'delete-occurrence-series', occursOn: '2026-08-10' } });
+
+    await expect(getCompletedItems(source)).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'recurrence:delete-occurrence-series:2026-08-17' }),
+    ]));
+    await expect(getCompletedItems(source)).resolves.not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'recurrence:delete-occurrence-series:2026-08-10' }),
+    ]));
+    await expect(source.getTaskItem(task.id)).resolves.toMatchObject({ id: task.id });
+  });
+
+  test('refuses permanent deletion when the completed archive entry no longer exists', async () => {
+    const source = createInMemoryDataSource();
+
+    await expect(permanentlyDeleteCompletedItem(source, { id: 'missing-task', kind: 'task', title: 'Несуществующая задача', completedAt: '2026-08-20T10:00:00.000Z', occurrence: null })).rejects.toThrow('Можно удалить только завершённый элемент');
   });
 });

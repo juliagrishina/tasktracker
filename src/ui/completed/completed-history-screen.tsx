@@ -13,6 +13,7 @@ import { SurfaceCard } from '../primitives/surface-card';
 import { ContextMenuPressable } from '../primitives/context-menu-pressable';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { CompletedItemDetailsSheet } from './completed-item-details-sheet';
+import { PermanentDeleteCompletedItemDialog } from './permanent-delete-completed-item-dialog';
 
 const periods = ['Сегодня', 'Неделя', 'Месяц', 'Год'] as const;
 type CompletedPeriod = (typeof periods)[number];
@@ -33,6 +34,9 @@ export function CompletedHistoryScreen() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<CompletedItem | null>(null);
   const [itemDetails, setItemDetails] = useState<CompletedItemDetails | null>(null);
+  const [itemPendingPermanentDeletion, setItemPendingPermanentDeletion] = useState<CompletedItem | null>(null);
+  const [permanentDeletionError, setPermanentDeletionError] = useState<string | null>(null);
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const filteredGroups = useMemo(() => filterGroups(services?.completedItems ?? [], query, period), [period, query, services?.completedItems]);
   const runAction = async (action: PlanTaskAction) => {
@@ -58,6 +62,20 @@ export function CompletedHistoryScreen() {
     if (services === null) return;
     const details = await services.getCompletedItemDetails(item);
     if (details !== null) setItemDetails(details);
+  };
+  const permanentlyDeleteSelectedItem = async () => {
+    if (services === null || itemPendingPermanentDeletion === null) return;
+    setIsPermanentlyDeleting(true);
+    setPermanentDeletionError(null);
+    try {
+      await services.deleteCompletedItem(itemPendingPermanentDeletion);
+      setFeedback('Элемент удалён из архива');
+      setItemPendingPermanentDeletion(null);
+    } catch (error) {
+      setPermanentDeletionError(error instanceof Error ? error.message : 'Не удалось удалить элемент из архива');
+    } finally {
+      setIsPermanentlyDeleting(false);
+    }
   };
 
   return (
@@ -121,7 +139,8 @@ export function CompletedHistoryScreen() {
         </View>
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
-      {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted itemKind={selectedItem.kind === 'reminder' ? 'reminder' : 'task'} onAction={(action) => void runAction(action)} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}
+      {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted itemKind={selectedItem.kind === 'reminder' ? 'reminder' : 'task'} onAction={(action) => void runAction(action)} onDeletePermanently={() => { setItemPendingPermanentDeletion(selectedItem); setSelectedItem(null); }} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}
+      {itemPendingPermanentDeletion === null ? null : <PermanentDeleteCompletedItemDialog error={permanentDeletionError} isDeleting={isPermanentlyDeleting} itemTitle={itemPendingPermanentDeletion.title} onConfirm={() => void permanentlyDeleteSelectedItem()} onRequestClose={() => { if (!isPermanentlyDeleting) { setPermanentDeletionError(null); setItemPendingPermanentDeletion(null); } }} visible />}
       {itemDetails === null ? null : <CompletedItemDetailsSheet details={itemDetails} onRequestClose={() => setItemDetails(null)} timeZoneId={services?.settings.timeZoneId ?? 'UTC'} visible />}
       {editingTask === null ? null : <ItemFormSheet item={editingTask} mode="edit" onClose={() => setEditingTask(null)} onSaved={() => setEditingTask(null)} planningContext={{ defaultDate: new Date().toISOString().slice(0, 10) }} type={editingTask.kind} visible />}
     </SafeAreaView>

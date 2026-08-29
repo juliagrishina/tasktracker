@@ -6,6 +6,7 @@ export type PlanTaskAction = 'complete' | 'resume' | 'returnToBacklog' | 'plan' 
 
 interface PlanTaskActionsDialogProps {
   onAction: (action: PlanTaskAction) => void;
+  onDeletePermanently?: () => void;
   onRequestClose: () => void;
   isCompleted?: boolean;
   itemKind?: 'task' | 'reminder';
@@ -13,7 +14,7 @@ interface PlanTaskActionsDialogProps {
   visible: boolean;
 }
 
-export function PlanTaskActionsDialog({ isCompleted = false, itemKind = 'task', onAction, onRequestClose, taskTitle, visible }: PlanTaskActionsDialogProps) {
+export function PlanTaskActionsDialog({ isCompleted = false, itemKind = 'task', onAction, onDeletePermanently, onRequestClose, taskTitle, visible }: PlanTaskActionsDialogProps) {
   const isReminder = itemKind === 'reminder';
   const noun = isReminder ? 'напоминанием' : 'задачей';
   const nominativeNoun = isReminder ? 'напоминание' : 'задачу';
@@ -23,7 +24,9 @@ export function PlanTaskActionsDialog({ isCompleted = false, itemKind = 'task', 
     <Text style={styles.description}>{taskTitle}</Text>
     {isCompleted ? <Pressable accessibilityLabel={`Возобновить ${nominativeNoun}`} accessibilityRole="button" onPress={() => onAction('resume')} style={[styles.action, styles.completeAction]}><Text style={styles.completeText}>Возобновить</Text></Pressable> : <Pressable accessibilityLabel={`Выполнить ${nominativeNoun}`} accessibilityRole="button" onPress={() => onAction('complete')} style={[styles.action, styles.completeAction]}><Text style={styles.completeText}>Выполнено</Text></Pressable>}
     <Pressable accessibilityLabel={returnToBacklogLabel} accessibilityRole="button" onPress={() => onAction('returnToBacklog')} style={[styles.action, styles.backlogAction]}><Text style={styles.backlogText}>Вернуть в Backlog</Text></Pressable>
-    {isCompleted && !isReminder ? <Pressable accessibilityLabel="Запланировать задачу" accessibilityRole="button" onPress={() => onAction('plan')} style={[styles.action, styles.backlogAction]}><Text style={styles.backlogText}>Запланировать</Text></Pressable> : <Pressable accessibilityLabel={`Удалить ${nominativeNoun}`} accessibilityRole="button" onPress={() => onAction('delete')} style={[styles.action, styles.deleteAction]}><Text style={styles.deleteText}>Удалить</Text></Pressable>}
+    {isCompleted && !isReminder ? <Pressable accessibilityLabel="Запланировать задачу" accessibilityRole="button" onPress={() => onAction('plan')} style={[styles.action, styles.backlogAction]}><Text style={styles.backlogText}>Запланировать</Text></Pressable> : null}
+    {!isCompleted || isReminder && onDeletePermanently === undefined ? <Pressable accessibilityLabel={`Удалить ${nominativeNoun}`} accessibilityRole="button" onPress={() => onAction('delete')} style={[styles.action, styles.deleteAction]}><Text style={styles.deleteText}>Удалить</Text></Pressable> : null}
+    {onDeletePermanently === undefined ? null : <Pressable accessibilityLabel="Удалить из архива безвозвратно" accessibilityRole="button" onPress={onDeletePermanently} style={[styles.action, styles.deleteAction]}><Text style={styles.deleteText}>Удалить безвозвратно</Text></Pressable>}
     <Pressable accessibilityLabel={`Закрыть действия с ${noun}`} accessibilityRole="button" onPress={onRequestClose} style={styles.cancel}><Text style={styles.cancelText}>Отмена</Text></Pressable>
   </View></View></Modal>;
 }

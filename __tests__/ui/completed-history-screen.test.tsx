@@ -66,6 +66,25 @@ describe('CompletedHistoryScreen', () => {
     });
   });
 
+  test('permanently deletes a completed archive item only after an explicit confirmation', async () => {
+    const source = createInMemoryDataSource();
+    const completedAt = new Date().toISOString();
+    await source.saveTaskItem({ id: 'permanent-delete-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Старый черновик', description: null, estimatedDurationMinutes: null, completedAt, createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
+    const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Открыть действия: Старый черновик')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Открыть действия: Старый черновик'));
+    await waitFor(() => expect(view.getByLabelText('Удалить из архива безвозвратно')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Удалить из архива безвозвратно'));
+
+    await waitFor(() => expect(view.getByText('Удалить безвозвратно?')).toBeOnTheScreen());
+    await expect(source.getTaskItem('permanent-delete-task')).resolves.toMatchObject({ id: 'permanent-delete-task' });
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Подтвердить безвозвратное удаление'));
+    });
+    await waitFor(async () => expect(await source.getTaskItem('permanent-delete-task')).toBeNull());
+  });
+
   test('returns a completed one-time reminder to Backlog atomically', async () => {
     const source = createInMemoryDataSource();
     const completedAt = new Date().toISOString();
