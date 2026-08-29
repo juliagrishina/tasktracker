@@ -77,10 +77,10 @@ describe('CompletedHistoryScreen', () => {
     await waitFor(() => expect(view.getByLabelText('Удалить экземпляр')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Удалить экземпляр'));
 
-    await waitFor(() => expect(view.getByText('Удалить безвозвратно?')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getByText('Удалить экземпляр?')).toBeOnTheScreen());
     await expect(source.getTaskItem('permanent-delete-task')).resolves.toMatchObject({ id: 'permanent-delete-task' });
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Подтвердить безвозвратное удаление'));
+      fireEvent.press(view.getByLabelText('Подтвердить удаление экземпляра'));
     });
     await waitFor(async () => expect(await source.getTaskItem('permanent-delete-task')).toBeNull());
   });
