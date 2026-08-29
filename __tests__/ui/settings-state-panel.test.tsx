@@ -53,6 +53,26 @@ describe('SettingsStatePanel', () => {
     }));
   });
 
+  test('edits the notification lead time from the Notifications card', async () => {
+    const onPlanningSettingsChange = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel onPlanningSettingsChange={onPlanningSettingsChange} settings={getDefaultSettings()} />);
+
+    fireEvent.press(view.getByLabelText('Предварительное'));
+    await waitFor(() => expect(view.getByLabelText('Интервал уведомления')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Интервал уведомления'));
+    await waitFor(() => expect(view.getByRole('button', { name: '30 минут' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: '30 минут' }));
+    await waitFor(() => expect(view.getByText('30 минут')).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: 'Сохранить интервал' }));
+
+    await waitFor(() => expect(onPlanningSettingsChange).toHaveBeenCalledWith({
+      workdayStartsAt: '08:00',
+      workdayEndsAt: '22:00',
+      eveningReviewAt: '21:00',
+      notificationLeadMinutes: 30,
+    }));
+  });
+
   test('renders the approved Settings 2 state cards', async () => {
     const view = await render(<SettingsStatePanel settings={getDefaultSettings()} />);
 

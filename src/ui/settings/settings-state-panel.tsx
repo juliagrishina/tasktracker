@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -35,7 +35,7 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<NotificationPermissionStatus>('undetermined');
   const [syncLabel, setSyncLabel] = useState<string>(settingsDemoState.initialSyncLabel);
   const [isTimeZonePickerVisible, setIsTimeZonePickerVisible] = useState(false);
-  const [isPlanEditorVisible, setIsPlanEditorVisible] = useState(false);
+  const [planningSettingsEditorPlacement, setPlanningSettingsEditorPlacement] = useState<'plan' | 'notifications' | null>(null);
   const [isSavingPlanningSettings, setIsSavingPlanningSettings] = useState(false);
   const [planningSettings, setPlanningSettings] = useState<UpdatePlanningSettingsInput>(() => getPlanningSettings(settings));
   const notificationPermissionService = useMemo(
@@ -76,13 +76,18 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
     setIsSavingPlanningSettings(true);
     try {
       await onPlanningSettingsChange(planningSettings);
-      setIsPlanEditorVisible(false);
+      setPlanningSettingsEditorPlacement(null);
       setFeedback('Параметры плана обновлены');
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'Не удалось обновить параметры плана');
     } finally {
       setIsSavingPlanningSettings(false);
     }
+  };
+  const openPlanningSettingsEditor = (placement: 'plan' | 'notifications') => {
+    setPlanningSettings(getPlanningSettings(settings));
+    setPlanningSettingsEditorPlacement(placement);
+    setFeedback(null);
   };
   const requestNotificationPermission = async () => {
     if (notificationPermissionService === undefined) return;
@@ -133,32 +138,18 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
-          <CardTitle action="Изменить" onAction={() => { setPlanningSettings(getPlanningSettings(settings)); setIsPlanEditorVisible(true); setFeedback(null); }} title="План дня" />
+          <CardTitle action="Изменить" onAction={() => openPlanningSettingsEditor('plan')} title="План дня" />
           <SettingsRow description="Знаменатель загрузки" label="Рабочий диапазон" value={`${settings.workdayStartsAt}–${settings.workdayEndsAt}`} />
           <SettingsRow description="Дела без времени" label="Вечерняя проверка" value={settings.eveningReviewAt} />
           <SettingsRow description={settings.timeZoneMode === 'manual' ? 'Выбран вручную из списка IANA' : 'Определяется автоматически устройством'} label="Часовой пояс" onPress={() => setIsTimeZonePickerVisible(true)} value={settings.timeZoneId} />
           {settings.timeZoneMode === 'manual' ? <View style={styles.deviceTimeZoneAction}><ActionButton label="Использовать пояс устройства" onPress={() => void useDeviceTimeZone()} tone="soft" /></View> : <Text style={styles.settingDescription}>Сейчас используется пояс устройства: {settings.timeZoneId}</Text>}
-          {isPlanEditorVisible ? <View style={styles.planEditor}>
-            <Text style={styles.editorTitle}>Параметры плана</Text>
-            <Text style={styles.fieldLabel}>Рабочий диапазон</Text>
-            <View style={styles.pickerRow}>
-              <View style={styles.pickerColumn}><Text style={styles.fieldHint}>Начало</Text><PlanningValuePicker accessibilityLabel="Начало рабочего дня" onChange={(workdayStartsAt) => setPlanningSettings((current) => ({ ...current, workdayStartsAt }))} options={timeOptions} title="Начало рабочего дня" value={planningSettings.workdayStartsAt} /></View>
-              <View style={styles.pickerColumn}><Text style={styles.fieldHint}>Конец</Text><PlanningValuePicker accessibilityLabel="Конец рабочего дня" onChange={(workdayEndsAt) => setPlanningSettings((current) => ({ ...current, workdayEndsAt }))} options={timeOptions} title="Конец рабочего дня" value={planningSettings.workdayEndsAt} /></View>
-            </View>
-            <Text style={styles.fieldLabel}>Вечерняя проверка</Text>
-            <PlanningValuePicker accessibilityLabel="Время вечерней проверки" onChange={(eveningReviewAt) => setPlanningSettings((current) => ({ ...current, eveningReviewAt }))} options={timeOptions} title="Время вечерней проверки" value={planningSettings.eveningReviewAt} />
-            <Text style={styles.fieldLabel}>Предварительное уведомление</Text>
-            <PlanningValuePicker accessibilityLabel="Интервал уведомления" onChange={(notificationLeadMinutes) => setPlanningSettings((current) => ({ ...current, notificationLeadMinutes: Number(notificationLeadMinutes) }))} options={notificationLeadOptions} title="Интервал уведомления" value={String(planningSettings.notificationLeadMinutes)} />
-            <View style={styles.buttonRow}>
-              <View style={styles.actionWrap}><ActionButton label="Отмена" onPress={() => setIsPlanEditorVisible(false)} tone="secondary" /></View>
-              <View style={styles.actionWrap}><ActionButton disabled={isSavingPlanningSettings} label="Сохранить параметры плана" onPress={() => void savePlanningSettings()} tone="primary" /></View>
-            </View>
-          </View> : null}
+          {planningSettingsEditorPlacement === 'plan' ? <PlanningSettingsEditor includePlanFields isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} settings={planningSettings} /> : null}
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
           <CardTitle action={notificationPermissionAction(notificationPermissionStatus).label} actionTone={notificationPermissionAction(notificationPermissionStatus).tone} onAction={notificationPermissions === undefined ? undefined : () => setIsNotificationPermissionPromptVisible(true)} title="Уведомления" />
-          <SettingsRow description="До задачи или встречи" label="Предварительное" value={`${settings.notificationLeadMinutes} минут`} />
+          <SettingsRow description="До задачи или встречи" label="Предварительное" onPress={() => openPlanningSettingsEditor('notifications')} value={`${settings.notificationLeadMinutes} минут`} />
+          {planningSettingsEditorPlacement === 'notifications' ? <PlanningSettingsEditor isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} settings={planningSettings} /> : null}
           {isNotificationPermissionPromptVisible ? <View style={styles.permissionPrompt}>
             <Text style={styles.settingDescription}>Разрешите локальные напоминания, когда будете готовы. План дня останется доступен в любом случае.</Text>
             <View style={styles.buttonRow}>
@@ -210,6 +201,34 @@ const notificationLeadOptions = Array.from({ length: 25 }, (_, index) => {
   const value = String(index * 5);
   return { label: `${value} минут`, value };
 });
+
+function PlanningSettingsEditor({ includePlanFields = false, isSaving, onCancel, onChange, onSave, settings }: {
+  includePlanFields?: boolean;
+  isSaving: boolean;
+  onCancel: () => void;
+  onChange: Dispatch<SetStateAction<UpdatePlanningSettingsInput>>;
+  onSave: () => void;
+  settings: UpdatePlanningSettingsInput;
+}) {
+  return <View style={styles.planEditor}>
+    <Text style={styles.editorTitle}>{includePlanFields ? 'Параметры плана' : 'Предварительное уведомление'}</Text>
+    {includePlanFields ? <>
+      <Text style={styles.fieldLabel}>Рабочий диапазон</Text>
+      <View style={styles.pickerRow}>
+        <View style={styles.pickerColumn}><Text style={styles.fieldHint}>Начало</Text><PlanningValuePicker accessibilityLabel="Начало рабочего дня" onChange={(workdayStartsAt) => onChange((current) => ({ ...current, workdayStartsAt }))} options={timeOptions} title="Начало рабочего дня" value={settings.workdayStartsAt} /></View>
+        <View style={styles.pickerColumn}><Text style={styles.fieldHint}>Конец</Text><PlanningValuePicker accessibilityLabel="Конец рабочего дня" onChange={(workdayEndsAt) => onChange((current) => ({ ...current, workdayEndsAt }))} options={timeOptions} title="Конец рабочего дня" value={settings.workdayEndsAt} /></View>
+      </View>
+      <Text style={styles.fieldLabel}>Вечерняя проверка</Text>
+      <PlanningValuePicker accessibilityLabel="Время вечерней проверки" onChange={(eveningReviewAt) => onChange((current) => ({ ...current, eveningReviewAt }))} options={timeOptions} title="Время вечерней проверки" value={settings.eveningReviewAt} />
+    </> : null}
+    <Text style={styles.fieldLabel}>Предварительное уведомление</Text>
+    <PlanningValuePicker accessibilityLabel="Интервал уведомления" onChange={(notificationLeadMinutes) => onChange((current) => ({ ...current, notificationLeadMinutes: Number(notificationLeadMinutes) }))} options={notificationLeadOptions} title="Интервал уведомления" value={String(settings.notificationLeadMinutes)} />
+    <View style={styles.buttonRow}>
+      <View style={styles.actionWrap}><ActionButton label="Отмена" onPress={onCancel} tone="secondary" /></View>
+      <View style={styles.actionWrap}><ActionButton disabled={isSaving} label={includePlanFields ? 'Сохранить параметры плана' : 'Сохранить интервал'} onPress={onSave} tone="primary" /></View>
+    </View>
+  </View>;
+}
 
 function notificationPermissionAction(status: NotificationPermissionStatus): { label: string; tone: 'default' | 'success' } {
   if (status === 'granted') return { label: 'Разрешены', tone: 'success' };
