@@ -82,8 +82,9 @@ describe('SettingsStatePanel', () => {
     expect(view.getByRole('button', { name: 'Управление' })).toBeOnTheScreen();
     expect(view.getByText('Рабочий диапазон')).toBeOnTheScreen();
     expect(view.getByText('Уведомления')).toBeOnTheScreen();
-    expect(view.getByText('Удалить локальные данные')).toBeOnTheScreen();
-    expect(view.getByText(/Версия 1\.0\.0/)).toBeOnTheScreen();
+    expect(view.getByText('Данные на этом устройстве')).toBeOnTheScreen();
+    expect(view.getByText(/При удалении приложения или переходе на другое устройство эти данные не восстанавливаются/)).toBeOnTheScreen();
+    expect(view.getByText(/Версия/)).toBeOnTheScreen();
   });
 
   test('keeps the Microsoft 365 refresh action inside local demo state', async () => {

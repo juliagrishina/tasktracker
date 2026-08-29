@@ -19,6 +19,7 @@ import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 
 import { settingsDemoState } from './settings-demo-state';
+import { getAppVersion } from './app-version';
 import { TimeZonePicker } from './time-zone-picker';
 
 interface SettingsStatePanelProps {
@@ -30,6 +31,7 @@ interface SettingsStatePanelProps {
 }
 
 export function SettingsStatePanel({ notificationPermissions, onPlanningSettingsChange, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+  const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
   const [notificationPermissionStatus, setNotificationPermissionStatus] = useState<NotificationPermissionStatus>('undetermined');
@@ -163,17 +165,15 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
-          <CardTitle title="Данные Outlook" />
-          <SettingsRow
-            danger
-            description="Не отключает корпоративную учётную запись"
-            label="Удалить локальные данные"
-            onPress={() => setFeedback('Удаление локальных данных недоступно в демо-режиме')}
-            value="Удалить"
-          />
+          <CardTitle title="Данные на этом устройстве" />
+          <Text style={styles.storageDescription}>Проекты, задачи, подзадачи, напоминания, блоки расписания и настройки хранятся только на этом устройстве.</Text>
+          <View style={styles.warning}>
+            <Text style={styles.warningText}>При удалении приложения или переходе на другое устройство эти данные не восстанавливаются.</Text>
+          </View>
+          <Text style={styles.storageDescription}>Анонимная учётная запись и история поведения не являются резервной копией и не восстанавливают ваши данные.</Text>
         </SurfaceCard>
 
-        <Text style={styles.footer}>{settingsDemoState.version} · Часовой пояс плана: {settings.timeZoneId}</Text>
+        <Text style={styles.footer}>Версия {appVersion} · Часовой пояс плана: {settings.timeZoneId}</Text>
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
       <TimeZonePicker onRequestClose={() => setIsTimeZonePickerVisible(false)} onSelect={(timeZoneId) => void selectTimeZone(timeZoneId)} selectedTimeZoneId={settings.timeZoneId} visible={isTimeZonePickerVisible} />
@@ -449,6 +449,7 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.meta,
     lineHeight: designTokens.typography.lineHeight.meta,
   },
+  storageDescription: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.meta, lineHeight: designTokens.typography.lineHeight.meta, marginTop: designTokens.space[8] },
   deviceTimeZoneAction: { marginTop: designTokens.space[8] },
   planEditor: { borderTopColor: designTokens.color.border.subtle, borderTopWidth: 1, gap: designTokens.space[8], marginTop: designTokens.space[12], paddingTop: designTokens.space[12] },
   editorTitle: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.label, fontWeight: designTokens.typography.weight.bold, lineHeight: designTokens.typography.lineHeight.label },
