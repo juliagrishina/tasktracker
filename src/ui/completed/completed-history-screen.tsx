@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useOptionalAppServices } from '../../application/app-services-provider';
-import type { CompletedItem, CompletedItemKind } from '../../application/completed-use-cases';
+import type { CompletedItem, CompletedItemDetails, CompletedItemKind } from '../../application/completed-use-cases';
 import type { TaskItem } from '../../domain/entities';
 import { ItemFormSheet } from '../backlog/item-form-sheet';
 import { designTokens } from '../design/tokens';
@@ -12,6 +12,7 @@ import { PlanTaskActionsDialog, type PlanTaskAction } from '../plan/plan-task-ac
 import { SurfaceCard } from '../primitives/surface-card';
 import { ContextMenuPressable } from '../primitives/context-menu-pressable';
 import { temporaryWebContentStyle } from '../screen-shell';
+import { CompletedItemDetailsSheet } from './completed-item-details-sheet';
 
 const periods = ['Сегодня', 'Неделя', 'Месяц', 'Год'] as const;
 type CompletedPeriod = (typeof periods)[number];
@@ -31,6 +32,7 @@ export function CompletedHistoryScreen() {
   const [query, setQuery] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<CompletedItem | null>(null);
+  const [itemDetails, setItemDetails] = useState<CompletedItemDetails | null>(null);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const filteredGroups = useMemo(() => filterGroups(services?.completedItems ?? [], query, period), [period, query, services?.completedItems]);
   const runAction = async (action: PlanTaskAction) => {
@@ -51,6 +53,11 @@ export function CompletedHistoryScreen() {
     }
     if (action === 'resume') setFeedback('Дело возобновлено');
     setSelectedItem(null);
+  };
+  const openItemDetails = async (item: CompletedItem) => {
+    if (services === null) return;
+    const details = await services.getCompletedItemDetails(item);
+    if (details !== null) setItemDetails(details);
   };
 
   return (
@@ -100,6 +107,7 @@ export function CompletedHistoryScreen() {
                 <CompletedRow
                   item={item}
                   key={item.id}
+                  onPressDetails={() => void openItemDetails(item)}
                   onPressMore={() => setSelectedItem(item)}
                   showDivider={index !== group.items.length - 1}
                 />
@@ -114,18 +122,20 @@ export function CompletedHistoryScreen() {
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
       {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted itemKind={selectedItem.kind === 'reminder' ? 'reminder' : 'task'} onAction={(action) => void runAction(action)} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}
+      {itemDetails === null ? null : <CompletedItemDetailsSheet details={itemDetails} onRequestClose={() => setItemDetails(null)} timeZoneId={services?.settings.timeZoneId ?? 'UTC'} visible />}
       {editingTask === null ? null : <ItemFormSheet item={editingTask} mode="edit" onClose={() => setEditingTask(null)} onSaved={() => setEditingTask(null)} planningContext={{ defaultDate: new Date().toISOString().slice(0, 10) }} type={editingTask.kind} visible />}
     </SafeAreaView>
   );
 }
 
-function CompletedRow({ item, onPressMore, showDivider }: {
+function CompletedRow({ item, onPressDetails, onPressMore, showDivider }: {
   item: CompletedItem;
+  onPressDetails: () => void;
   onPressMore: () => void;
   showDivider: boolean;
 }) {
   return (
-    <ContextMenuPressable accessibilityLabel={`Действия: ${item.title}`} delayLongPress={350} onContextMenu={(event) => { event.preventDefault(); onPressMore(); }} onLongPress={onPressMore} style={[styles.row, showDivider && styles.rowDivider]}>
+    <ContextMenuPressable accessibilityLabel={`Открыть детали: ${item.title}`} delayLongPress={350} onContextMenu={(event) => { event.preventDefault(); onPressMore(); }} onLongPress={onPressMore} onPress={onPressDetails} style={[styles.row, showDivider && styles.rowDivider]}>
       <View style={[styles.typeIcon, item.kind === 'reminder' && styles.reminderIcon, item.kind === 'project' && styles.projectIcon]}>
         <Ionicons color={iconColor(item.kind)} name={typeIcons[item.kind]} size={17} />
       </View>

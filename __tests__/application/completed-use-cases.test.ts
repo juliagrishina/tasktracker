@@ -1,5 +1,5 @@
 import { completeBacklogItem, createReminder, createTask, resumeBacklogItem } from '../../src/application/backlog-use-cases';
-import { getCompletedItems } from '../../src/application/completed-use-cases';
+import { getCompletedItemDetails, getCompletedItems } from '../../src/application/completed-use-cases';
 import { saveTaskPlanning, setRecurrenceOccurrenceState, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
@@ -76,5 +76,44 @@ describe('completed use cases', () => {
       expect.objectContaining({ id: localDecember.id }),
       expect.objectContaining({ id: localJanuary.id }),
     ]));
+  });
+
+  test('returns read-only details with the source description and hierarchy for each completed kind', async () => {
+    const source = createInMemoryDataSource();
+    const completedAt = '2026-08-20T10:00:00.000Z';
+    await source.saveProject({ id: 'project-1', title: 'Запуск приложения', description: 'Описание проекта', completedAt, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveTaskItem({ id: 'parent-task', kind: 'task', projectId: 'project-1', parentTaskId: null, title: 'Подготовить релиз', description: 'Описание задачи', estimatedDurationMinutes: null, completedAt, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveTaskItem({ id: 'subtask-1', kind: 'subtask', projectId: 'project-1', parentTaskId: 'parent-task', title: 'Проверить сборку', description: 'Описание подзадачи', estimatedDurationMinutes: null, completedAt, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveReminder({ id: 'reminder-1', title: 'Напомнить о релизе', linkedTaskItemId: 'parent-task', linkedOccurrenceOn: null, remindsOn: null, periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    await expect(getCompletedItemDetails(source, { id: 'project-1', kind: 'project', title: 'Запуск приложения', completedAt, occurrence: null })).resolves.toMatchObject({
+      typeLabel: 'Проект', description: 'Описание проекта', relation: null,
+    });
+    await expect(getCompletedItemDetails(source, { id: 'parent-task', kind: 'task', title: 'Подготовить релиз', completedAt, occurrence: null })).resolves.toMatchObject({
+      typeLabel: 'Задача', description: 'Описание задачи', relation: { label: 'Проект', title: 'Запуск приложения' },
+    });
+    await expect(getCompletedItemDetails(source, { id: 'subtask-1', kind: 'subtask', title: 'Проверить сборку', completedAt, occurrence: null })).resolves.toMatchObject({
+      typeLabel: 'Подзадача', description: 'Описание подзадачи', relation: { label: 'Родительская задача', title: 'Подготовить релиз' },
+    });
+    await expect(getCompletedItemDetails(source, { id: 'reminder-1', kind: 'reminder', title: 'Напомнить о релизе', completedAt, occurrence: null })).resolves.toMatchObject({
+      typeLabel: 'Напоминание', description: null, relation: { label: 'Связанная задача', title: 'Подготовить релиз' },
+    });
+  });
+
+  test('returns the occurrence context and overridden description for a completed recurring task', async () => {
+    const source = createInMemoryDataSource();
+    const task = await createTask(source, { id: 'recurring-task', title: 'Еженедельный обзор', description: 'Базовое описание', createdAt });
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [],
+      placement: { scheduledOn: '2026-08-03', periodStartOn: null, periodEndOn: null },
+      recurrence: { id: 'series-details', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
+    });
+    await source.saveRecurrenceOccurrence({ id: 'occurrence-details', seriesId: 'series-details', occursOn: '2026-08-10', cancelledAt: null, completedAt: '2026-08-10T12:00:00.000Z', blocksOverridden: false, taskPatch: { description: 'Описание этого экземпляра' }, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    await expect(getCompletedItemDetails(source, { id: 'recurrence:series-details:2026-08-10', taskId: task.id, kind: 'task', title: 'Еженедельный обзор', completedAt: '2026-08-10T12:00:00.000Z', occurrence: { seriesId: 'series-details', occursOn: '2026-08-10' } })).resolves.toMatchObject({
+      description: 'Описание этого экземпляра',
+      completionContext: 'Экземпляр серии от 2026-08-10',
+    });
   });
 });

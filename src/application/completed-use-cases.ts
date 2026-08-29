@@ -14,6 +14,14 @@ export interface CompletedItem {
   taskId?: EntityId;
 }
 
+export interface CompletedItemDetails {
+  item: CompletedItem;
+  typeLabel: 'Проект' | 'Задача' | 'Подзадача' | 'Напоминание';
+  description: string | null;
+  relation: { label: 'Проект' | 'Родительская задача' | 'Связанная задача'; title: string } | null;
+  completionContext: string;
+}
+
 export interface GetCompletedItemsOptions {
   now?: Date;
   period?: CompletedPeriod;
@@ -78,4 +86,61 @@ export async function getCompletedItems(source: AppDataSource, options: GetCompl
   const settings = await source.getSettings();
   const filtered = result.filter((item) => isInCompletedPeriod(item.completedAt, options.period!, options.now ?? new Date(), settings.timeZoneId));
   return filtered.sort((left, right) => right.completedAt.localeCompare(left.completedAt) || left.title.localeCompare(right.title, 'ru'));
+}
+
+export async function getCompletedItemDetails(source: AppDataSource, item: CompletedItem): Promise<CompletedItemDetails | null> {
+  if (item.kind === 'project') {
+    const project = await source.getProject(item.id);
+    return project === null ? null : createDetails(item, 'Проект', project.description, null);
+  }
+
+  if (item.kind === 'reminder') {
+    const reminder = await getReminderForCompletedItem(source, item);
+    if (reminder === null) return null;
+    const linkedTask = reminder.linkedTaskItemId === null || reminder.linkedTaskItemId === undefined
+      ? null
+      : await source.getTaskItem(reminder.linkedTaskItemId);
+    return createDetails(item, 'Напоминание', null, linkedTask === null ? null : { label: 'Связанная задача', title: linkedTask.title });
+  }
+
+  const task = await getTaskForCompletedItem(source, item);
+  if (task === null) return null;
+  const occurrence = item.occurrence === null
+    ? null
+    : (await source.listRecurrenceOccurrences(item.occurrence.seriesId)).find((candidate) => candidate.occursOn === item.occurrence!.occursOn) ?? null;
+  const description = occurrence?.taskPatch?.description ?? task.description;
+  if (task.kind === 'subtask') {
+    const parentTask = await source.getTaskItem(task.parentTaskId);
+    return createDetails(item, 'Подзадача', description, parentTask === null ? null : { label: 'Родительская задача', title: parentTask.title });
+  }
+  const project = task.projectId === null ? null : await source.getProject(task.projectId);
+  return createDetails(item, 'Задача', description, project === null ? null : { label: 'Проект', title: project.title });
+}
+
+function createDetails(
+  item: CompletedItem,
+  typeLabel: CompletedItemDetails['typeLabel'],
+  description: string | null,
+  relation: CompletedItemDetails['relation'],
+): CompletedItemDetails {
+  return {
+    item,
+    typeLabel,
+    description,
+    relation,
+    completionContext: item.occurrence === null ? 'Обычное завершение' : `Экземпляр серии от ${item.occurrence.occursOn}`,
+  };
+}
+
+async function getTaskForCompletedItem(source: AppDataSource, item: CompletedItem) {
+  if (item.taskId !== undefined) return source.getTaskItem(item.taskId);
+  if (item.occurrence === null) return source.getTaskItem(item.id);
+  const series = await source.getRecurrenceSeries(item.occurrence.seriesId);
+  return series === null ? null : source.getTaskItem(series.itemId);
+}
+
+async function getReminderForCompletedItem(source: AppDataSource, item: CompletedItem) {
+  if (item.occurrence === null) return source.getReminder(item.id);
+  const series = await source.getRecurrenceSeries(item.occurrence.seriesId);
+  return series === null ? null : source.getReminder(series.itemId);
 }
