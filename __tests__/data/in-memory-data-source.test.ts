@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  DailyEnergyEntry,
   Project,
   RecurrenceOccurrence,
   RecurrenceSeries,
@@ -122,6 +123,13 @@ const changedSettings: AppSettings = {
   notificationLeadMinutes: 15,
 };
 
+const dailyEnergyEntry: DailyEnergyEntry = {
+  recordedOn: '2026-08-03',
+  energyPercent: 70,
+  createdAt,
+  updatedAt: createdAt,
+};
+
 describe('in-memory data source', () => {
   test('creates default settings only once', async () => {
     const source = createInMemoryDataSource();
@@ -182,6 +190,16 @@ describe('in-memory data source', () => {
       updatedAt: expect.any(String),
     });
     await expect(source.getSettings()).resolves.toEqual(changedSettings);
+  });
+
+  test('keeps a daily energy entry while the browser data source remains open', async () => {
+    const source = createInMemoryDataSource();
+
+    await source.saveDailyEnergyEntry(dailyEnergyEntry);
+    await source.initialize();
+
+    await expect(source.getDailyEnergyEntry(dailyEnergyEntry.recordedOn))
+      .resolves.toEqual(dailyEnergyEntry);
   });
 
   test('rejects a subtask whose stored parent is another subtask', async () => {

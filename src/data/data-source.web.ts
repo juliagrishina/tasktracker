@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  DailyEnergyEntry,
   EntityId,
   Project,
   RecurrenceOccurrence,
@@ -39,6 +40,7 @@ function replaceMap<T>(target: Map<EntityId, T>, source: Map<EntityId, T>): void
 
 class BrowserInMemoryDataSource implements InMemoryDataSource {
   private settings: AppSettings | null = null;
+  private readonly dailyEnergyEntries = new Map<string, DailyEnergyEntry>();
   private readonly projects = new Map<EntityId, Project>();
   private readonly taskItems = new Map<EntityId, TaskItem>();
   private readonly reminders = new Map<EntityId, Reminder>();
@@ -62,6 +64,16 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   async saveSettings(settings: AppSettings): Promise<void> {
     await this.initialize();
     this.settings = settings;
+  }
+
+  async getDailyEnergyEntry(recordedOn: string): Promise<DailyEnergyEntry | null> {
+    await this.initialize();
+    return this.dailyEnergyEntries.get(recordedOn) ?? null;
+  }
+
+  async saveDailyEnergyEntry(entry: DailyEnergyEntry): Promise<void> {
+    await this.initialize();
+    this.dailyEnergyEntries.set(entry.recordedOn, { ...entry });
   }
 
   async saveProject(project: Project): Promise<void> {
@@ -308,6 +320,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     await this.initialize();
     const snapshot = {
       settings: this.settings,
+      dailyEnergyEntries: new Map(this.dailyEnergyEntries),
       projects: new Map(this.projects),
       taskItems: new Map(this.taskItems),
       reminders: new Map(this.reminders),
@@ -321,6 +334,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       return await operation();
     } catch (error) {
       this.settings = snapshot.settings;
+      replaceMap(this.dailyEnergyEntries, snapshot.dailyEnergyEntries);
       replaceMap(this.projects, snapshot.projects);
       replaceMap(this.taskItems, snapshot.taskItems);
       replaceMap(this.reminders, snapshot.reminders);

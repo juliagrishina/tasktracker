@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 
 import type {
   AppSettings,
+  DailyEnergyEntry,
   EntityId,
   Project,
   RecurrenceOccurrence,
@@ -29,6 +30,13 @@ interface SettingsRow {
   evening_review_at: string;
   evening_review_notification_id: string | null;
   notification_lead_minutes: number;
+}
+
+interface DailyEnergyEntryRow {
+  recorded_on: string;
+  energy_percent: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface ProjectRow {
@@ -186,6 +194,40 @@ class NativeDataSource implements AppDataSource {
         settings.eveningReviewNotificationId ?? null,
         settings.notificationLeadMinutes,
       ],
+    );
+  }
+
+  async getDailyEnergyEntry(recordedOn: string): Promise<DailyEnergyEntry | null> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<DailyEnergyEntryRow>(
+      `SELECT recorded_on, energy_percent, created_at, updated_at
+      FROM daily_energy_entries
+      WHERE recorded_on = ?`,
+      [recordedOn],
+    );
+
+    return row === null
+      ? null
+      : {
+          recordedOn: row.recorded_on,
+          energyPercent: row.energy_percent,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        };
+  }
+
+  async saveDailyEnergyEntry(entry: DailyEnergyEntry): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO daily_energy_entries (recorded_on, energy_percent, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(recorded_on) DO UPDATE SET
+        energy_percent = excluded.energy_percent,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at`,
+      [entry.recordedOn, entry.energyPercent, entry.createdAt, entry.updatedAt],
     );
   }
 

@@ -343,6 +343,19 @@ const schemaVersionSixteen = `
     CHECK (time_zone_mode IN ('device', 'manual'));
 `;
 
+const schemaVersionSeventeen = `
+  CREATE TABLE daily_energy_entries (
+    recorded_on TEXT PRIMARY KEY,
+    energy_percent INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK (
+      energy_percent IS NULL
+      OR (energy_percent >= 0 AND energy_percent <= 100 AND energy_percent % 5 = 0)
+    )
+  );
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -462,6 +475,12 @@ const migrations: readonly Migration[] = [
           [],
         );
       }
+    },
+  },
+  {
+    version: 17,
+    async apply(database) {
+      await database.execAsync(schemaVersionSeventeen);
     },
   },
 ];

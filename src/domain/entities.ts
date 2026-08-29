@@ -115,6 +115,14 @@ export interface TransferHistory {
   createdAt: string;
 }
 
+/** A single morning energy mark for a local calendar day. A null value is an explicit skip. */
+export interface DailyEnergyEntry {
+  recordedOn: string;
+  energyPercent: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppSettings {
   timeZoneId: string;
   timeZoneMode?: 'device' | 'manual';

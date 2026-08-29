@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  DailyEnergyEntry,
   EntityId,
   Project,
   RecurrenceOccurrence,
@@ -14,6 +15,8 @@ export interface AppDataSource {
   initialize(): Promise<void>;
   getSettings(): Promise<AppSettings>;
   saveSettings(settings: AppSettings): Promise<void>;
+  getDailyEnergyEntry(recordedOn: string): Promise<DailyEnergyEntry | null>;
+  saveDailyEnergyEntry(entry: DailyEnergyEntry): Promise<void>;
   saveProject(project: Project): Promise<void>;
   getProject(id: EntityId): Promise<Project | null>;
   listProjects(): Promise<readonly Project[]>;
