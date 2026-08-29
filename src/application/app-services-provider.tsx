@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { AppSettings, Project, RecurrenceOccurrence, Reminder, TaskItem } from '../domain/entities';
+import type { AppSettings, DailyEnergyEntry, Project, RecurrenceOccurrence, Reminder, TaskItem } from '../domain/entities';
 import { ensureAnonymousSession } from '../data/auth-session';
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
@@ -62,6 +62,7 @@ import type { LocalNotificationScheduler } from './notification-scheduling';
 import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 import { updatePlanningSettings, type UpdatePlanningSettingsInput } from './settings-use-cases';
+import { getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -109,11 +110,19 @@ interface SettingsActions {
   updatePlanningSettings(input: UpdatePlanningSettingsInput): Promise<void>;
 }
 
+interface EnergyActions {
+  refreshDailyEnergy(): Promise<DailyEnergyEntry | null>;
+  saveDailyEnergy(energyPercent: number | null): Promise<DailyEnergyEntry>;
+}
+
 interface AppServicesContextValue {
   isReady: boolean;
   projects: ProjectRepository;
   settings: AppSettings;
   settingsActions: SettingsActions;
+  dailyEnergy: DailyEnergyEntry | null;
+  isDailyEnergyLoaded: boolean;
+  energyActions: EnergyActions;
   demoTasks: DemoTaskGroups;
   backlog: BacklogView;
   completedItems: readonly CompletedItem[];
@@ -154,6 +163,8 @@ export function AppServicesProvider({
   const repositories = useMemo(() => createAppRepositories(appSource), [appSource]);
   const [isReady, setIsReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);
+  const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyEntry | null>(null);
+  const [isDailyEnergyLoaded, setIsDailyEnergyLoaded] = useState(false);
   const [demoTasks, setDemoTasks] = useState<DemoTaskGroups>(emptyDemoTaskGroups);
   const [backlog, setBacklog] = useState<BacklogView>(emptyBacklogView);
   const [completedItems, setCompletedItems] = useState<readonly CompletedItem[]>([]);
@@ -162,6 +173,12 @@ export function AppServicesProvider({
     () => runPersistenceDiagnostic(appSource),
     [appSource],
   );
+  const refreshDailyEnergy = useCallback(async () => {
+    const entry = await getDailyEnergyForCurrentDay(appSource);
+    setDailyEnergy(entry);
+    setIsDailyEnergyLoaded(true);
+    return entry;
+  }, [appSource]);
   const refreshBacklog = useCallback(async () => {
     const loadedBacklog = await getBacklogView(appSource);
     setBacklog(loadedBacklog);
@@ -246,6 +263,7 @@ export function AppServicesProvider({
         const updatedSettings = { ...settings, timeZoneId, timeZoneMode: 'manual' as const };
         await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
+        await refreshDailyEnergy();
       },
       useDeviceTimeZone: async () => {
         const updatedSettings = {
@@ -255,13 +273,26 @@ export function AppServicesProvider({
         };
         await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
+        await refreshDailyEnergy();
       },
       updatePlanningSettings: async (input) => {
         const updatedSettings = await updatePlanningSettings(appSource, input, notificationScheduler);
         setSettings(updatedSettings);
       },
     }),
-    [appSource, notificationScheduler, settings],
+    [appSource, notificationScheduler, refreshDailyEnergy, settings],
+  );
+  const energyActions = useMemo<EnergyActions>(
+    () => ({
+      refreshDailyEnergy,
+      saveDailyEnergy: async (energyPercent) => {
+        const entry = await saveDailyEnergyForCurrentDay(appSource, { energyPercent });
+        setDailyEnergy(entry);
+        setIsDailyEnergyLoaded(true);
+        return entry;
+      },
+    }),
+    [appSource, refreshDailyEnergy],
   );
 
   useEffect(() => {
@@ -285,6 +316,7 @@ export function AppServicesProvider({
           : emptyDemoTaskGroups;
         const loadedBacklog = await getBacklogView(appSource);
         const loadedCompletedItems = await getCompletedItems(appSource);
+        const loadedDailyEnergy = await getDailyEnergyForCurrentDay(appSource);
         void synchronizeRecurrenceNotifications(appSource, notificationScheduler, new Date()).catch(() => {});
         void synchronizeEveningReviewNotification({ now: new Date(), scheduler: notificationScheduler, source: appSource }).catch(() => {});
 
@@ -293,6 +325,8 @@ export function AppServicesProvider({
           setDemoTasks(loadedDemoTasks);
           setBacklog(loadedBacklog);
           setCompletedItems(loadedCompletedItems);
+          setDailyEnergy(loadedDailyEnergy);
+          setIsDailyEnergyLoaded(true);
           setIsReady(true);
         }
       } catch {
@@ -322,6 +356,9 @@ export function AppServicesProvider({
         projects: repositories.projects,
         settings,
         settingsActions,
+        dailyEnergy,
+        isDailyEnergyLoaded,
+        energyActions,
         demoTasks,
         backlog,
         completedItems,

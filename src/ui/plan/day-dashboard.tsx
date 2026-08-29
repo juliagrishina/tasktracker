@@ -32,6 +32,7 @@ interface DayDashboardProps {
   onEditReminder?: (reminder: Reminder) => void;
   onEditTask?: (task: TaskItem) => void;
   onEditRecurrence?: (task: TaskItem, seriesId: string, occursOn: string) => void;
+  onEditDailyEnergy?: () => void;
   onRefresh?: () => void;
   onSelectMode?: () => void;
   refreshToken?: number;
@@ -44,7 +45,7 @@ type QuickActionTarget =
   | { isCompleted: boolean; item: import('../../application/planning-use-cases').PlanUntimedTask | TaskItem; itemKind: 'task'; occurrence: { seriesId: string; occursOn: string } | null }
   | { isCompleted: boolean; item: import('../../application/planning-use-cases').PlanUntimedReminder; itemKind: 'reminder'; occurrence: { seriesId: string; occursOn: string } | null };
 
-export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, onEditTask, onEditRecurrence, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
+export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, onEditTask, onEditRecurrence, onEditDailyEnergy, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
   const services = useOptionalAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
@@ -446,7 +447,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       {completionCandidate === null ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) setCompletionCandidate(null); }} onUnfinished={() => { if (!isCompleting) setIsUnfinishedDialogVisible(true); }} taskTitle={completionCandidate.task.title} visible={!isUnfinishedDialogVisible} />}
       {completionCandidate === null ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
       {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
-      <EveningReviewDialog items={eveningReviewItems} onRequestClose={() => setIsEveningReviewVisible(false)} visible={isEveningReviewVisible} />
+      <EveningReviewDialog energy={services?.dailyEnergy ?? null} items={eveningReviewItems} onEditEnergy={onEditDailyEnergy} onRequestClose={() => setIsEveningReviewVisible(false)} visible={isEveningReviewVisible} />
       {quickActionTarget === null ? null : <PlanTaskActionsDialog isCompleted={quickActionTarget.isCompleted} itemKind={quickActionTarget.itemKind} onAction={chooseQuickAction} onRequestClose={() => setQuickActionTarget(null)} taskTitle={quickActionTarget.item.title} visible={pendingQuickAction === null && !isQuickDeleteConfirmVisible} />}
       {quickActionTarget === null || pendingQuickAction === null ? null : <RecurrenceScopeDialog actionLabel={pendingQuickAction === 'complete' ? 'Выполнить повторение' : pendingQuickAction === 'delete' ? 'Удалить повторение' : 'Вернуть повторение в Backlog'} onChoose={async (scope) => { if (pendingQuickAction === 'delete' && scope === 'series') { setPendingQuickAction(null); setIsQuickDeleteConfirmVisible(true); } else await runQuickAction(pendingQuickAction, scope); }} onRequestClose={() => setPendingQuickAction(null)} visible />}
       {quickActionTarget === null ? null : <DeletePlanTaskDialog deletesSeries={quickActionTarget.occurrence !== null} itemKind={quickActionTarget.itemKind} onConfirm={() => void runQuickAction('delete', 'series')} onRequestClose={() => { setIsQuickDeleteConfirmVisible(false); setPendingQuickAction(null); }} visible={isQuickDeleteConfirmVisible} />}

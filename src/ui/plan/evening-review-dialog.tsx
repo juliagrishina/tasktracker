@@ -1,15 +1,18 @@
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { EveningReviewItem } from '../../application/evening-review';
+import type { DailyEnergyEntry } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
 
 interface EveningReviewDialogProps {
+  energy: DailyEnergyEntry | null;
   items: readonly EveningReviewItem[];
+  onEditEnergy?: () => void;
   onRequestClose: () => void;
   visible: boolean;
 }
 
-export function EveningReviewDialog({ items, onRequestClose, visible }: EveningReviewDialogProps) {
+export function EveningReviewDialog({ energy, items, onEditEnergy, onRequestClose, visible }: EveningReviewDialogProps) {
   return (
     <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible={visible}>
       <View style={styles.overlay}>
@@ -22,6 +25,13 @@ export function EveningReviewDialog({ items, onRequestClose, visible }: EveningR
               <Text style={styles.itemTitle}>{item.title}</Text>
             </View>)}
           </View>}
+          <View style={styles.energySection}>
+            <Text style={styles.energyTitle}>Энергия за сегодня</Text>
+            <Text style={styles.energyValue}>{energy?.energyPercent === null || energy === null ? 'Не указана' : `${energy.energyPercent}%`}</Text>
+            {onEditEnergy === undefined ? null : <Pressable accessibilityLabel={energy?.energyPercent === null || energy === null ? 'Указать оценку энергии' : 'Изменить оценку энергии'} accessibilityRole="button" onPress={onEditEnergy} style={({ pressed }) => [styles.energyAction, pressed && styles.pressed]}>
+              <Text style={styles.energyActionText}>{energy?.energyPercent === null || energy === null ? 'Указать оценку' : 'Изменить'}</Text>
+            </Pressable>}
+          </View>
           <Text style={styles.note}>Проверка не меняет состояние дел автоматически.</Text>
           <Pressable accessibilityLabel="Закрыть вечернюю проверку" accessibilityRole="button" onPress={onRequestClose} style={({ pressed }) => [styles.closeAction, pressed && styles.pressed]}>
             <Text style={styles.closeActionText}>Закрыть</Text>
@@ -42,6 +52,11 @@ const styles = StyleSheet.create({
   itemKind: { color: designTokens.color.text.tertiary, fontSize: designTokens.typography.size.micro, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.micro },
   itemTitle: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.label, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.label },
   empty: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.label, lineHeight: designTokens.typography.lineHeight.label },
+  energySection: { backgroundColor: designTokens.color.surface.subtle, borderRadius: designTokens.radius.compact, gap: designTokens.space[4], padding: designTokens.space[10] },
+  energyTitle: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.meta, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.meta },
+  energyValue: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.body, fontWeight: designTokens.typography.weight.bold, lineHeight: designTokens.typography.lineHeight.body },
+  energyAction: { alignSelf: 'flex-start', justifyContent: 'center', minHeight: designTokens.size.touchTargetMin },
+  energyActionText: { color: designTokens.color.primaryStrong, fontSize: designTokens.typography.size.label, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.label },
   note: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.meta, lineHeight: designTokens.typography.lineHeight.meta },
   closeAction: { alignItems: 'center', backgroundColor: designTokens.color.primarySoft, borderRadius: designTokens.radius.control, justifyContent: 'center', minHeight: designTokens.size.touchTargetMin },
   closeActionText: { color: designTokens.color.primaryStrong, fontSize: designTokens.typography.size.label, fontWeight: designTokens.typography.weight.bold, lineHeight: designTokens.typography.lineHeight.label },

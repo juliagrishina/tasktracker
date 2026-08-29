@@ -22,6 +22,7 @@ import { PlanPeriodNavigator } from './plan-period-navigator';
 import { PlanViewControl, PlanViewMenu } from './plan-view-menu';
 import { MonthLoadGrid } from './month-load-grid';
 import { WeekLoadList } from './week-load-list';
+import { DailyEnergyCheckIn } from './daily-energy-check-in';
 
 interface PlanScreenProps {
   initialDate?: string;
@@ -58,6 +59,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
   const [editingOccurrence, setEditingOccurrence] = useState<RecurrenceTaskEditor | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [planReadModel, setPlanReadModel] = useState<PlanReadModel | null>(null);
+  const [isManualEnergyCheckInVisible, setIsManualEnergyCheckInVisible] = useState(false);
 
   useEffect(() => {
     if (services === null) return;
@@ -110,6 +112,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
             if (services === null) return;
             void services.planningActions.getRecurrenceOccurrence(seriesId, occursOn).then((occurrence) => setEditingOccurrence({ task, seriesId, occursOn, occurrence }));
           }}
+          onEditDailyEnergy={() => setIsManualEnergyCheckInVisible(true)}
           onRefresh={() => { setRefreshToken((value) => value + 1); }}
           refreshToken={refreshToken}
           dayPlan={services === null ? undefined : activePlanReadModel?.byDate[selectedDate] ?? null}
@@ -134,6 +137,13 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         onSelectMode={setMode}
         visible={isModeMenuVisible}
       />
+      {services === null ? null : <DailyEnergyCheckIn
+        initialEnergyPercent={services.dailyEnergy?.energyPercent}
+        onRequestClose={() => setIsManualEnergyCheckInVisible(false)}
+        onSave={async (energyPercent) => { await services.energyActions.saveDailyEnergy(energyPercent); }}
+        onSkip={services.isDailyEnergyLoaded && services.dailyEnergy === null ? async () => { await services.energyActions.saveDailyEnergy(null); } : undefined}
+        visible={services.isDailyEnergyLoaded && (services.dailyEnergy === null || isManualEnergyCheckInVisible)}
+      />}
       {isTaskSheetVisible ? (
         <ItemFormSheet
           mode="create"
