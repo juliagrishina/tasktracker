@@ -36,6 +36,12 @@ function addCalendarDays(isoDate: string, amount: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+async function getTaskRevisionPatch(source: AppDataSource, seriesId: EntityId, occursOn: string) {
+  return (await source.listRecurrenceRevisions(seriesId))
+    .filter((revision) => revision.effectiveFrom <= occursOn)
+    .at(-1)?.taskPatch ?? {};
+}
+
 function isInCompletedPeriod(completedAt: string, period: CompletedPeriod, now: Date, timeZoneId: string): boolean {
   const completedOn = getDateInTimeZone(completedAt, timeZoneId);
   const today = getDateInTimeZone(now.toISOString(), timeZoneId);
@@ -71,12 +77,13 @@ export async function getCompletedItems(source: AppDataSource, options: GetCompl
     if (task === undefined && reminder === undefined) continue;
     for (const occurrence of await source.listRecurrenceOccurrences(recurrence.id)) {
       if (occurrence.completedAt === null) continue;
+      const revisionPatch = task === undefined ? {} : await getTaskRevisionPatch(source, recurrence.id, occurrence.occursOn);
       result.push({
         id: `recurrence:${recurrence.id}:${occurrence.occursOn}`,
         kind: task?.kind ?? 'reminder',
         title: task === undefined
           ? occurrence.reminderPatch?.title ?? reminder!.title
-          : occurrence.taskPatch?.title ?? task.title,
+          : occurrence.taskPatch?.title ?? revisionPatch.title ?? task.title,
         completedAt: occurrence.completedAt,
         occurrence: { seriesId: recurrence.id, occursOn: occurrence.occursOn },
         ...(task === undefined ? {} : { taskId: recurrence.itemId }),
@@ -111,12 +118,14 @@ export async function getCompletedItemDetails(source: AppDataSource, item: Compl
   const occurrence = item.occurrence === null
     ? null
     : (await source.listRecurrenceOccurrences(item.occurrence.seriesId)).find((candidate) => candidate.occursOn === item.occurrence!.occursOn) ?? null;
-  const description = occurrence?.taskPatch?.description ?? task.description;
+  const revisionPatch = item.occurrence === null ? {} : await getTaskRevisionPatch(source, item.occurrence.seriesId, item.occurrence.occursOn);
+  const description = occurrence?.taskPatch?.description ?? revisionPatch.description ?? task.description;
   if (task.kind === 'subtask') {
     const parentTask = await source.getTaskItem(task.parentTaskId);
     return createDetails(item, 'Подзадача', description, parentTask === null ? null : { label: 'Родительская задача', title: parentTask.title });
   }
-  const project = task.projectId === null ? null : await source.getProject(task.projectId);
+  const projectId = occurrence?.taskPatch?.projectId ?? revisionPatch.projectId ?? task.projectId;
+  const project = projectId === null ? null : await source.getProject(projectId);
   return createDetails(item, 'Задача', description, project === null ? null : { label: 'Проект', title: project.title });
 }
 

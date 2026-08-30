@@ -3,7 +3,7 @@ import type { AppDataSource } from '../../src/data/contracts';
 import * as planningUseCases from '../../src/application/planning-use-cases';
 import type { ScheduleBlock, TaskItem } from '../../src/domain/entities';
 import type { LocalNotificationScheduler } from '../../src/application/notification-scheduling';
-import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, returnIncompleteTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from '../../src/application/planning-use-cases';
+import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, returnIncompleteTaskToBacklog, saveOccurrenceException, saveRecurrenceRevision, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 import { updatePlanningSettings } from '../../src/application/settings-use-cases';
 import { getDefaultSettings } from '../../src/data/default-settings';
 
@@ -146,6 +146,44 @@ describe('planning use cases', () => {
 
     await expect(source.getTaskItem(task.id)).resolves.toMatchObject({ scheduledOn: null, periodStartOn: null, periodEndOn: null });
     await expect(source.getScheduleBlock(block.id)).resolves.toBeNull();
+  });
+
+  test('returns one recurring occurrence as a standalone Backlog task', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    await source.saveScheduleBlock(block);
+    await source.saveRecurrenceSeries({ id: 'return-series', itemKind: 'task', itemId: task.id, frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt, updatedAt: createdAt, deletedAt: null });
+
+    await returnIncompleteTaskToBacklog(source, { taskId: task.id, occurrence: { seriesId: 'return-series', occursOn: '2026-08-10' }, reason: null });
+
+    await expect(source.listTaskItems()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: `backlog-${task.id}-2026-08-10`, title: task.title, scheduledOn: null }),
+    ]));
+    await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toMatchObject([
+      expect.objectContaining({ taskItemId: task.id }),
+    ]);
+  });
+
+  test('revises a recurring task only from the selected date and preserves earlier occurrences', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem(task);
+    await saveTaskPlanning(source, {
+      taskId: task.id,
+      blocks: [block],
+      recurrence: { id: 'revision-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
+    });
+
+    await saveRecurrenceRevision(source, {
+      seriesId: 'revision-series',
+      effectiveFrom: '2026-08-10',
+      taskPatch: { title: 'Обновлённый план', estimatedDurationMinutes: 90 },
+      recurrence: { frequency: 'weekly', interval: 1, startsOn: '2026-08-10' },
+      blocks: [{ ...block, startsAt: '2026-08-10T11:00:00+03:00', endsAt: '2026-08-10T12:30:00+03:00' }],
+    });
+
+    await expect(getPlanScheduleBlocks(source, '2026-08-03')).resolves.toMatchObject([{ startsAt: '2026-08-03T09:00:00+03:00' }]);
+    await expect(getPlanScheduleBlocks(source, '2026-08-10')).resolves.toMatchObject([{ startsAt: '2026-08-10T11:00:00+03:00', endsAt: '2026-08-10T12:30:00+03:00', displayTaskPatch: { title: 'Обновлённый план' } }]);
+    await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toMatchObject([{ startsAt: '2026-08-17T11:00:00+03:00' }]);
   });
 
   test('persists a newly scheduled notification when a future block is saved', async () => {

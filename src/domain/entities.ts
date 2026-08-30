@@ -77,6 +77,8 @@ export interface ScheduleBlock {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /** Ephemeral display data for a revised recurring series; it is never persisted with the block. */
+  displayTaskPatch?: RecurrenceTaskPatch;
 }
 
 export interface RecurrenceSeries {
@@ -99,7 +101,7 @@ export interface RecurrenceOccurrence {
   cancelledAt: string | null;
   completedAt: string | null;
   blocksOverridden: boolean;
-  taskPatch: Partial<Pick<TaskItem, 'title' | 'description' | 'estimatedDurationMinutes' | 'scheduledOn'>> | null;
+  taskPatch: RecurrenceTaskPatch | null;
   reminderPatch: Partial<Pick<Reminder, 'title' | 'estimatedDurationMinutes' | 'remindsOn'>> | null;
   createdAt: string;
   updatedAt: string;
@@ -113,6 +115,29 @@ export interface TransferHistory {
   reason: string | null;
   returnedAt: string;
   createdAt: string;
+}
+
+export type RecurrenceTaskPatch = Partial<Pick<TaskItem, 'title' | 'description' | 'estimatedDurationMinutes' | 'projectId' | 'scheduledOn' | 'periodStartOn' | 'periodEndOn'>>;
+
+export interface RecurrenceBlockTemplate {
+  timeZoneId: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+/** A forward-only change to a recurring task. Earlier instances keep the prior rule and details. */
+export interface RecurrenceRevision {
+  id: EntityId;
+  seriesId: EntityId;
+  effectiveFrom: string;
+  frequency: BacklogRepeatRule['frequency'];
+  interval: number;
+  weekdays?: readonly number[];
+  taskPatch: RecurrenceTaskPatch;
+  blockTemplates: readonly RecurrenceBlockTemplate[];
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
 
 /** A single morning energy mark for a local calendar day. A null value is an explicit skip. */

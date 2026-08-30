@@ -360,6 +360,24 @@ const schemaVersionEighteen = `
   ALTER TABLE settings ADD COLUMN completion_prompt_deferred_on TEXT;
 `;
 
+const schemaVersionNineteen = `
+  CREATE TABLE recurrence_revisions (
+    id TEXT PRIMARY KEY,
+    series_id TEXT NOT NULL REFERENCES recurrence_series(id),
+    effective_from TEXT NOT NULL,
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly', 'yearly', 'intervalDays')),
+    interval INTEGER NOT NULL CHECK (interval > 0),
+    weekdays_json TEXT,
+    task_patch_json TEXT NOT NULL,
+    block_templates_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT
+  );
+  CREATE UNIQUE INDEX recurrence_revisions_live_effective_from
+    ON recurrence_revisions (series_id, effective_from) WHERE deleted_at IS NULL;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -491,6 +509,12 @@ const migrations: readonly Migration[] = [
     version: 18,
     async apply(database) {
       await database.execAsync(schemaVersionEighteen);
+    },
+  },
+  {
+    version: 19,
+    async apply(database) {
+      await database.execAsync(schemaVersionNineteen);
     },
   },
 ];

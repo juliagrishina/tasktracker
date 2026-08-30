@@ -34,8 +34,13 @@ export async function loadPlanReadModel(reader: PlanReadModelReader, settings: A
   }));
   const taskIds = [...new Set(loadedDays.flatMap((day) => day.blocks.map((block) => block.taskItemId)))];
   const loadedTasks = await Promise.all(taskIds.map(async (taskId) => [taskId, await reader.getTaskItem(taskId)] as const));
-  const taskById = new Map(loadedTasks.filter((entry): entry is readonly [string, TaskItem] => entry[1] !== null));
+  const baseTaskById = new Map(loadedTasks.filter((entry): entry is readonly [string, TaskItem] => entry[1] !== null));
   const byDate = Object.fromEntries(loadedDays.map((day) => {
+    const taskById = new Map(baseTaskById);
+    for (const block of day.blocks) {
+      const task = taskById.get(block.taskItemId);
+      if (task !== undefined && block.displayTaskPatch !== undefined) taskById.set(block.taskItemId, { ...task, ...block.displayTaskPatch });
+    }
     const estimatedMinutes = [...day.untimedReminders, ...day.untimedTasks]
       .reduce((total, item) => total + (item.estimatedDurationMinutes ?? 0), 0);
     return [day.isoDate, {

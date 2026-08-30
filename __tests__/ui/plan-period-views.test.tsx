@@ -218,17 +218,42 @@ describe('PlanScreen period views', () => {
 
     await waitFor(() => expect(view.getByLabelText('Повторяющаяся задача, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Повторяющаяся задача, 09:00–10:00, колонка 1 из 1'));
-    await waitFor(() => expect(view.getByLabelText('Редактировать повторение')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Редактировать повторение'));
     await waitFor(() => expect(view.getByText('К чему применить это изменение?')).toBeOnTheScreen());
+    expect(view.getByText('Серию с этой даты')).toBeOnTheScreen();
     fireEvent.press(view.getByText('Только этот экземпляр'));
     await waitFor(() => expect(view.getByDisplayValue('Повторяющаяся задача')).toBeOnTheScreen());
-    expect(view.queryByLabelText('Выбрать проект')).toBeNull();
+    expect(view.getByLabelText('Выбрать проект')).toBeOnTheScreen();
+    expect(view.getByLabelText('Дата задачи')).toBeOnTheScreen();
+    expect(view.getByLabelText('Дата блока 1')).toBeOnTheScreen();
     fireEvent.changeText(view.getByDisplayValue('Повторяющаяся задача'), 'Изменённый экземпляр');
     await waitFor(() => expect(view.getByDisplayValue('Изменённый экземпляр')).toBeOnTheScreen());
     fireEvent.press(view.getByText('Сохранить'));
     await waitFor(async () => expect((await source.listRecurrenceOccurrences('recurring-plan-series'))[0]).toMatchObject({ taskPatch: { title: 'Изменённый экземпляр' } }));
     await expect(source.getTaskItem('recurring-plan-task')).resolves.toMatchObject({ title: 'Повторяющаяся задача' });
+  });
+
+  test('edits a recurring task series forward from the selected plan date', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'forward-series-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Исходная серия', description: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'forward-series-block', taskItemId: 'forward-series-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
+    await source.saveRecurrenceSeries({ id: 'forward-series', itemKind: 'task', itemId: 'forward-series-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-05', createdAt, updatedAt: createdAt, deletedAt: null });
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-12" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByLabelText('Исходная серия, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText('Исходная серия, 09:00–10:00, колонка 1 из 1'));
+    await waitFor(() => expect(view.getByText('Серию с этой даты')).toBeOnTheScreen());
+    fireEvent.press(view.getByText('Серию с этой даты'));
+    await waitFor(() => expect(view.getByDisplayValue('Исходная серия')).toBeOnTheScreen());
+    fireEvent.changeText(view.getByDisplayValue('Исходная серия'), 'Обновлённая серия');
+    await waitFor(() => expect(view.getByDisplayValue('Обновлённая серия')).toBeOnTheScreen());
+    fireEvent.press(view.getByText('Сохранить'));
+
+    await waitFor(async () => expect(await source.listRecurrenceRevisions('forward-series')).toMatchObject([
+      { effectiveFrom: '2026-08-12', taskPatch: { title: 'Обновлённая серия' } },
+    ]));
+    await expect(source.getTaskItem('forward-series-task')).resolves.toMatchObject({ title: 'Исходная серия' });
+    await waitFor(() => expect(view.getByLabelText('Обновлённая серия, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
   });
 
   test('keeps scope selection for a moved recurring task instance', async () => {

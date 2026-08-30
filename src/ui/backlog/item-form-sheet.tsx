@@ -57,7 +57,9 @@ interface ItemFormSheetProps {
   onResume?: (item: ActionableItem) => Promise<void>;
   onDelete?: (item: ActionableItem) => Promise<void>;
   occurrenceEdit?: {
-    onSave: (input: { title: string; description: string; estimatedDurationMinutes: number | null }) => Promise<void>;
+    initialPlanning: TaskPlanningDraft;
+    showRepeat?: boolean;
+    onSave: (input: { title: string; description: string; estimatedDurationMinutes: number | null; projectId: string | null; planning: TaskPlanningDraft }) => Promise<void>;
   };
   planningContext?: {
     defaultDate: string;
@@ -206,6 +208,15 @@ export function ItemFormSheet({
   }, [isPlanTaskForm, pendingAlternativeDate, planningActions, planningDate, settings, visible]);
   useEffect(() => {
     if (!visible || !isPlanTaskForm || item === undefined || !('kind' in item)) return;
+    if (occurrenceEdit !== undefined) {
+      let isCurrent = true;
+      void Promise.resolve().then(() => {
+        if (!isCurrent) return;
+        setPersistedBlockIds([]);
+        setPlanningDraft(occurrenceEdit.initialPlanning);
+      });
+      return () => { isCurrent = false; };
+    }
     void planningActions.getTaskPlanningSnapshot(item.id).then(({ blocks, recurrence, placement }) => {
       setPersistedBlockIds(blocks.map((block) => block.id));
       setPlanningDraft({
@@ -220,7 +231,7 @@ export function ItemFormSheet({
         scheduleMode: placement.scheduledOn !== null || (blocks.length === 0 && planningContext?.defaultDate !== undefined) ? 'date' : placement.periodStartOn !== null ? 'period' : 'none',
       });
     });
-  }, [isPlanTaskForm, item, planningActions, settings.timeZoneId, visible]);
+  }, [isPlanTaskForm, item, occurrenceEdit, planningActions, settings.timeZoneId, visible]);
 
   const formTitle = useMemo(() => {
     const createTitle: Record<ItemFormType, string> = {
@@ -247,7 +258,7 @@ export function ItemFormSheet({
       const estimatedDurationMinutes = duration.trim() === '' ? null : Number(duration);
       const now = new Date().toISOString();
       if (occurrenceEdit !== undefined) {
-        await occurrenceEdit.onSave({ title, description, estimatedDurationMinutes });
+        await occurrenceEdit.onSave({ title, description, estimatedDurationMinutes, projectId: selectedProjectId, planning: planningDraft });
         await afterSave?.();
         const plannedOn = planningDraft.blocks[0]?.date ?? (planningDraft.scheduleMode === 'date' ? planningDraft.scheduledOn : '');
         if (plannedOn !== '') onPlanned?.({ plannedOn, title, type: type === 'subtask' ? 'subtask' : 'task' });
@@ -485,7 +496,7 @@ export function ItemFormSheet({
               style={[styles.input, styles.multilineInput]}
               value={description}
             />
-            {(type === 'task' && occurrenceEdit === undefined) || (type === 'reminder' && reminderTimed) ? (
+            {type === 'task' || (type === 'reminder' && reminderTimed) ? (
               <View>
                 <Text style={styles.label}>Проект</Text>
                 <Pressable
@@ -526,6 +537,7 @@ export function ItemFormSheet({
                   planningContext.onPlanningDraftChange?.(draft);
                 }}
                 onNoFreeSlot={() => { setIsNoFreeSlotDialogVisible(true); setIsAlternativeDatePickerVisible(false); }}
+                showRepeat={occurrenceEdit?.showRepeat}
                 value={planningDraft}
               />
             ) : null}

@@ -6,6 +6,7 @@ import type {
   EntityId,
   Project,
   RecurrenceOccurrence,
+  RecurrenceRevision,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
@@ -124,6 +125,19 @@ interface RecurrenceOccurrenceRow {
   task_patch: string | null;
   reminder_patch: string | null;
   notification_ids_json: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+interface RecurrenceRevisionRow {
+  id: string;
+  series_id: string;
+  effective_from: string;
+  frequency: RecurrenceRevision['frequency'];
+  interval: number;
+  weekdays_json: string | null;
+  task_patch_json: string;
+  block_templates_json: string;
   created_at: string;
   updated_at: string | null;
 }
@@ -905,6 +919,70 @@ class NativeDataSource implements AppDataSource {
       'UPDATE recurrence_series SET deleted_at = ?, updated_at = ? WHERE id = ?',
       [deletedAt, deletedAt, id],
     );
+    await database.runAsync(
+      'UPDATE recurrence_revisions SET deleted_at = ?, updated_at = ? WHERE series_id = ?',
+      [deletedAt, deletedAt, id],
+    );
+  }
+
+  async saveRecurrenceRevision(revision: RecurrenceRevision): Promise<void> {
+    await this.initialize();
+    if (await this.getRecurrenceSeries(revision.seriesId) === null) throw new Error('Серия повторения для изменения не найдена');
+    const database = await this.getDatabase();
+    const updatedAt = new Date().toISOString();
+    await database.runAsync(
+      `INSERT INTO recurrence_revisions (
+        id, series_id, effective_from, frequency, interval, weekdays_json,
+        task_patch_json, block_templates_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        series_id = excluded.series_id,
+        effective_from = excluded.effective_from,
+        frequency = excluded.frequency,
+        interval = excluded.interval,
+        weekdays_json = excluded.weekdays_json,
+        task_patch_json = excluded.task_patch_json,
+        block_templates_json = excluded.block_templates_json,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
+        deleted_at = NULL`,
+      [
+        revision.id,
+        revision.seriesId,
+        revision.effectiveFrom,
+        revision.frequency,
+        revision.interval,
+        revision.weekdays === undefined ? null : JSON.stringify(revision.weekdays),
+        JSON.stringify(revision.taskPatch),
+        JSON.stringify(revision.blockTemplates),
+        revision.createdAt,
+        updatedAt,
+      ],
+    );
+  }
+
+  async listRecurrenceRevisions(seriesId: EntityId): Promise<readonly RecurrenceRevision[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<RecurrenceRevisionRow>(
+      `SELECT id, series_id, effective_from, frequency, interval, weekdays_json,
+        task_patch_json, block_templates_json, created_at, updated_at
+      FROM recurrence_revisions
+      WHERE series_id = ? AND deleted_at IS NULL
+      ORDER BY effective_from ASC, created_at ASC, id ASC`,
+      [seriesId],
+    );
+    return rows.map((row) => this.mapRecurrenceRevision(row));
+  }
+
+  async deleteRecurrenceRevision(id: EntityId): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const deletedAt = new Date().toISOString();
+    await database.runAsync(
+      'UPDATE recurrence_revisions SET deleted_at = ?, updated_at = ? WHERE id = ?',
+      [deletedAt, deletedAt, id],
+    );
   }
 
   async saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void> {
@@ -1021,6 +1099,22 @@ class NativeDataSource implements AppDataSource {
           ? null
           : JSON.parse(row.reminder_patch) as RecurrenceOccurrence['reminderPatch'],
       notificationIds: row.notification_ids_json === null ? [] : JSON.parse(row.notification_ids_json) as readonly string[],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at ?? row.created_at,
+      deletedAt: null,
+    };
+  }
+
+  private mapRecurrenceRevision(row: RecurrenceRevisionRow): RecurrenceRevision {
+    return {
+      id: row.id,
+      seriesId: row.series_id,
+      effectiveFrom: row.effective_from,
+      frequency: row.frequency,
+      interval: row.interval,
+      weekdays: row.weekdays_json === null ? undefined : JSON.parse(row.weekdays_json),
+      taskPatch: JSON.parse(row.task_patch_json) as RecurrenceRevision['taskPatch'],
+      blockTemplates: JSON.parse(row.block_templates_json) as RecurrenceRevision['blockTemplates'],
       createdAt: row.created_at,
       updatedAt: row.updated_at ?? row.created_at,
       deletedAt: null,

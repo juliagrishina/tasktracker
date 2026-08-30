@@ -6,11 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { designTokens } from '../design/tokens';
 import { useOptionalAppServices } from '../../application/app-services-provider';
 import { getDefaultSettings } from '../../data/default-settings';
-import { getDateInTimeZone } from '../../domain/planning';
-import type { RecurrenceOccurrence, Reminder, TaskItem } from '../../domain/entities';
+import { getDateInTimeZone, getInstantInTimeZone, getTimeInTimeZone } from '../../domain/planning';
+import type { RecurrenceOccurrence, RecurrenceRevision, RecurrenceSeries, Reminder, ScheduleBlock, TaskItem } from '../../domain/entities';
 import { loadPlanReadModel, type PlanReadModel } from '../../application/plan-read-model';
 import { temporaryWebContentStyle } from '../screen-shell';
 import { ItemFormSheet } from '../backlog/item-form-sheet';
+import { createInitialTaskPlanningDraft, type TaskPlanningDraft } from '../backlog/task-planning-fields';
 import { DayDashboard } from './day-dashboard';
 import {
   formatPlanMonth,
@@ -34,13 +35,34 @@ interface RecurrenceTaskEditor {
   occurrence: RecurrenceOccurrence | null;
   occursOn: string;
   seriesId: string;
+  scope: 'occurrence' | 'series';
   task: TaskItem;
+  planning: TaskPlanningDraft;
 }
 
 type PlanActionableItem = TaskItem | Reminder;
 
 function getActionableItemKind(item: PlanActionableItem): 'task' | 'subtask' | 'reminder' {
   return 'kind' in item ? item.kind : 'reminder';
+}
+
+function createRecurrencePlanningDraft(occursOn: string, blocks: readonly ScheduleBlock[], timeZoneId: string, series: RecurrenceSeries, revisions: readonly RecurrenceRevision[], showRepeat: boolean): TaskPlanningDraft {
+  const revision = revisions.filter((candidate) => candidate.effectiveFrom <= occursOn).at(-1);
+  const rule = revision ?? series;
+  return {
+    ...createInitialTaskPlanningDraft(occursOn),
+    blocks: blocks.map((block) => ({
+      id: block.id,
+      date: getDateInTimeZone(block.startsAt, timeZoneId),
+      startsAt: getTimeInTimeZone(block.startsAt, timeZoneId),
+      durationMinutes: String((new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000),
+    })),
+    repeatFrequency: showRepeat ? rule.frequency : 'none',
+    repeatInterval: String(rule.interval),
+    repeatWeekdays: rule.weekdays === undefined ? [] : [...rule.weekdays],
+    scheduledOn: occursOn,
+    scheduleMode: 'date',
+  };
 }
 
 export function PlanScreen({ initialDate }: PlanScreenProps) {
@@ -86,6 +108,31 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
     setMode('day');
   };
 
+  const openRecurrenceEditor = (task: TaskItem, seriesId: string, occursOn: string, scope: 'occurrence' | 'series') => {
+    if (services === null) return;
+    void Promise.all([
+      services.planningActions.getRecurrenceOccurrence(seriesId, occursOn),
+      services.planningActions.getPlanScheduleBlocks(occursOn),
+      services.planningActions.getRecurrenceSeries(seriesId),
+      services.planningActions.getRecurrenceRevisions(seriesId),
+    ]).then(([occurrence, planBlocks, series, revisions]) => {
+      if (series === null) return;
+      const matchingBlocks = planBlocks.filter((block) => {
+        if (block.taskItemId !== task.id) return false;
+        const virtual = block.occurrenceId === `virtual:${seriesId}:${occursOn}`;
+        return virtual || block.occurrenceId === occurrence?.id;
+      });
+      setEditingOccurrence({
+        task,
+        seriesId,
+        occursOn,
+        scope,
+        occurrence,
+        planning: createRecurrencePlanningDraft(occursOn, matchingBlocks, services.settings.timeZoneId, series, revisions, scope === 'series'),
+      });
+    });
+  };
+
   const completePlanItem = async (item: PlanActionableItem) => {
     if (services === null) return;
     await services.backlogActions.completeItem({ kind: getActionableItemKind(item), id: item.id, completedAt: new Date().toISOString() });
@@ -113,10 +160,8 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           onCreateTask={() => setIsTaskSheetVisible(true)}
           onEditReminder={setEditingReminder}
           onEditTask={setEditingTask}
-          onEditRecurrence={(task, seriesId, occursOn) => {
-            if (services === null) return;
-            void services.planningActions.getRecurrenceOccurrence(seriesId, occursOn).then((occurrence) => setEditingOccurrence({ task, seriesId, occursOn, occurrence }));
-          }}
+          onEditRecurrence={(task, seriesId, occursOn) => openRecurrenceEditor(task, seriesId, occursOn, 'occurrence')}
+          onEditRecurrenceSeries={(task, seriesId, occursOn) => openRecurrenceEditor(task, seriesId, occursOn, 'series')}
           onEditDailyEnergy={() => setIsManualEnergyCheckInVisible(true)}
           onRefresh={() => { setRefreshToken((value) => value + 1); }}
           refreshToken={refreshToken}
@@ -194,30 +239,69 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           mode="edit"
           onComplete={async () => { if (services === null) return; await services.planningActions.setRecurrenceOccurrenceState(editingOccurrence.seriesId, editingOccurrence.occursOn, 'completed'); }}
           onResume={async () => { if (services === null) return; await services.planningActions.setRecurrenceOccurrenceState(editingOccurrence.seriesId, editingOccurrence.occursOn, 'active'); setRefreshToken((value) => value + 1); }}
+          planningContext={{ defaultDate: editingOccurrence.occursOn }}
           occurrenceEdit={{
-            onSave: async ({ title, description, estimatedDurationMinutes }) => {
+            initialPlanning: editingOccurrence.planning,
+            showRepeat: editingOccurrence.scope === 'series',
+            onSave: async ({ title, description, estimatedDurationMinutes, projectId, planning }) => {
               if (services === null) return;
               const now = new Date().toISOString();
               const existing = editingOccurrence.occurrence;
+              const occurrenceId = existing?.id ?? `occurrence-${editingOccurrence.seriesId}-${editingOccurrence.occursOn}`;
+              const blocks = planning.blocks.map((block) => {
+                const startsAt = new Date(getInstantInTimeZone(block.date, block.startsAt, services.settings.timeZoneId));
+                return {
+                  id: `${occurrenceId}-${block.id}`,
+                  taskItemId: editingOccurrence.task.id,
+                  occurrenceId,
+                  timeZoneId: services.settings.timeZoneId,
+                  startsAt: startsAt.toISOString(),
+                  endsAt: new Date(startsAt.getTime() + Number(block.durationMinutes) * 60_000).toISOString(),
+                  createdAt: now,
+                  updatedAt: now,
+                  deletedAt: null,
+                };
+              });
+              if (editingOccurrence.scope === 'series') {
+                const effectiveFrom = planning.scheduledOn || planning.blocks[0]?.date;
+                if (effectiveFrom === '') throw new Error('Укажите дату начала обновлённой серии');
+                if (planning.repeatFrequency === 'none') throw new Error('Для серии выберите правило повторения');
+                await services.planningActions.saveRecurrenceRevision({
+                  seriesId: editingOccurrence.seriesId,
+                  effectiveFrom,
+                  taskPatch: { title, description: description.trim() === '' ? null : description, estimatedDurationMinutes, projectId },
+                  recurrence: {
+                    frequency: planning.repeatFrequency,
+                    interval: Number(planning.repeatInterval),
+                    weekdays: planning.repeatFrequency === 'weekly' && planning.repeatWeekdays.length > 0 ? planning.repeatWeekdays : undefined,
+                    startsOn: effectiveFrom,
+                  },
+                  blocks: blocks.map((block) => ({ ...block, occurrenceId: null })),
+                });
+                return;
+              }
               await services.planningActions.saveOccurrenceException({
                 occurrence: {
-                  id: existing?.id ?? `occurrence-${editingOccurrence.seriesId}-${editingOccurrence.occursOn}`,
+                  id: occurrenceId,
                   seriesId: editingOccurrence.seriesId,
                   occursOn: editingOccurrence.occursOn,
                   cancelledAt: existing?.cancelledAt ?? null,
                   completedAt: existing?.completedAt ?? null,
-                  blocksOverridden: existing?.blocksOverridden ?? false,
+                  blocksOverridden: true,
                   taskPatch: {
                     ...existing?.taskPatch,
                     title,
                     description: description.trim() === '' ? null : description,
                     estimatedDurationMinutes,
+                    projectId,
+                    scheduledOn: planning.scheduleMode === 'date' ? planning.scheduledOn : null,
                   },
                   reminderPatch: null,
                   createdAt: existing?.createdAt ?? now,
                   updatedAt: now,
                   deletedAt: existing?.deletedAt ?? null,
                 },
+                blocks,
               });
             },
           }}

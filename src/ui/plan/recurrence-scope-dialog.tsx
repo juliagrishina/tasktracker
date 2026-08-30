@@ -6,11 +6,12 @@ interface RecurrenceScopeDialogProps {
   actionLabel: string;
   onChoose: (scope: 'occurrence' | 'series') => Promise<void>;
   onRequestClose: () => void;
+  seriesOptionLabel?: string;
   visible: boolean;
 }
 
-export function RecurrenceScopeDialog({ actionLabel, onChoose, onRequestClose, visible }: RecurrenceScopeDialogProps) {
-  return <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible={visible}><View style={styles.overlay}><View style={styles.dialog}><Text style={styles.title}>{actionLabel}</Text><Text style={styles.description}>К чему применить это изменение?</Text><Pressable onPress={() => void onChoose('occurrence')} style={[styles.action, styles.primary]}><Text style={styles.primaryText}>Только этот экземпляр</Text></Pressable><Pressable onPress={() => void onChoose('series')} style={[styles.action, styles.secondary]}><Text style={styles.secondaryText}>Всю серию</Text></Pressable><Pressable onPress={onRequestClose} style={styles.cancel}><Text style={styles.cancelText}>Отмена</Text></Pressable></View></View></Modal>;
+export function RecurrenceScopeDialog({ actionLabel, onChoose, onRequestClose, seriesOptionLabel = 'Всю серию', visible }: RecurrenceScopeDialogProps) {
+  return <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible={visible}><View style={styles.overlay}><View style={styles.dialog}><Text style={styles.title}>{actionLabel}</Text><Text style={styles.description}>К чему применить это изменение?</Text><Pressable onPress={() => void onChoose('occurrence')} style={[styles.action, styles.primary]}><Text style={styles.primaryText}>Только этот экземпляр</Text></Pressable><Pressable onPress={() => void onChoose('series')} style={[styles.action, styles.secondary]}><Text style={styles.secondaryText}>{seriesOptionLabel}</Text></Pressable><Pressable onPress={onRequestClose} style={styles.cancel}><Text style={styles.cancelText}>Отмена</Text></Pressable></View></View></Modal>;
 }
 
 const styles = StyleSheet.create({

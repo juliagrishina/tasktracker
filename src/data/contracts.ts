@@ -4,6 +4,7 @@ import type {
   EntityId,
   Project,
   RecurrenceOccurrence,
+  RecurrenceRevision,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
@@ -40,6 +41,9 @@ export interface AppDataSource {
   getRecurrenceSeries(id: EntityId): Promise<RecurrenceSeries | null>;
   listRecurrenceSeries(): Promise<readonly RecurrenceSeries[]>;
   deleteRecurrenceSeries(id: EntityId): Promise<void>;
+  saveRecurrenceRevision(revision: RecurrenceRevision): Promise<void>;
+  listRecurrenceRevisions(seriesId: EntityId): Promise<readonly RecurrenceRevision[]>;
+  deleteRecurrenceRevision(id: EntityId): Promise<void>;
   saveRecurrenceOccurrence(occurrence: RecurrenceOccurrence): Promise<void>;
   getRecurrenceOccurrence(id: EntityId): Promise<RecurrenceOccurrence | null>;
   listRecurrenceOccurrences(seriesId: EntityId): Promise<readonly RecurrenceOccurrence[]>;

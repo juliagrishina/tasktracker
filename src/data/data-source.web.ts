@@ -4,6 +4,7 @@ import type {
   EntityId,
   Project,
   RecurrenceOccurrence,
+  RecurrenceRevision,
   RecurrenceSeries,
   Reminder,
   ScheduleBlock,
@@ -47,6 +48,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   private readonly scheduleBlocks = new Map<EntityId, ScheduleBlock>();
   private readonly recurrenceSeries = new Map<EntityId, RecurrenceSeries>();
   private readonly recurrenceOccurrences = new Map<EntityId, RecurrenceOccurrence>();
+  private readonly recurrenceRevisions = new Map<EntityId, RecurrenceRevision>();
   private readonly transferHistories = new Map<EntityId, TransferHistory>();
 
   async initialize(): Promise<void> {
@@ -267,6 +269,33 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       const deletedAt = new Date().toISOString();
       this.recurrenceSeries.set(id, { ...series, deletedAt, updatedAt: deletedAt });
       this.deleteRecurrenceOccurrencesForSeries(id, deletedAt);
+      for (const [revisionId, revision] of this.recurrenceRevisions) {
+        if (revision.seriesId === id) this.recurrenceRevisions.set(revisionId, { ...revision, deletedAt, updatedAt: deletedAt });
+      }
+    }
+  }
+
+  async saveRecurrenceRevision(revision: RecurrenceRevision): Promise<void> {
+    await this.initialize();
+    if (await this.getRecurrenceSeries(revision.seriesId) === null) throw new Error('Серия повторения для изменения не найдена');
+    const duplicate = [...this.recurrenceRevisions.values()].find((candidate) => candidate.id !== revision.id && candidate.seriesId === revision.seriesId && candidate.effectiveFrom === revision.effectiveFrom && candidate.deletedAt === null);
+    if (duplicate !== undefined) throw new Error('Изменение серии на эту дату уже существует');
+    this.recurrenceRevisions.set(revision.id, { ...revision, updatedAt: new Date().toISOString() });
+  }
+
+  async listRecurrenceRevisions(seriesId: EntityId): Promise<readonly RecurrenceRevision[]> {
+    await this.initialize();
+    return [...this.recurrenceRevisions.values()]
+      .filter((revision) => revision.seriesId === seriesId && revision.deletedAt === null)
+      .sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom) || left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+  }
+
+  async deleteRecurrenceRevision(id: EntityId): Promise<void> {
+    await this.initialize();
+    const revision = this.recurrenceRevisions.get(id);
+    if (revision !== undefined) {
+      const deletedAt = new Date().toISOString();
+      this.recurrenceRevisions.set(id, { ...revision, deletedAt, updatedAt: deletedAt });
     }
   }
 
@@ -327,6 +356,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       scheduleBlocks: new Map(this.scheduleBlocks),
       recurrenceSeries: new Map(this.recurrenceSeries),
       recurrenceOccurrences: new Map(this.recurrenceOccurrences),
+      recurrenceRevisions: new Map(this.recurrenceRevisions),
       transferHistories: new Map(this.transferHistories),
     };
 
@@ -341,6 +371,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       replaceMap(this.scheduleBlocks, snapshot.scheduleBlocks);
       replaceMap(this.recurrenceSeries, snapshot.recurrenceSeries);
       replaceMap(this.recurrenceOccurrences, snapshot.recurrenceOccurrences);
+      replaceMap(this.recurrenceRevisions, snapshot.recurrenceRevisions);
       replaceMap(this.transferHistories, snapshot.transferHistories);
       throw error;
     }
@@ -358,6 +389,7 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       this.scheduleBlocks.has(id) ||
       this.recurrenceSeries.has(id)
       || this.recurrenceOccurrences.has(id)
+      || this.recurrenceRevisions.has(id)
     );
   }
 

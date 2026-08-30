@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { AppSettings, DailyEnergyEntry, Project, RecurrenceOccurrence, Reminder, TaskItem } from '../domain/entities';
+import type { AppSettings, DailyEnergyEntry, Project, RecurrenceOccurrence, RecurrenceRevision, RecurrenceSeries, Reminder, TaskItem } from '../domain/entities';
 import { ensureAnonymousSession } from '../data/auth-session';
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
@@ -59,8 +59,8 @@ import { getCompletionEligibility, type CompletionEligibility } from './completi
 import { getEveningReviewItems, synchronizeEveningReviewNotification } from './evening-review';
 import { localNotificationScheduler } from './local-notification-scheduler';
 import type { LocalNotificationScheduler } from './notification-scheduling';
-import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
-import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
+import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveRecurrenceRevision, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
+import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveRecurrenceRevisionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 import { updatePlanningSettings, type UpdatePlanningSettingsInput } from './settings-use-cases';
 import { getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
 
@@ -83,6 +83,8 @@ interface PlanningActions {
   getTaskItem(taskId: string): Promise<TaskItem | null>;
   getRecurrenceOccurrence(seriesId: string, occursOn: string): Promise<RecurrenceOccurrence | null>;
   getRecurrenceOccurrenceById(id: string): Promise<RecurrenceOccurrence | null>;
+  getRecurrenceSeries(seriesId: string): Promise<RecurrenceSeries | null>;
+  getRecurrenceRevisions(seriesId: string): Promise<readonly RecurrenceRevision[]>;
   convertReminderToTask(reminderId: string, taskId: string, createdAt: string): ReturnType<typeof convertReminderToTask>;
   getPlanScheduleBlocks(isoDate: string): ReturnType<typeof getPlanScheduleBlocks>;
   getTaskPlanningSnapshot(taskId: string): ReturnType<typeof getTaskPlanningSnapshot>;
@@ -100,6 +102,7 @@ interface PlanningActions {
   saveTaskWithPlanning(input: SaveTaskWithPlanningInput): Promise<SaveTaskPlanningResult>;
   createTimedReminderTaskWithPlanning(input: CreateTimedReminderTaskWithPlanningInput): Promise<SaveTaskPlanningResult>;
   saveOccurrenceException(input: SaveOccurrenceExceptionInput): Promise<void>;
+  saveRecurrenceRevision(input: SaveRecurrenceRevisionInput): Promise<void>;
   moveRecurrenceOccurrence(input: MoveRecurrenceOccurrenceInput): Promise<{ scope: MoveRecurrenceOccurrenceInput['scope'] }>;
   removeRecurrenceOccurrence(input: { seriesId: string; occursOn: string; scope: 'occurrence' | 'series' }): Promise<void>;
 }
@@ -227,6 +230,8 @@ export function AppServicesProvider({
       getTaskItem: (taskId) => appSource.getTaskItem(taskId),
       getRecurrenceOccurrence: async (seriesId, occursOn) => (await appSource.listRecurrenceOccurrences(seriesId)).find((occurrence) => occurrence.occursOn === occursOn) ?? null,
       getRecurrenceOccurrenceById: (id) => appSource.getRecurrenceOccurrence(id),
+      getRecurrenceSeries: (seriesId) => appSource.getRecurrenceSeries(seriesId),
+      getRecurrenceRevisions: (seriesId) => appSource.listRecurrenceRevisions(seriesId),
       convertReminderToTask: (reminderId, taskId, createdAt) => convertReminderToTask(appSource, { reminderId, taskId, createdAt }),
       getPlanScheduleBlocks: (isoDate) => getPlanScheduleBlocks(appSource, isoDate),
       getTaskPlanningSnapshot: (taskId) => getTaskPlanningSnapshot(appSource, taskId),
@@ -247,7 +252,14 @@ export function AppServicesProvider({
       saveTaskPlanning: (input) => saveTaskPlanning(appSource, input, notificationScheduler),
       saveTaskWithPlanning: (input) => runBacklogAction(() => saveTaskWithPlanning(appSource, input, notificationScheduler)),
       createTimedReminderTaskWithPlanning: (input) => runBacklogAction(() => createTimedReminderTaskWithPlanning(appSource, input, notificationScheduler)),
-      saveOccurrenceException: (input) => saveOccurrenceException(appSource, input, notificationScheduler),
+      saveOccurrenceException: async (input) => {
+        await saveOccurrenceException(appSource, input);
+        void synchronizeRecurrenceNotifications(appSource, notificationScheduler, new Date()).catch(() => {});
+      },
+      saveRecurrenceRevision: async (input) => {
+        await runBacklogAction(() => saveRecurrenceRevision(appSource, input));
+        void synchronizeRecurrenceNotifications(appSource, notificationScheduler, new Date()).catch(() => {});
+      },
       moveRecurrenceOccurrence: (input) => moveRecurrenceOccurrence(appSource, input, notificationScheduler),
       removeRecurrenceOccurrence: (input) => removeRecurrenceOccurrence(appSource, input, notificationScheduler),
     }),

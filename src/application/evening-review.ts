@@ -69,7 +69,7 @@ export async function getEveningReviewItems(source: AppDataSource, isoDate: stri
     const virtual = virtualOccurrence(block.occurrenceId);
     const occurrence = virtual === null ? occurrenceById.get(block.occurrenceId ?? '') : occurrencesBySeriesId.get(virtual.seriesId)?.find((candidate) => candidate.occursOn === virtual.occursOn);
     const occurrenceDetails = virtual ?? (occurrence === undefined ? null : { seriesId: occurrence.seriesId, occursOn: occurrence.occursOn });
-    if (occurrenceDetails !== null && isIncompleteOccurrence(occurrence)) add({ id: task.id, kind: 'task', title: task.title, occurrence: occurrenceDetails });
+    if (occurrenceDetails !== null && isIncompleteOccurrence(occurrence)) add({ id: task.id, kind: 'task', title: occurrence?.taskPatch?.title ?? block.displayTaskPatch?.title ?? task.title, occurrence: occurrenceDetails });
   }
 
   const taskIdsWithExactTime = new Set(blocks.map((block) => block.taskItemId));

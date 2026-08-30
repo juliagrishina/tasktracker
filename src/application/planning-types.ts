@@ -1,4 +1,4 @@
-import type { EntityId, RecurrenceOccurrence, RecurrenceSeries, Reminder, ScheduleBlock } from '../domain/entities';
+import type { EntityId, RecurrenceOccurrence, RecurrenceSeries, RecurrenceTaskPatch, Reminder, ScheduleBlock } from '../domain/entities';
 
 export interface PlanningRecurrenceInput {
   id: EntityId;
@@ -32,6 +32,14 @@ export interface SaveTaskPlanningInput {
 export interface SaveOccurrenceExceptionInput {
   occurrence: RecurrenceOccurrence;
   blocks?: readonly ScheduleBlock[];
+}
+
+export interface SaveRecurrenceRevisionInput {
+  seriesId: EntityId;
+  effectiveFrom: string;
+  taskPatch: RecurrenceTaskPatch;
+  recurrence: Pick<PlanningRecurrenceInput, 'frequency' | 'interval' | 'weekdays' | 'startsOn'>;
+  blocks: readonly ScheduleBlock[];
 }
 
 export interface SaveTaskWithPlanningInput {

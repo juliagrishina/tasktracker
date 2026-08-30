@@ -1,11 +1,52 @@
 import type { AppDataSource } from '../data/contracts';
-import type { EntityId, RecurrenceSeries, Reminder, ScheduleBlock, TaskItem } from '../domain/entities';
+import type { EntityId, RecurrenceBlockTemplate, RecurrenceSeries, RecurrenceTaskPatch, Reminder, ScheduleBlock, TaskItem } from '../domain/entities';
 import { assertPlanningDateRange, assertRecurrenceOccurrence, assertRecurrenceRule, doesScheduleBlockOverlapDate, findScheduleConflicts, getDateInTimeZone, getRecurrenceDates, shiftScheduleBlockToDate } from '../domain/planning';
 import { assertScheduleBlockShape } from '../domain/invariants';
 import { createReminder, createSubtask, createTask, updateTaskItem } from './backlog-use-cases';
 import { convertReminderToTask } from './convert-reminder-to-task';
 import { cancelScheduleBlockNotification, type LocalNotificationScheduler, synchronizeScheduleBlockNotification } from './notification-scheduling';
-import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput, ScheduleConflict } from './planning-types';
+import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveRecurrenceRevisionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput, ScheduleConflict } from './planning-types';
+
+interface EffectiveTaskRecurrence {
+  rule: RecurrenceSeries;
+  taskPatch: RecurrenceTaskPatch;
+  blockTemplates: readonly RecurrenceBlockTemplate[] | null;
+}
+
+async function getEffectiveTaskRecurrence(source: AppDataSource, series: RecurrenceSeries, isoDate: string): Promise<EffectiveTaskRecurrence | null> {
+  if (series.itemKind !== 'task' || isoDate < series.startsOn) return null;
+  const revisions = await source.listRecurrenceRevisions(series.id);
+  const revision = revisions.filter((candidate) => candidate.effectiveFrom <= isoDate).at(-1);
+  if (revision === undefined) return { rule: series, taskPatch: {}, blockTemplates: null };
+  return {
+    rule: { ...series, frequency: revision.frequency, interval: revision.interval, weekdays: revision.weekdays, startsOn: revision.effectiveFrom },
+    taskPatch: revision.taskPatch,
+    blockTemplates: revision.blockTemplates,
+  };
+}
+
+async function assertTaskRecurrenceOccurrence(source: AppDataSource, series: RecurrenceSeries, occursOn: string): Promise<void> {
+  const effective = await getEffectiveTaskRecurrence(source, series, occursOn);
+  if (effective === null || !getRecurrenceDates(effective.rule, occursOn, occursOn).includes(occursOn)) throw new Error('Экземпляр не принадлежит серии повторения');
+}
+
+function toBlockTemplates(blocks: readonly ScheduleBlock[]): readonly RecurrenceBlockTemplate[] {
+  return blocks.map(({ timeZoneId, startsAt, endsAt }) => ({ timeZoneId, startsAt, endsAt }));
+}
+
+function fromBlockTemplates(templates: readonly RecurrenceBlockTemplate[], taskItemId: EntityId, now: string): readonly ScheduleBlock[] {
+  return templates.map((template, index) => ({
+    id: `revision-template-${index}`,
+    taskItemId,
+    occurrenceId: null,
+    timeZoneId: template.timeZoneId,
+    startsAt: template.startsAt,
+    endsAt: template.endsAt,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  }));
+}
 
 export async function getTaskPlanningSnapshot(source: AppDataSource, taskId: EntityId): Promise<{ blocks: readonly ScheduleBlock[]; recurrence: RecurrenceSeries | null; placement: { scheduledOn: string | null; periodStartOn: string | null; periodEndOn: string | null } }> {
   const task = await source.getTaskItem(taskId);
@@ -143,10 +184,44 @@ export async function createTimedReminderTaskWithPlanning(source: AppDataSource,
 export async function saveOccurrenceException(source: AppDataSource, input: SaveOccurrenceExceptionInput, scheduler?: LocalNotificationScheduler): Promise<void> {
   const series = await source.getRecurrenceSeries(input.occurrence.seriesId);
   if (series === null) throw new Error('Серия повторения не найдена');
-  assertRecurrenceOccurrence(series, input.occurrence.occursOn);
+  if (series.itemKind === 'task') await assertTaskRecurrenceOccurrence(source, series, input.occurrence.occursOn);
+  else assertRecurrenceOccurrence(series, input.occurrence.occursOn);
   if (series.itemKind === 'task' && input.occurrence.reminderPatch !== null) throw new Error('Неверный тип изменения экземпляра');
   if (series.itemKind === 'reminder' && input.occurrence.taskPatch !== null) throw new Error('Неверный тип изменения экземпляра');
   await source.transaction(async () => { await persistOccurrenceException(source, input, scheduler); });
+  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
+}
+
+/** Saves a forward-only revision. The base series remains intact for all earlier calendar dates. */
+export async function saveRecurrenceRevision(source: AppDataSource, input: SaveRecurrenceRevisionInput, scheduler?: LocalNotificationScheduler): Promise<void> {
+  const series = await source.getRecurrenceSeries(input.seriesId);
+  if (series === null || series.itemKind !== 'task') throw new Error('Серия задачи не найдена');
+  const task = await source.getTaskItem(series.itemId);
+  if (task === null) throw new Error('Задача для серии не найдена');
+  if (input.effectiveFrom < series.startsOn) throw new Error('Изменение серии не может начинаться раньше её первого экземпляра');
+  if (input.recurrence.startsOn !== input.effectiveFrom) throw new Error('Дата начала изменения серии должна совпадать с датой первого обновлённого экземпляра');
+  assertRecurrenceRule(input.recurrence);
+  for (const block of input.blocks) {
+    if (block.taskItemId !== task.id || block.occurrenceId !== null) throw new Error('Шаблон блока должен принадлежать серии задачи');
+    assertScheduleBlockShape(block, task);
+  }
+  const now = new Date().toISOString();
+  const existing = (await source.listRecurrenceRevisions(series.id)).find((revision) => revision.effectiveFrom === input.effectiveFrom);
+  await source.transaction(async () => {
+    await source.saveRecurrenceRevision({
+      id: existing?.id ?? `revision-${series.id}-${input.effectiveFrom}`,
+      seriesId: series.id,
+      effectiveFrom: input.effectiveFrom,
+      frequency: input.recurrence.frequency,
+      interval: input.recurrence.interval,
+      weekdays: input.recurrence.weekdays,
+      taskPatch: input.taskPatch,
+      blockTemplates: toBlockTemplates(input.blocks),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      deletedAt: null,
+    });
+  });
   if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
 }
 
@@ -174,9 +249,15 @@ function shiftedDate(value: string, source: string, target: string): string {
 export async function moveRecurrenceOccurrence(source: AppDataSource, input: MoveRecurrenceOccurrenceInput, scheduler?: LocalNotificationScheduler): Promise<{ scope: MoveRecurrenceOccurrenceInput['scope'] }> {
   const series = await source.getRecurrenceSeries(input.seriesId);
   if (series === null) throw new Error('Серия повторения не найдена');
-  assertRecurrenceOccurrence(series, input.occursOn);
+  if (series.itemKind === 'task') await assertTaskRecurrenceOccurrence(source, series, input.occursOn);
+  else assertRecurrenceOccurrence(series, input.occursOn);
   if (input.targetDate === input.occursOn) return { scope: input.scope };
-  const masterBlocks = series.itemKind === 'task' ? (await source.listScheduleBlocksForTaskItem(series.itemId)).filter((block) => block.occurrenceId === null) : [];
+  const effective = series.itemKind === 'task' ? await getEffectiveTaskRecurrence(source, series, input.occursOn) : null;
+  const masterBlocks = series.itemKind === 'task'
+    ? effective?.blockTemplates === null
+      ? (await source.listScheduleBlocksForTaskItem(series.itemId)).filter((block) => block.occurrenceId === null)
+      : effective === null ? [] : fromBlockTemplates(effective.blockTemplates, series.itemId, series.createdAt)
+    : [];
   const now = new Date().toISOString();
   await source.transaction(async () => {
     if (input.scope === 'series') {
@@ -225,7 +306,8 @@ export async function moveRecurrenceOccurrence(source: AppDataSource, input: Mov
 export async function setRecurrenceOccurrenceState(source: AppDataSource, seriesId: EntityId, occursOn: string, state: 'active' | 'completed' | 'cancelled', scheduler?: LocalNotificationScheduler, now = new Date()): Promise<void> {
   const series = await source.getRecurrenceSeries(seriesId);
   if (series === null) throw new Error('Серия повторения не найдена');
-  assertRecurrenceOccurrence(series, occursOn);
+  if (series.itemKind === 'task') await assertTaskRecurrenceOccurrence(source, series, occursOn);
+  else assertRecurrenceOccurrence(series, occursOn);
   const existing = (await source.listRecurrenceOccurrences(seriesId)).find((occurrence) => occurrence.occursOn === occursOn);
   const updatedAt = now.toISOString();
   await source.saveRecurrenceOccurrence({
@@ -297,18 +379,23 @@ export async function synchronizeRecurrenceNotifications(source: AppDataSource, 
   for (const recurrence of series.filter((candidate) => candidate.itemKind === 'task')) {
     const task = await source.getTaskItem(recurrence.itemId);
     if (task === null || task.completedAt !== null) continue;
-    const masterBlocks = allBlocks.filter((block) => block.taskItemId === task.id && block.occurrenceId === null);
-    if (masterBlocks.length === 0) continue;
     const occurrences = await source.listRecurrenceOccurrences(recurrence.id);
     const byDate = new Map(occurrences.map((occurrence) => [occurrence.occursOn, occurrence]));
-    for (const occursOn of getRecurrenceDates(recurrence, fromDate, untilDate)) {
+    for (let occursOn = fromDate; occursOn <= untilDate; occursOn = addCalendarDays(occursOn, 1)) {
+      const effective = await getEffectiveTaskRecurrence(source, recurrence, occursOn);
+      if (effective === null || !getRecurrenceDates(effective.rule, occursOn, occursOn).includes(occursOn)) continue;
       const existing = byDate.get(occursOn);
       if (existing?.cancelledAt !== null && existing?.cancelledAt !== undefined || existing?.completedAt !== null && existing?.completedAt !== undefined) continue;
       const occurrenceId = existing?.id ?? `occurrence-${recurrence.id}-${occursOn}`;
+      const masterBlocks = effective.blockTemplates === null
+        ? allBlocks.filter((block) => block.taskItemId === task.id && block.occurrenceId === null)
+        : fromBlockTemplates(effective.blockTemplates, task.id, recurrence.createdAt);
+      if (masterBlocks.length === 0) continue;
       const blocks = existing?.blocksOverridden
         ? (await source.listScheduleBlocks()).filter((block) => block.occurrenceId === occurrenceId)
-        : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, occursOn, recurrence.startsOn), id: `${occurrenceId}-${block.id}`, occurrenceId, notificationId: null }));
-      const scheduled = await synchronizeBlocks(source, task, blocks.map((block) => ({ ...block, notificationId: null })), now, scheduler);
+        : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, occursOn), id: `${occurrenceId}-${block.id}`, occurrenceId, notificationId: null }));
+      const notificationTask = { ...task, ...effective.taskPatch };
+      const scheduled = await synchronizeBlocks(source, notificationTask, blocks.map((block) => ({ ...block, notificationId: null })), now, scheduler);
       const notificationIds = scheduled.map((block) => block.notificationId).filter((id): id is string => id !== null && id !== undefined);
       await source.saveRecurrenceOccurrence({
         id: occurrenceId,
@@ -345,13 +432,17 @@ export async function continueIncompleteTask(source: AppDataSource, input: Unfin
 
   const series = await source.getRecurrenceSeries(input.occurrence.seriesId);
   if (series === null || series.itemKind !== 'task' || series.itemId !== task.id) throw new Error('Повторение задачи не найдено');
-  assertRecurrenceOccurrence(series, input.occurrence.occursOn);
+  await assertTaskRecurrenceOccurrence(source, series, input.occurrence.occursOn);
   const existing = (await source.listRecurrenceOccurrences(series.id)).find((occurrence) => occurrence.occursOn === input.occurrence!.occursOn);
   const occurrenceId = existing?.id ?? `occurrence-${series.id}-${input.occurrence.occursOn}`;
-  const masterBlocks = (await source.listScheduleBlocksForTaskItem(task.id)).filter((block) => block.occurrenceId === null);
+  const effective = await getEffectiveTaskRecurrence(source, series, input.occurrence.occursOn);
+  if (effective === null) throw new Error('Экземпляр не принадлежит серии повторения');
+  const masterBlocks = effective.blockTemplates === null
+    ? (await source.listScheduleBlocksForTaskItem(task.id)).filter((block) => block.occurrenceId === null)
+    : fromBlockTemplates(effective.blockTemplates, task.id, updatedAt);
   const currentBlocks = existing?.blocksOverridden
     ? (await source.listScheduleBlocks()).filter((block) => block.occurrenceId === occurrenceId)
-    : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, input.occurrence!.occursOn, series.startsOn), id: `${occurrenceId}-${block.id}`, occurrenceId, createdAt: updatedAt, updatedAt, deletedAt: null }));
+    : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, input.occurrence!.occursOn), id: `${occurrenceId}-${block.id}`, occurrenceId, createdAt: updatedAt, updatedAt, deletedAt: null }));
   const latestId = currentBlocks.reduce<string | null>((result, block) => result === null || new Date(block.endsAt).getTime() > new Date(currentBlocks.find((candidate) => candidate.id === result)!.endsAt).getTime() ? block.id : result, null);
   if (latestId === null) throw new Error('Для повторения нет блока, который можно продлить');
   const extendedBlocks = currentBlocks.map((block) => block.id === latestId ? withThirtyMoreMinutes(block, updatedAt) : { ...block, updatedAt });
@@ -384,6 +475,8 @@ export async function returnIncompleteTaskToBacklog(source: AppDataSource, input
   }
   const series = await source.getRecurrenceSeries(input.occurrence.seriesId);
   if (series === null || series.itemKind !== 'task' || series.itemId !== input.taskId) throw new Error('Повторение задачи не найдено');
+  const task = await source.getTaskItem(input.taskId);
+  if (task === null) throw new Error('Задача для возврата в Backlog не найдена');
   await setRecurrenceOccurrenceState(source, series.id, input.occurrence.occursOn, 'cancelled', scheduler);
   const occurrence = (await source.listRecurrenceOccurrences(series.id)).find((candidate) => candidate.occursOn === input.occurrence!.occursOn);
   if (occurrence !== undefined) {
@@ -393,13 +486,27 @@ export async function returnIncompleteTaskToBacklog(source: AppDataSource, input
     }
   }
   const returnedAt = new Date().toISOString();
+  const effective = await getEffectiveTaskRecurrence(source, series, input.occurrence.occursOn);
+  const patch = { ...(effective?.taskPatch ?? {}), ...(occurrence?.taskPatch ?? {}) };
+  await source.saveTaskItem({
+    ...task,
+    ...patch,
+    id: `backlog-${task.id}-${input.occurrence.occursOn}`,
+    completedAt: null,
+    scheduledOn: null,
+    periodStartOn: null,
+    periodEndOn: null,
+    createdAt: returnedAt,
+    updatedAt: returnedAt,
+  });
   await source.saveTransferHistory({ id: `transfer-${input.taskId}-${input.occurrence.occursOn}-${returnedAt}`, taskItemId: input.taskId, reason: input.reason, returnedAt, createdAt: returnedAt });
 }
 
 export async function removeRecurrenceOccurrence(source: AppDataSource, input: { seriesId: EntityId; occursOn: string; scope: 'occurrence' | 'series' }, scheduler?: LocalNotificationScheduler): Promise<void> {
   const series = await source.getRecurrenceSeries(input.seriesId);
   if (series === null) throw new Error('Серия повторения не найдена');
-  assertRecurrenceOccurrence(series, input.occursOn);
+  if (series.itemKind === 'task') await assertTaskRecurrenceOccurrence(source, series, input.occursOn);
+  else assertRecurrenceOccurrence(series, input.occursOn);
   if (input.scope === 'series') {
     await source.transaction(async () => { await source.deleteRecurrenceSeries(series.id); });
     if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
@@ -464,15 +571,23 @@ export async function getPlanUntimedTasks(source: AppDataSource, isoDate: string
   const result: PlanUntimedTask[] = [];
   for (const task of tasks) {
     if (taskIdsWithExactTime.has(task.id)) continue;
-    const recurrence = series.find((candidate) => candidate.itemKind === 'task' && candidate.itemId === task.id);
-    if (recurrence === undefined) {
+    const recurrences = series.filter((candidate) => candidate.itemKind === 'task' && candidate.itemId === task.id);
+    if (recurrences.length === 0) {
       if (hasPlanPlacement({ plannedOn: task.scheduledOn ?? null, periodStartOn: task.periodStartOn ?? null, periodEndOn: task.periodEndOn ?? null }, isoDate)) result.push({ ...task, seriesId: null, occursOn: null });
       continue;
     }
-    const occurrences = await source.listRecurrenceOccurrences(recurrence.id);
-    const occurrence = occurrences.find((candidate) => candidate.occursOn === isoDate);
-    if (getRecurrenceDates(recurrence, isoDate, isoDate).includes(isoDate) && !(occurrence?.cancelledAt !== null && occurrence?.cancelledAt !== undefined)) result.push({ ...task, ...(occurrence?.taskPatch ?? {}), seriesId: recurrence.id, occursOn: isoDate });
-    for (const moved of occurrences.filter((candidate) => candidate.taskPatch?.scheduledOn === isoDate)) result.push({ ...task, ...(moved.taskPatch ?? {}), seriesId: recurrence.id, occursOn: moved.occursOn });
+    for (const recurrence of recurrences) {
+      const effective = await getEffectiveTaskRecurrence(source, recurrence, isoDate);
+      const occurrences = await source.listRecurrenceOccurrences(recurrence.id);
+      const occurrence = occurrences.find((candidate) => candidate.occursOn === isoDate);
+      if (effective !== null && getRecurrenceDates(effective.rule, isoDate, isoDate).includes(isoDate) && !(occurrence?.cancelledAt !== null && occurrence?.cancelledAt !== undefined)) {
+        result.push({ ...task, ...effective.taskPatch, ...(occurrence?.taskPatch ?? {}), seriesId: recurrence.id, occursOn: isoDate });
+      }
+      for (const moved of occurrences.filter((candidate) => candidate.taskPatch?.scheduledOn === isoDate)) {
+        const movedEffective = await getEffectiveTaskRecurrence(source, recurrence, moved.occursOn);
+        result.push({ ...task, ...(movedEffective?.taskPatch ?? {}), ...(moved.taskPatch ?? {}), seriesId: recurrence.id, occursOn: moved.occursOn });
+      }
+    }
   }
   return result;
 }
@@ -518,12 +633,27 @@ export async function getPlanScheduleBlocks(source: AppDataSource, isoDate: stri
   const projected: ScheduleBlock[] = blocks.filter((block) => block.occurrenceId === null && taskIds.has(block.taskItemId) && !recurringTaskIds.has(block.taskItemId));
   projected.push(...blocks.filter((block) => block.occurrenceId !== null && taskIds.has(block.taskItemId) && recurringTaskIds.has(block.taskItemId)));
   for (const recurring of series.filter((candidate) => candidate.itemKind === 'task')) {
-    const masterBlocks = blocks.filter((block) => block.occurrenceId === null && block.taskItemId === recurring.itemId);
-    if (masterBlocks.length === 0 || !getRecurrenceDates(recurring, isoDate, isoDate).includes(isoDate)) continue;
+    const effective = await getEffectiveTaskRecurrence(source, recurring, isoDate);
+    if (effective === null || !getRecurrenceDates(effective.rule, isoDate, isoDate).includes(isoDate)) continue;
+    const masterBlocks = effective.blockTemplates === null
+      ? blocks.filter((block) => block.occurrenceId === null && block.taskItemId === recurring.itemId)
+      : fromBlockTemplates(effective.blockTemplates, recurring.itemId, recurring.createdAt);
+    if (masterBlocks.length === 0) continue;
     const occurrences = await source.listRecurrenceOccurrences(recurring.id);
     const occurrence = occurrences.find((candidate) => candidate.occursOn === isoDate);
     if (occurrence !== undefined && occurrence.cancelledAt !== null) continue;
-    const selected = occurrence?.blocksOverridden ? [] : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, isoDate, recurring.startsOn), id: `recurrence-${recurring.id}-${isoDate}-${block.id}`, occurrenceId: occurrence?.id ?? `virtual:${recurring.id}:${isoDate}` }));
+    for (let index = 0; index < projected.length; index += 1) {
+      const block = projected[index]!;
+      if (block.taskItemId !== recurring.itemId || block.occurrenceId === null) continue;
+      const storedOccurrence = occurrences.find((candidate) => candidate.id === block.occurrenceId);
+      if (storedOccurrence !== undefined) projected[index] = { ...block, displayTaskPatch: { ...effective.taskPatch, ...(storedOccurrence.taskPatch ?? {}) } };
+    }
+    const selected = occurrence?.blocksOverridden ? [] : masterBlocks.map((block) => ({
+      ...shiftScheduleBlockToDate(block, isoDate),
+      id: `recurrence-${recurring.id}-${isoDate}-${block.id}`,
+      occurrenceId: occurrence?.id ?? `virtual:${recurring.id}:${isoDate}`,
+      displayTaskPatch: { ...effective.taskPatch, ...(occurrence?.taskPatch ?? {}) },
+    }));
     projected.push(...selected);
   }
   return projected.filter((block) => doesScheduleBlockOverlapDate(block, isoDate));
