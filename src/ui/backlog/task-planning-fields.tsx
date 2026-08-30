@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
+import { formatDuration } from '../format-duration';
 import { PlanningValuePicker, type PlanningValueOption } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
 import { getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
@@ -27,7 +28,7 @@ export interface TaskPlanningDraft {
 }
 
 export interface TaskPlanningFieldsProps {
-  defaultBlock: TaskPlanningBlock;
+  defaultBlock: TaskPlanningBlock | null;
   onChange: (value: TaskPlanningDraft) => void;
   value: TaskPlanningDraft;
 }
@@ -50,9 +51,12 @@ const timeOptions: readonly PlanningValueOption[] = Array.from({ length: 288 }, 
   const value = `${String(Math.floor(index / 12)).padStart(2, '0')}:${String((index % 12) * 5).padStart(2, '0')}`;
   return { label: value, value };
 });
-const durationOptions: readonly PlanningValueOption[] = Array.from({ length: 96 }, (_, index) => ({ label: `${(index + 1) * 5} мин`, value: String((index + 1) * 5) }));
+const durationOptions: readonly PlanningValueOption[] = Array.from({ length: 96 }, (_, index) => {
+  const minutes = (index + 1) * 5;
+  return { label: formatDuration(minutes), value: String(minutes) };
+});
 
-export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
+export function createInitialTaskPlanningDraft(defaultDate?: string): TaskPlanningDraft {
   return {
     blocks: [],
     periodEndOn: '',
@@ -60,8 +64,8 @@ export function createInitialTaskPlanningDraft(): TaskPlanningDraft {
     repeatFrequency: 'none',
     repeatInterval: '1',
     repeatWeekdays: [],
-    scheduledOn: '',
-    scheduleMode: 'none',
+    scheduledOn: defaultDate ?? '',
+    scheduleMode: defaultDate === undefined ? 'none' : 'date',
   };
 }
 
@@ -168,9 +172,10 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
         <Pressable
           accessibilityLabel="Добавить блок времени"
           accessibilityRole="button"
-          onPress={() => update({ blocks: [...value.blocks, { ...defaultBlock, id: `${defaultBlock.id}-${value.blocks.length + 1}` }] })}
-          style={styles.addBlockButton}>
-          <Text style={styles.addBlockText}>Добавить блок времени</Text>
+          accessibilityState={{ disabled: defaultBlock === null }}
+          onPress={() => { if (defaultBlock !== null) update({ blocks: [...value.blocks, { ...defaultBlock, id: `${defaultBlock.id}-${value.blocks.length + 1}` }] }); }}
+          style={[styles.addBlockButton, defaultBlock === null && styles.disabled]}>
+          <Text style={[styles.addBlockText, defaultBlock === null && styles.disabledText]}>{defaultBlock === null ? 'Нет свободного блока' : 'Добавить блок времени'}</Text>
         </Pressable>
       </View>
       {value.blocks.map((block, index) => (
@@ -302,6 +307,8 @@ const styles = StyleSheet.create({
     fontWeight: designTokens.typography.weight.semibold,
     lineHeight: designTokens.typography.lineHeight.meta,
   },
+  disabled: { opacity: designTokens.state.disabledOpacity },
+  disabledText: { color: designTokens.color.text.tertiary },
   block: {
     backgroundColor: designTokens.color.surface.subtle,
     borderRadius: designTokens.radius.row,

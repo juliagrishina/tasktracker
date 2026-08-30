@@ -506,11 +506,11 @@ function SectionHeader({ action, title }: { action: string; title: string }) {
 function PlanListRow({ allowCompletedPress = false, completed = false, onLongPress, onPress, title, time }: { allowCompletedPress?: boolean; completed?: boolean; onLongPress?: () => void; onPress: () => void; title: string; time: string }) {
   return (
     <ContextMenuPressable accessibilityLabel={`${time}: ${title}${completed ? ', выполнено' : ''}`} onContextMenu={(event) => { event.preventDefault(); onLongPress?.(); }} onLongPress={onLongPress} onPress={() => { if (!completed || allowCompletedPress) onPress(); }}><SurfaceCard style={[styles.listRow, completed && styles.completedListRow]}>
-      <Text style={styles.time}>{time}</Text>
+      <Text numberOfLines={2} style={styles.time}>{time}</Text>
       <View style={[styles.dot, completed && styles.completedDot]} />
       <View style={styles.listCopy}>
         <Text numberOfLines={1} style={[styles.listTitle, completed && styles.completedListText]}>{completed ? `✓ ${title}` : title}</Text>
-        <Text numberOfLines={1} style={[styles.listDetail, completed && styles.completedListText]}>{completed ? 'Выполнено' : 'Точно запланировано'}</Text>
+        {completed ? <Text numberOfLines={1} style={[styles.listDetail, styles.completedListText]}>Выполнено</Text> : null}
       </View>
     </SurfaceCard></ContextMenuPressable>
   );
@@ -655,7 +655,8 @@ const styles = StyleSheet.create({
     color: designTokens.color.text.secondary,
     fontSize: designTokens.typography.size.micro,
     lineHeight: designTokens.typography.lineHeight.micro,
-    width: designTokens.space[32] + designTokens.space[8],
+    flexShrink: 0,
+    width: designTokens.space[24] + designTokens.space[8],
   },
   dot: {
     backgroundColor: designTokens.color.feedback.success.base,

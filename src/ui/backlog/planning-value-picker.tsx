@@ -4,13 +4,17 @@ import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native
 import { designTokens } from '../design/tokens';
 
 export interface PlanningValueOption { label: string; value: string; }
+export function getPickerInitialScrollIndex(values: readonly string[], selectedValue: string): number {
+  const selectedIndex = values.indexOf(selectedValue);
+  return selectedIndex < 0 ? 0 : Math.max(0, selectedIndex - 5);
+}
 export function PlanningValuePicker({ accessibilityLabel, onChange, options, value, title }: { accessibilityLabel: string; onChange: (value: string) => void; options: readonly PlanningValueOption[]; value: string; title: string }) {
   const [visible, setVisible] = useState(false);
   const selected = options.find((option) => option.value === value);
   return <View>
     <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" onPress={() => setVisible(true)} style={styles.trigger}><Text style={styles.triggerText}>{selected?.label ?? 'Выбрать'}</Text><Text>⌄</Text></Pressable>
     <Modal animationType="slide" onRequestClose={() => setVisible(false)} transparent visible={visible}>
-      <View style={styles.overlay}><Pressable accessibilityLabel={`Закрыть выбор: ${title}`} onPress={() => setVisible(false)} style={styles.scrim} /><View style={styles.sheet}><Text style={styles.title}>{title}</Text><FlatList data={options} getItemLayout={(_, index) => ({ index, length: 44, offset: index * 44 })} initialNumToRender={16} keyExtractor={(option) => option.value} renderItem={({ item }) => <Pressable accessibilityLabel={item.label} accessibilityRole="button" onPress={() => { onChange(item.value); setVisible(false); }} style={[styles.option, item.value === value && styles.selected]}><Text style={styles.optionText}>{item.label}</Text></Pressable>} /></View></View>
+      <View style={styles.overlay}><Pressable accessibilityLabel={`Закрыть выбор: ${title}`} onPress={() => setVisible(false)} style={styles.scrim} /><View style={styles.sheet}><Text style={styles.title}>{title}</Text><FlatList data={options} getItemLayout={(_, index) => ({ index, length: 44, offset: index * 44 })} initialNumToRender={16} initialScrollIndex={getPickerInitialScrollIndex(options.map((option) => option.value), value)} key={`${title}-${value}`} keyExtractor={(option) => option.value} renderItem={({ item }) => <Pressable accessibilityLabel={item.label} accessibilityRole="button" onPress={() => { onChange(item.value); setVisible(false); }} style={[styles.option, item.value === value && styles.selected]}><Text style={styles.optionText}>{item.label}</Text></Pressable>} /></View></View>
     </Modal>
   </View>;
 }

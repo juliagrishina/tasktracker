@@ -347,6 +347,17 @@ describe('DayDashboard', () => {
     await waitFor(() => expect(source.getTaskItem('date-task')).resolves.toMatchObject({ scheduledOn: null }));
   });
 
+  test('does not describe untimed tasks as precisely scheduled', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'untimed-copy-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Без времени в две строки', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-10', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Без времени в две строки')).toBeOnTheScreen());
+    expect(view.queryByText('Точно запланировано')).toBeNull();
+  });
+
   test('renders untimed items before the schedule', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';

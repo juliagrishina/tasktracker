@@ -71,6 +71,21 @@ export function getRecurrenceDates(rule: RecurrenceRule, from: string, to: strin
 }
 export function assertRecurrenceOccurrence(rule: RecurrenceRule, occursOn: string): void { if (!getRecurrenceDates(rule, occursOn, occursOn).includes(occursOn)) throw new Error('Экземпляр не принадлежит серии повторения'); }
 export function findScheduleConflicts(candidate: ScheduleBlock, existing: readonly ScheduleBlock[]): ScheduleBlock[] { const start = new Date(candidate.startsAt).getTime(); const end = new Date(candidate.endsAt).getTime(); return existing.filter((block) => block.id !== candidate.id && start < new Date(block.endsAt).getTime() && new Date(block.startsAt).getTime() < end); }
+export function findFirstAvailablePlanTime(input: { blocks: readonly ScheduleBlock[]; date: string; durationMinutes: number; now: Date; settings: Pick<AppSettings, 'timeZoneId' | 'workdayStartsAt' | 'workdayEndsAt'> }): string | null {
+  const startOfWorkday = minutes(input.settings.workdayStartsAt);
+  const endOfWorkday = minutes(input.settings.workdayEndsAt);
+  const isToday = getDateInTimeZone(input.now.toISOString(), input.settings.timeZoneId) === input.date;
+  const currentTime = isToday ? minutes(getTimeInTimeZone(input.now.toISOString(), input.settings.timeZoneId)) : startOfWorkday;
+  const firstCandidate = Math.max(startOfWorkday, Math.ceil((currentTime + 1) / 5) * 5);
+  for (let candidate = firstCandidate; candidate + input.durationMinutes <= endOfWorkday; candidate += 5) {
+    const startsAt = getInstantInTimeZone(input.date, `${String(Math.floor(candidate / 60)).padStart(2, '0')}:${String(candidate % 60).padStart(2, '0')}`, input.settings.timeZoneId);
+    const endsAt = new Date(new Date(startsAt).getTime() + input.durationMinutes * 60_000).toISOString();
+    if (findScheduleConflicts({ id: 'new-plan-block', taskItemId: 'new-plan-task', occurrenceId: null, timeZoneId: input.settings.timeZoneId, startsAt, endsAt, createdAt: startsAt, updatedAt: startsAt, deletedAt: null }, input.blocks).length === 0) {
+      return getTimeInTimeZone(startsAt, input.settings.timeZoneId);
+    }
+  }
+  return null;
+}
 export function getDayLoadPercent(settings: AppSettings, blocks: readonly ScheduleBlock[], day: string, estimatedMinutes = 0): number { const capacity = minutes(settings.workdayEndsAt) - minutes(settings.workdayStartsAt); if (capacity <= 0) throw new Error('Конец рабочего диапазона должен быть позже начала'); const total = blocks.reduce((sum, block) => { const [start, end] = bounds(block, day); return sum + Math.max(0, Math.min(new Date(block.endsAt).getTime(), end) - Math.max(new Date(block.startsAt).getTime(), start)) / 60_000; }, estimatedMinutes); return total / capacity * 100; }
 export function getPlanLoadTone(value: number): PlanLoadTone { return value <= 50 ? 'low' : value <= 70 ? 'medium' : 'high'; }
 export function createDefaultScheduleBlock(input: { id: EntityId; taskItemId: EntityId; now: Date; createdAt: string; }): ScheduleBlock { const start = new Date(input.now); start.setUTCSeconds(0, 0); start.setUTCMinutes(Math.ceil(start.getUTCMinutes() / 5) * 5); if (start <= input.now) start.setUTCMinutes(start.getUTCMinutes() + 5); return { id: input.id, taskItemId: input.taskItemId, occurrenceId: null, timeZoneId: 'UTC', startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 3_600_000).toISOString(), createdAt: input.createdAt, updatedAt: input.createdAt, deletedAt: null }; }

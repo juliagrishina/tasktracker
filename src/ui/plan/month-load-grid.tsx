@@ -68,8 +68,7 @@ function MonthLoadCell({ day, onPress, selected, today }: { day: PlanLoadDay; on
         { backgroundColor: tone.surface, borderColor: selected ? designTokens.color.primary : today ? designTokens.color.primaryStrong : tone.border },
         pressed && styles.pressed,
       ]}>
-      <Text style={styles.dayNumber}>{day.dayOfMonth}</Text>
-      {today ? <View style={styles.todayIndicator} /> : null}
+      <View style={[styles.dayBadge, today && styles.todayBadge]}><Text style={[styles.dayNumber, today && styles.todayNumber]}>{day.dayOfMonth}</Text></View>
       <Text style={[styles.load, { color: tone.foreground }]}>{day.loadPercent}%</Text>
     </Pressable>
   );
@@ -116,13 +115,18 @@ const styles = StyleSheet.create({
     fontWeight: designTokens.typography.weight.bold,
     lineHeight: designTokens.typography.lineHeight.label,
   },
-  todayIndicator: {
+  dayBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: designTokens.color.primaryStrong,
     borderRadius: designTokens.radius.pill,
-    height: designTokens.space[6],
-    marginTop: designTokens.space[2],
-    width: designTokens.space[6],
+    minWidth: designTokens.size.touchTargetMin - designTokens.space[12],
+    paddingHorizontal: designTokens.space[8],
+    paddingVertical: designTokens.space[4],
+  },
+  todayBadge: {
+    backgroundColor: designTokens.color.primary,
+  },
+  todayNumber: {
+    color: designTokens.color.text.inverse,
   },
   load: {
     fontSize: designTokens.typography.size.micro,

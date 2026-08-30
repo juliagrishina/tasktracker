@@ -67,6 +67,7 @@ export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new D
             const title = titleByTaskId.get(layout.block.taskItemId) ?? 'Задача';
             const timeRange = formatTimeRange(layout.block, timeZoneId);
             const isCompleted = completedBlockIds.has(layout.blockId);
+            const showTimeRange = layout.durationMinutes * MINUTE_HEIGHT >= 56;
             const label = `${title}, ${timeRange}${isCompleted ? ', выполнено' : ''}, колонка ${layout.column + 1} из ${layout.columnCount}`;
             return (
               <ContextMenuPressable
@@ -88,7 +89,7 @@ export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new D
                   pressed && styles.pressed,
                 ]}>
                 <Text numberOfLines={1} style={[styles.blockTitle, isCompleted && styles.completedText]}>{isCompleted ? `✓ ${title}` : title}</Text>
-                <Text numberOfLines={1} style={[styles.blockTime, isCompleted && styles.completedText]}>{timeRange}</Text>
+                {showTimeRange ? <Text numberOfLines={1} style={[styles.blockTime, isCompleted && styles.completedText]}>{timeRange}</Text> : null}
               </ContextMenuPressable>
             );
           })}

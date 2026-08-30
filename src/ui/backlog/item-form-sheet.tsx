@@ -14,6 +14,7 @@ import { useAppServices } from '../../application/app-services-provider';
 import type { CreateTimedReminderTaskWithPlanningInput, SaveTaskWithPlanningInput, ScheduleConflict } from '../../application/planning-types';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
 import { designTokens } from '../design/tokens';
+import { formatDuration } from '../format-duration';
 import {
   createDefaultBlock,
   createInitialTaskPlanningDraft,
@@ -24,7 +25,8 @@ import {
 import { PlanningValuePicker } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
 import { confirmBacklogDeletion } from './confirmation';
-import { getInstantInTimeZone, getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
+import type { PlanningSuccessResult } from './planning-success';
+import { findFirstAvailablePlanTime, getInstantInTimeZone, getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 
 export type ItemFormType = 'project' | 'task' | 'subtask' | 'reminder';
 export type ItemFormMode = 'create' | 'edit';
@@ -35,7 +37,10 @@ type PendingConflict =
   | { kind: 'timedReminder'; input: CreateTimedReminderTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] };
 const estimateOptions = [
   { label: 'Без оценки', value: '' },
-  ...Array.from({ length: 96 }, (_, index) => ({ label: `${(index + 1) * 5} мин`, value: String((index + 1) * 5) })),
+  ...Array.from({ length: 96 }, (_, index) => {
+    const minutes = (index + 1) * 5;
+    return { label: formatDuration(minutes), value: String(minutes) };
+  }),
 ];
 
 interface ItemFormSheetProps {
@@ -47,6 +52,7 @@ interface ItemFormSheetProps {
   parentTaskId?: string;
   projectId?: string | null;
   onSaved?: () => void;
+  onPlanned?: (result: PlanningSuccessResult) => void;
   onComplete?: (item: ActionableItem) => Promise<void>;
   onResume?: (item: ActionableItem) => Promise<void>;
   onDelete?: (item: ActionableItem) => Promise<void>;
@@ -125,6 +131,7 @@ export function ItemFormSheet({
   parentTaskId,
   projectId,
   onSaved,
+  onPlanned,
   onComplete,
   onResume,
   onDelete,
@@ -137,7 +144,7 @@ export function ItemFormSheet({
   const [duration, setDuration] = useState(() => getInitialDuration(item));
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => getInitialProjectId(item, projectId));
   const [projectPickerVisible, setProjectPickerVisible] = useState(false);
-  const [remindsOn, setRemindsOn] = useState(() => getInitialReminderValue(item, 'remindsOn'));
+  const [remindsOn, setRemindsOn] = useState(() => getInitialReminderValue(item, 'remindsOn') || (type === 'reminder' ? planningContext?.defaultDate ?? '' : ''));
   const [periodStartOn, setPeriodStartOn] = useState(() => getInitialReminderValue(item, 'periodStartOn'));
   const [periodEndOn, setPeriodEndOn] = useState(() => getInitialReminderValue(item, 'periodEndOn'));
   const [repeatFrequency, setRepeatFrequency] = useState<'' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays'>(() => getInitialRepeatFrequency(item));
@@ -145,30 +152,47 @@ export function ItemFormSheet({
   const [repeatWeekdays, setRepeatWeekdays] = useState(() => getInitialRepeatWeekdays(item));
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(createInitialTaskPlanningDraft);
+  const [planningDraft, setPlanningDraft] = useState<TaskPlanningDraft>(() => createInitialTaskPlanningDraft(
+    (type === 'task' || type === 'subtask') ? planningContext?.defaultDate : undefined,
+  ));
   const [persistedBlockIds, setPersistedBlockIds] = useState<readonly string[]>([]);
   const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
   const [reminderTimed, setReminderTimed] = useState(false);
   const [reminderTime, setReminderTime] = useState('09:00');
-  const defaultBlock = useMemo(
-    () => createDefaultBlock(planningContext?.defaultDate ?? '', new Date(), settings.timeZoneId),
-    [planningContext?.defaultDate, settings.timeZoneId],
-  );
+  const [planBlocks, setPlanBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
   const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
+  const defaultBlock = useMemo(
+    () => {
+      const fallback = createDefaultBlock(planningContext?.defaultDate ?? '', new Date(), settings.timeZoneId);
+      const startsAt = planningContext === undefined ? fallback.startsAt : findFirstAvailablePlanTime({
+        blocks: planBlocks,
+        date: planningContext.defaultDate,
+        durationMinutes: 60,
+        now: new Date(),
+        settings,
+      });
+      return startsAt === null && planningContext !== undefined ? null : { ...fallback, date: planningContext?.defaultDate ?? fallback.date, startsAt: startsAt ?? fallback.startsAt };
+    },
+    [planBlocks, planningContext, settings],
+  );
+  useEffect(() => {
+    if (!visible || !isPlanTaskForm || planningContext === undefined) return;
+    void planningActions.getPlanScheduleBlocks(planningContext.defaultDate).then(setPlanBlocks);
+  }, [isPlanTaskForm, planningActions, planningContext, visible]);
   useEffect(() => {
     if (!visible || !isPlanTaskForm || item === undefined || !('kind' in item)) return;
     void planningActions.getTaskPlanningSnapshot(item.id).then(({ blocks, recurrence, placement }) => {
       setPersistedBlockIds(blocks.map((block) => block.id));
       setPlanningDraft({
-        ...createInitialTaskPlanningDraft(),
+        ...createInitialTaskPlanningDraft(placement.scheduledOn ?? (blocks.length === 0 ? planningContext?.defaultDate : undefined)),
         blocks: blocks.map((block) => ({ id: block.id, date: getDateInTimeZone(block.startsAt, settings.timeZoneId), startsAt: getTimeInTimeZone(block.startsAt, settings.timeZoneId), durationMinutes: String((new Date(block.endsAt).getTime() - new Date(block.startsAt).getTime()) / 60_000) })),
         repeatFrequency: recurrence?.frequency ?? 'none',
         repeatInterval: String(recurrence?.interval ?? 1),
         repeatWeekdays: recurrence?.weekdays === undefined ? [] : [...recurrence.weekdays],
-        scheduledOn: placement.scheduledOn ?? recurrence?.startsOn ?? '',
+        scheduledOn: placement.scheduledOn ?? recurrence?.startsOn ?? (blocks.length === 0 ? planningContext?.defaultDate ?? '' : ''),
         periodStartOn: placement.periodStartOn ?? '',
         periodEndOn: placement.periodEndOn ?? '',
-        scheduleMode: placement.scheduledOn !== null ? 'date' : placement.periodStartOn !== null ? 'period' : 'none',
+        scheduleMode: placement.scheduledOn !== null || (blocks.length === 0 && planningContext?.defaultDate !== undefined) ? 'date' : placement.periodStartOn !== null ? 'period' : 'none',
       });
     });
   }, [isPlanTaskForm, item, planningActions, settings.timeZoneId, visible]);
@@ -200,6 +224,8 @@ export function ItemFormSheet({
       if (occurrenceEdit !== undefined) {
         await occurrenceEdit.onSave({ title, description, estimatedDurationMinutes });
         await afterSave?.();
+        const plannedOn = planningDraft.blocks[0]?.date ?? (planningDraft.scheduleMode === 'date' ? planningDraft.scheduledOn : '');
+        if (plannedOn !== '') onPlanned?.({ plannedOn, title, type: type === 'subtask' ? 'subtask' : 'task' });
         onSaved?.();
         onClose();
         return;
@@ -365,6 +391,7 @@ export function ItemFormSheet({
               return;
             }
             await afterSave?.();
+            if (planningContext !== undefined) onPlanned?.({ plannedOn: reminderDate, title, type: 'reminder' });
             onSaved?.();
             onClose();
             return;
@@ -384,6 +411,10 @@ export function ItemFormSheet({
       }
 
       await afterSave?.();
+      if (type === 'reminder' && planningContext !== undefined) {
+        const plannedOn = emptyToNull(remindsOn);
+        if (plannedOn !== null) onPlanned?.({ plannedOn, title, type: 'reminder' });
+      }
       onSaved?.();
       onClose();
     } catch (caughtError) {
@@ -458,7 +489,7 @@ export function ItemFormSheet({
             ) : null}
             {type === 'task' || type === 'subtask' || type === 'reminder' ? (
               <View>
-                <Text style={styles.label}>Оценочная длительность, мин.</Text>
+                <Text style={styles.label}>Оценочная длительность</Text>
                 <PlanningValuePicker accessibilityLabel="Оценочная длительность, мин." onChange={setDuration} options={estimateOptions} title="Оценочная длительность" value={duration} />
               </View>
             ) : null}

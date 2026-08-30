@@ -39,4 +39,13 @@ describe('DayTimeline', () => {
     expect(view.getByLabelText('Первый блок, 09:00–10:00, колонка 1 из 2')).toBeOnTheScreen();
     expect(view.getByLabelText('Второй блок, 09:30–10:30, колонка 2 из 2')).toBeOnTheScreen();
   });
+
+  test('keeps a narrow block title visible and hides its time range', async () => {
+    const view = await render(
+      <DayTimeline blocks={[block('narrow', 'task-narrow', '2026-08-22T09:00:00+03:00', '2026-08-22T09:30:00+03:00')]} selectedDate="2026-08-22" timeZoneId="Europe/Moscow" titleByTaskId={new Map([['task-narrow', 'Короткая встреча']])} />,
+    );
+
+    expect(view.getByText('Короткая встреча')).toBeOnTheScreen();
+    expect(view.queryByText('09:00–09:30')).toBeNull();
+  });
 });

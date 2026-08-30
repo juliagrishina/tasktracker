@@ -1,5 +1,6 @@
 import type { AppSettings, ScheduleBlock } from '../../src/domain/entities';
 import {
+  findFirstAvailablePlanTime,
   assertRecurrenceOccurrence,
   createDefaultScheduleBlock,
   getDateInTimeZone,
@@ -77,5 +78,15 @@ describe('planning domain', () => {
     expect(findScheduleConflicts({ ...block, id: 'candidate', startsAt: block.endsAt, endsAt: '2026-08-03T11:00:00+03:00' }, [block])).toHaveLength(0);
     expect(createDefaultScheduleBlock({ id: 'next', taskItemId: 'task-1', createdAt: block.createdAt, now: new Date('2026-08-03T23:59:00.000Z') }).startsAt)
       .toBe('2026-08-04T00:00:00.000Z');
+  });
+
+  test('finds the nearest free slot in the workday instead of using an occupied current time', () => {
+    expect(findFirstAvailablePlanTime({
+      blocks: [block],
+      date: '2026-08-03',
+      durationMinutes: 60,
+      now: new Date('2026-08-03T06:05:00.000Z'),
+      settings,
+    })).toBe('10:00');
   });
 });

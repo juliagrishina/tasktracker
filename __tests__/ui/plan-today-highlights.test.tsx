@@ -3,6 +3,7 @@ import { render } from '@testing-library/react-native';
 import { MonthLoadGrid } from '../../src/ui/plan/month-load-grid';
 import { getMonthLoadDays, getWeekLoadDays } from '../../src/ui/plan/plan-period-model';
 import { WeekLoadList } from '../../src/ui/plan/week-load-list';
+import { designTokens } from '../../src/ui/design/tokens';
 
 describe('plan today highlights', () => {
   test('marks today independently from the selected date in the weekly plan', async () => {
@@ -17,5 +18,6 @@ describe('plan today highlights', () => {
 
     expect(view.getByLabelText('7 августа: загрузка 0%, сегодня')).toBeOnTheScreen();
     expect(view.getByLabelText('5 августа: загрузка 0%')).toBeOnTheScreen();
+    expect(view.getByText('7')).toHaveStyle({ color: designTokens.color.text.inverse });
   });
 });
