@@ -34,10 +34,10 @@ export function RecurrenceMoveDialog({ occursOn, onMove, onRequestClose, visible
             <Text style={styles.label}>Новая дата</Text>
             <PlanningDatePicker accessibilityLabel="Дата переноса" onChange={setTargetDate} value={targetDate} />
           </View>
-          <Pressable accessibilityState={{ disabled: isMoving }} onPress={() => move('occurrence')} style={[styles.action, styles.primaryAction, isMoving && styles.disabledAction]}>
+          <Pressable accessibilityLabel="Перенести только выбранный экземпляр" accessibilityState={{ disabled: isMoving }} onPress={() => move('occurrence')} style={[styles.action, styles.primaryAction, isMoving && styles.disabledAction]}>
             <Text style={styles.primaryActionText}>Только этот экземпляр</Text>
           </Pressable>
-          <Pressable accessibilityState={{ disabled: isMoving }} onPress={() => move('series')} style={[styles.action, styles.secondaryAction, isMoving && styles.disabledAction]}>
+          <Pressable accessibilityLabel="Перенести всю серию" accessibilityState={{ disabled: isMoving }} onPress={() => move('series')} style={[styles.action, styles.secondaryAction, isMoving && styles.disabledAction]}>
             <Text style={styles.secondaryActionText}>Всю серию</Text>
           </Pressable>
           <Pressable accessibilityState={{ disabled: isMoving }} onPress={onRequestClose} style={styles.cancelAction}>

@@ -29,15 +29,15 @@ describe('recurrence move', () => {
     fireEvent.press(view.getByLabelText('Перенести этот экземпляр'));
 
     await waitFor(() => {
-      expect(view.getByText('Только этот экземпляр')).toBeOnTheScreen();
-      expect(view.getByText('Всю серию')).toBeOnTheScreen();
+      expect(view.getByLabelText('Перенести только выбранный экземпляр')).toBeOnTheScreen();
+      expect(view.getByLabelText('Перенести всю серию')).toBeOnTheScreen();
     });
     fireEvent.press(view.getByLabelText('Дата переноса'));
     await waitFor(() => expect(view.getByLabelText('11 Август 2026')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('11 Август 2026'));
     await waitFor(() => expect(view.getByText('11.08.2026')).toBeOnTheScreen());
     await act(async () => {
-      fireEvent.press(view.getByText('Только этот экземпляр'));
+      fireEvent.press(view.getByLabelText('Перенести только выбранный экземпляр'));
       await new Promise((resolve) => setTimeout(resolve, 1));
     });
 

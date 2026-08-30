@@ -28,28 +28,24 @@ describe('SettingsStatePanel', () => {
     fireEvent.press(view.getByRole('button', { name: 'Изменить' }));
     await waitFor(() => expect(view.getByLabelText('Начало рабочего дня')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Начало рабочего дня'));
-    await waitFor(() => expect(view.getByRole('button', { name: '01:00' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: '01:00' }));
-    await waitFor(() => expect(view.getByText('01:00')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getByRole('button', { name: '07:00' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: '07:00' }));
+    await waitFor(() => expect(view.getByLabelText('Начало рабочего дня')).toHaveTextContent(/07:00/));
     fireEvent.press(view.getByLabelText('Конец рабочего дня'));
-    await waitFor(() => expect(view.getByRole('button', { name: '02:00' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: '02:00' }));
-    await waitFor(() => expect(view.getByText('02:00')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getByRole('button', { name: '21:00' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: '21:00' }));
+    await waitFor(() => expect(view.getByLabelText('Конец рабочего дня')).toHaveTextContent(/21:00/));
     fireEvent.press(view.getByLabelText('Время вечерней проверки'));
-    await waitFor(() => expect(view.getByRole('button', { name: '03:00' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: '03:00' }));
-    await waitFor(() => expect(view.getByText('03:00')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Интервал уведомления'));
-    await waitFor(() => expect(view.getByRole('button', { name: '30 минут' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: '30 минут' }));
-    await waitFor(() => expect(view.getByText('30 минут')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getByRole('button', { name: '20:45' })).toBeOnTheScreen());
+    fireEvent.press(view.getByRole('button', { name: '20:45' }));
+    await waitFor(() => expect(view.getByLabelText('Время вечерней проверки')).toHaveTextContent(/20:45/));
     fireEvent.press(view.getByRole('button', { name: 'Сохранить параметры плана' }));
 
     await waitFor(() => expect(onPlanningSettingsChange).toHaveBeenCalledWith({
-      workdayStartsAt: '01:00',
-      workdayEndsAt: '02:00',
-      eveningReviewAt: '03:00',
-      notificationLeadMinutes: 30,
+      workdayStartsAt: '07:00',
+      workdayEndsAt: '21:00',
+      eveningReviewAt: '20:45',
+      notificationLeadMinutes: 10,
     }));
   });
 
@@ -62,7 +58,7 @@ describe('SettingsStatePanel', () => {
     fireEvent.press(view.getByLabelText('Интервал уведомления'));
     await waitFor(() => expect(view.getByRole('button', { name: '30 минут' })).toBeOnTheScreen());
     fireEvent.press(view.getByRole('button', { name: '30 минут' }));
-    await waitFor(() => expect(view.getByText('30 минут')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getByLabelText('Интервал уведомления')).toHaveTextContent(/30 минут/));
     fireEvent.press(view.getByRole('button', { name: 'Сохранить интервал' }));
 
     await waitFor(() => expect(onPlanningSettingsChange).toHaveBeenCalledWith({

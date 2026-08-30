@@ -231,7 +231,7 @@ export function ItemFormSheet({
         scheduleMode: placement.scheduledOn !== null || (blocks.length === 0 && planningContext?.defaultDate !== undefined) ? 'date' : placement.periodStartOn !== null ? 'period' : 'none',
       });
     });
-  }, [isPlanTaskForm, item, occurrenceEdit, planningActions, settings.timeZoneId, visible]);
+  }, [isPlanTaskForm, item, occurrenceEdit, planningActions, planningContext?.defaultDate, settings.timeZoneId, visible]);
 
   const formTitle = useMemo(() => {
     const createTitle: Record<ItemFormType, string> = {

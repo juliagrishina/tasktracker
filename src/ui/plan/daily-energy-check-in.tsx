@@ -30,14 +30,19 @@ export function DailyEnergyCheckIn({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visible) {
-      setSelectedEnergyPercent(initialEnergyPercent ?? defaultEnergyPercent);
+    if (!visible) return;
+    const selectedValue = initialEnergyPercent ?? defaultEnergyPercent;
+    let isCurrent = true;
+    void Promise.resolve().then(() => {
+      if (!isCurrent) return;
+      setSelectedEnergyPercent(selectedValue);
       setError(null);
       pickerRef.current?.scrollTo({
         animated: false,
-        y: Math.max(0, energyValues.indexOf(initialEnergyPercent ?? defaultEnergyPercent) * pickerRowHeight - pickerRowHeight),
+        y: Math.max(0, energyValues.indexOf(selectedValue) * pickerRowHeight - pickerRowHeight),
       });
-    }
+    });
+    return () => { isCurrent = false; };
   }, [initialEnergyPercent, visible]);
 
   const save = async () => {

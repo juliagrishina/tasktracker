@@ -13,7 +13,7 @@ describe('cloud integrations without Supabase configuration', () => {
     delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     jest.resetModules();
 
-    const { ensureAnonymousSession } = require('../../src/data/auth-session') as typeof import('../../src/data/auth-session');
+    const { ensureAnonymousSession } = jest.requireActual('../../src/data/auth-session') as typeof import('../../src/data/auth-session');
 
     await expect(ensureAnonymousSession()).resolves.toBeUndefined();
   });
@@ -23,7 +23,7 @@ describe('cloud integrations without Supabase configuration', () => {
     delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     jest.resetModules();
 
-    const { recordEvent } = require('../../src/data/events-client') as typeof import('../../src/data/events-client');
+    const { recordEvent } = jest.requireActual('../../src/data/events-client') as typeof import('../../src/data/events-client');
 
     await expect(
       recordEvent({

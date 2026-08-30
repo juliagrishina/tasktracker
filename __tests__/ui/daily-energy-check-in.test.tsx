@@ -1,10 +1,12 @@
 import { act, render, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import * as mockReact from 'react';
+
+import { DailyEnergyCheckIn } from '../../src/ui/plan/daily-energy-check-in';
 
 const mockScrollTo = jest.fn();
 
 jest.mock('react-native', () => {
-  const mockReact = require('react') as typeof import('react');
   return {
     Modal: ({ children, visible }: { children: ReactNode; visible: boolean }) => visible ? mockReact.createElement(mockReact.Fragment, null, children) : null,
     Pressable: 'Pressable',
@@ -17,8 +19,6 @@ jest.mock('react-native', () => {
     View: 'View',
   };
 });
-
-import { DailyEnergyCheckIn } from '../../src/ui/plan/daily-energy-check-in';
 
 describe('DailyEnergyCheckIn', () => {
   test('scrolls its initial 75-percent selection into view after opening', async () => {

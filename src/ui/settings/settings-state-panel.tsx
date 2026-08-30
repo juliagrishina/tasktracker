@@ -64,7 +64,7 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
       setFeedback(error instanceof Error ? error.message : 'Не удалось обновить часовой пояс');
     }
   };
-  const useDeviceTimeZone = async () => {
+  const activateDeviceTimeZone = async () => {
     if (onUseDeviceTimeZone === undefined) return;
     try {
       await onUseDeviceTimeZone();
@@ -144,7 +144,7 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
           <SettingsRow description="Знаменатель загрузки" label="Рабочий диапазон" value={`${settings.workdayStartsAt}–${settings.workdayEndsAt}`} />
           <SettingsRow description="Дела без времени" label="Вечерняя проверка" value={settings.eveningReviewAt} />
           <SettingsRow description={settings.timeZoneMode === 'manual' ? 'Выбран вручную из списка IANA' : 'Определяется автоматически устройством'} label="Часовой пояс" onPress={() => setIsTimeZonePickerVisible(true)} value={settings.timeZoneId} />
-          {settings.timeZoneMode === 'manual' ? <View style={styles.deviceTimeZoneAction}><ActionButton label="Использовать пояс устройства" onPress={() => void useDeviceTimeZone()} tone="soft" /></View> : <Text style={styles.settingDescription}>Сейчас используется пояс устройства: {settings.timeZoneId}</Text>}
+          {settings.timeZoneMode === 'manual' ? <View style={styles.deviceTimeZoneAction}><ActionButton label="Использовать пояс устройства" onPress={() => void activateDeviceTimeZone()} tone="soft" /></View> : <Text style={styles.settingDescription}>Сейчас используется пояс устройства: {settings.timeZoneId}</Text>}
           {planningSettingsEditorPlacement === 'plan' ? <PlanningSettingsEditor includePlanFields isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} settings={planningSettings} /> : null}
         </SurfaceCard>
 

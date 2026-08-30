@@ -11,7 +11,11 @@ interface RecurrenceScopeDialogProps {
 }
 
 export function RecurrenceScopeDialog({ actionLabel, onChoose, onRequestClose, seriesOptionLabel = 'Всю серию', visible }: RecurrenceScopeDialogProps) {
-  return <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible={visible}><View style={styles.overlay}><View style={styles.dialog}><Text style={styles.title}>{actionLabel}</Text><Text style={styles.description}>К чему применить это изменение?</Text><Pressable onPress={() => void onChoose('occurrence')} style={[styles.action, styles.primary]}><Text style={styles.primaryText}>Только этот экземпляр</Text></Pressable><Pressable onPress={() => void onChoose('series')} style={[styles.action, styles.secondary]}><Text style={styles.secondaryText}>{seriesOptionLabel}</Text></Pressable><Pressable onPress={onRequestClose} style={styles.cancel}><Text style={styles.cancelText}>Отмена</Text></Pressable></View></View></Modal>;
+  const occurrenceAccessibilityLabel = actionLabel === 'Редактировать повторение' ? 'Редактировать только выбранный экземпляр' : `${actionLabel}: только этот экземпляр`;
+  const seriesAccessibilityLabel = actionLabel === 'Редактировать повторение'
+    ? (seriesOptionLabel === 'Серию с этой даты' ? 'Редактировать серию с этой даты' : 'Редактировать всю серию')
+    : `${actionLabel}: ${seriesOptionLabel.toLowerCase()}`;
+  return <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible={visible}><View style={styles.overlay}><View style={styles.dialog}><Text style={styles.title}>{actionLabel}</Text><Text style={styles.description}>К чему применить это изменение?</Text><Pressable accessibilityLabel={occurrenceAccessibilityLabel} onPress={() => void onChoose('occurrence')} style={[styles.action, styles.primary]}><Text style={styles.primaryText}>Только этот экземпляр</Text></Pressable><Pressable accessibilityLabel={seriesAccessibilityLabel} onPress={() => void onChoose('series')} style={[styles.action, styles.secondary]}><Text style={styles.secondaryText}>{seriesOptionLabel}</Text></Pressable><Pressable onPress={onRequestClose} style={styles.cancel}><Text style={styles.cancelText}>Отмена</Text></Pressable></View></View></Modal>;
 }
 
 const styles = StyleSheet.create({
