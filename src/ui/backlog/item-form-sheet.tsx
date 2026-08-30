@@ -70,6 +70,11 @@ function emptyToNull(value: string): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
+function formatPlanningDate(value: string): string {
+  const [year, month, day] = value.split('-');
+  return year === undefined || month === undefined || day === undefined ? value : `${day}.${month}.${year}`;
+}
+
 function createItemId(type: ItemFormType): string {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -160,25 +165,45 @@ export function ItemFormSheet({
   const [reminderTimed, setReminderTimed] = useState(false);
   const [reminderTime, setReminderTime] = useState('09:00');
   const [planBlocks, setPlanBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
+  const [planningDateOverride, setPlanningDateOverride] = useState<string | null>(null);
+  const [pendingAlternativeDate, setPendingAlternativeDate] = useState<string | null>(null);
+  const [isNoFreeSlotDialogVisible, setIsNoFreeSlotDialogVisible] = useState(false);
+  const [isAlternativeDatePickerVisible, setIsAlternativeDatePickerVisible] = useState(false);
   const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
+  const planningDate = planningDateOverride ?? planningContext?.defaultDate;
   const defaultBlock = useMemo(
     () => {
-      const fallback = createDefaultBlock(planningContext?.defaultDate ?? '', new Date(), settings.timeZoneId);
-      const startsAt = planningContext === undefined ? fallback.startsAt : findFirstAvailablePlanTime({
+      const fallback = createDefaultBlock(planningDate ?? '', new Date(), settings.timeZoneId);
+      const startsAt = planningDate === undefined ? fallback.startsAt : findFirstAvailablePlanTime({
         blocks: planBlocks,
-        date: planningContext.defaultDate,
+        date: planningDate,
         durationMinutes: 60,
         now: new Date(),
         settings,
       });
-      return startsAt === null && planningContext !== undefined ? null : { ...fallback, date: planningContext?.defaultDate ?? fallback.date, startsAt: startsAt ?? fallback.startsAt };
+      return startsAt === null && planningDate !== undefined ? null : { ...fallback, date: planningDate ?? fallback.date, startsAt: startsAt ?? fallback.startsAt };
     },
-    [planBlocks, planningContext, settings],
+    [planBlocks, planningDate, settings],
   );
   useEffect(() => {
-    if (!visible || !isPlanTaskForm || planningContext === undefined) return;
-    void planningActions.getPlanScheduleBlocks(planningContext.defaultDate).then(setPlanBlocks);
-  }, [isPlanTaskForm, planningActions, planningContext, visible]);
+    if (!visible || !isPlanTaskForm || planningDate === undefined) return;
+    let isCurrent = true;
+    void planningActions.getPlanScheduleBlocks(planningDate).then((nextBlocks) => {
+      if (!isCurrent) return;
+      setPlanBlocks(nextBlocks);
+      if (pendingAlternativeDate !== planningDate) return;
+      const startsAt = findFirstAvailablePlanTime({ blocks: nextBlocks, date: planningDate, durationMinutes: 60, now: new Date(), settings });
+      if (startsAt === null) {
+        setIsNoFreeSlotDialogVisible(true);
+        setIsAlternativeDatePickerVisible(true);
+        return;
+      }
+      const block = { ...createDefaultBlock(planningDate, new Date(), settings.timeZoneId), date: planningDate, startsAt };
+      setPlanningDraft((draft) => ({ ...draft, blocks: [...draft.blocks, block], scheduleMode: 'date', scheduledOn: planningDate }));
+      setPendingAlternativeDate(null);
+    });
+    return () => { isCurrent = false; };
+  }, [isPlanTaskForm, pendingAlternativeDate, planningActions, planningDate, settings, visible]);
   useEffect(() => {
     if (!visible || !isPlanTaskForm || item === undefined || !('kind' in item)) return;
     void planningActions.getTaskPlanningSnapshot(item.id).then(({ blocks, recurrence, placement }) => {
@@ -500,6 +525,7 @@ export function ItemFormSheet({
                   setPlanningDraft(draft);
                   planningContext.onPlanningDraftChange?.(draft);
                 }}
+                onNoFreeSlot={() => { setIsNoFreeSlotDialogVisible(true); setIsAlternativeDatePickerVisible(false); }}
                 value={planningDraft}
               />
             ) : null}
@@ -538,6 +564,7 @@ export function ItemFormSheet({
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
+            {isNoFreeSlotDialogVisible ? <View style={styles.noFreeSlotDialog}><Text style={styles.noFreeSlotTitle}>{`На ${formatPlanningDate(planningDate ?? '')} нет свободного окна на 1 ч.`}</Text>{isAlternativeDatePickerVisible ? <PlanningDatePicker accessibilityLabel="Выбрать другой день" onChange={(date) => { setPlanningDateOverride(date); setPlanningDraft((draft) => ({ ...draft, scheduleMode: 'date', scheduledOn: date })); setPendingAlternativeDate(date); setIsAlternativeDatePickerVisible(false); }} value={planningDate ?? ''} /> : <><Text style={styles.noFreeSlotCopy}>Выберите другой день или укажите время вручную. При пересечении потребуется подтверждение.</Text><Pressable accessibilityLabel="Запланировать на другой день" onPress={() => setIsAlternativeDatePickerVisible(true)} style={styles.secondaryChoice}><Text style={styles.secondaryChoiceText}>Запланировать на другой день</Text></Pressable><Pressable accessibilityLabel="Все равно запланировать" onPress={() => { const block = createDefaultBlock(planningDate ?? '', new Date(), settings.timeZoneId); setPlanningDraft((draft) => ({ ...draft, blocks: [...draft.blocks, block] })); setIsNoFreeSlotDialogVisible(false); }} style={styles.primaryChoice}><Text style={styles.primaryActionText}>Все равно запланировать</Text></Pressable></>}</View> : null}
             {pendingConflict === null ? null : <View>{pendingConflict.conflicts.map((conflict) => <Text key={`${conflict.candidate.id}-${conflict.block.id}`} style={styles.error}>{`${conflict.itemTitle}: ${getTimeInTimeZone(conflict.startsAt, settings.timeZoneId)}–${getTimeInTimeZone(conflict.endsAt, settings.timeZoneId)}`}</Text>)}<Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable></View>}
           </ScrollView>
           <View style={styles.footer}>
@@ -668,6 +695,12 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.label,
     fontWeight: designTokens.typography.weight.semibold,
   },
+  noFreeSlotDialog: { backgroundColor: designTokens.color.feedback.warning.surface, borderColor: designTokens.color.feedback.warning.border, borderRadius: designTokens.radius.row, borderWidth: 1, gap: designTokens.space[10], marginTop: designTokens.space[16], padding: designTokens.space[12] },
+  noFreeSlotTitle: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.label, fontWeight: designTokens.typography.weight.bold, lineHeight: designTokens.typography.lineHeight.label },
+  noFreeSlotCopy: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.meta, lineHeight: designTokens.typography.lineHeight.meta },
+  secondaryChoice: { alignItems: 'center', backgroundColor: designTokens.color.surface.raised, borderRadius: designTokens.radius.control, justifyContent: 'center', minHeight: designTokens.size.touchTargetMin },
+  secondaryChoiceText: { color: designTokens.color.primaryStrong, fontSize: designTokens.typography.size.body, fontWeight: designTokens.typography.weight.bold },
+  primaryChoice: { alignItems: 'center', backgroundColor: designTokens.color.primary, borderRadius: designTokens.radius.control, justifyContent: 'center', minHeight: designTokens.size.touchTargetMin },
   conflictAction: { alignItems: 'center', backgroundColor: designTokens.color.primary, borderRadius: designTokens.radius.control, justifyContent: 'center', marginTop: designTokens.space[12], minHeight: designTokens.size.touchTargetMin },
   footer: {
     flexDirection: 'row',

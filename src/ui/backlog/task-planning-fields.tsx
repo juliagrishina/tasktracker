@@ -30,6 +30,7 @@ export interface TaskPlanningDraft {
 export interface TaskPlanningFieldsProps {
   defaultBlock: TaskPlanningBlock | null;
   onChange: (value: TaskPlanningDraft) => void;
+  onNoFreeSlot?: () => void;
   value: TaskPlanningDraft;
 }
 
@@ -117,7 +118,7 @@ export function validateTaskPlanningDraft(value: TaskPlanningDraft): string | nu
   return invalidBlockIndex === -1 ? null : `Заполните корректно блок времени ${invalidBlockIndex + 1}`;
 }
 
-export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanningFieldsProps) {
+export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, value }: TaskPlanningFieldsProps) {
   const update = (patch: Partial<TaskPlanningDraft>) => onChange({ ...value, ...patch });
 
   return (
@@ -172,10 +173,9 @@ export function TaskPlanningFields({ defaultBlock, onChange, value }: TaskPlanni
         <Pressable
           accessibilityLabel="Добавить блок времени"
           accessibilityRole="button"
-          accessibilityState={{ disabled: defaultBlock === null }}
-          onPress={() => { if (defaultBlock !== null) update({ blocks: [...value.blocks, { ...defaultBlock, id: `${defaultBlock.id}-${value.blocks.length + 1}` }] }); }}
-          style={[styles.addBlockButton, defaultBlock === null && styles.disabled]}>
-          <Text style={[styles.addBlockText, defaultBlock === null && styles.disabledText]}>{defaultBlock === null ? 'Нет свободного блока' : 'Добавить блок времени'}</Text>
+          onPress={() => { if (defaultBlock === null) onNoFreeSlot?.(); else update({ blocks: [...value.blocks, { ...defaultBlock, id: `${defaultBlock.id}-${value.blocks.length + 1}` }] }); }}
+          style={styles.addBlockButton}>
+          <Text style={styles.addBlockText}>Добавить блок времени</Text>
         </Pressable>
       </View>
       {value.blocks.map((block, index) => (
@@ -307,8 +307,6 @@ const styles = StyleSheet.create({
     fontWeight: designTokens.typography.weight.semibold,
     lineHeight: designTokens.typography.lineHeight.meta,
   },
-  disabled: { opacity: designTokens.state.disabledOpacity },
-  disabledText: { color: designTokens.color.text.tertiary },
   block: {
     backgroundColor: designTokens.color.surface.subtle,
     borderRadius: designTokens.radius.row,

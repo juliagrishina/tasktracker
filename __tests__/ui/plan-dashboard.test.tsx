@@ -358,6 +358,17 @@ describe('DayDashboard', () => {
     expect(view.queryByText('Точно запланировано')).toBeNull();
   });
 
+  test('shows the untimed label only in the section heading', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveTaskItem({ id: 'untimed-label-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Задача без повторной подписи', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-10', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Задача без повторной подписи')).toBeOnTheScreen());
+    expect(view.getAllByText('Без времени')).toHaveLength(1);
+  });
+
   test('renders untimed items before the schedule', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
