@@ -3,6 +3,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testMatch: ['**/__tests__/**/*.test.ts?(x)'],
   testPathIgnorePatterns: ['<rootDir>/.worktrees/'],
+  modulePathIgnorePatterns: ['<rootDir>/.worktrees/'],
   moduleNameMapper: {
     '^\\.\\./data/data-source$': '<rootDir>/src/data/data-source.web.ts',
   },
