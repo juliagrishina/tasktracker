@@ -7,6 +7,7 @@ import { formatPlanDate, type PlanLoadDay, type PlanLoadTone, type PlanMonthLoad
 interface MonthLoadGridProps {
   onSelectDate: (isoDate: string) => void;
   selectedDate: string;
+  todayDate: string;
   weeks: PlanMonthLoadWeeks;
 }
 
@@ -36,7 +37,7 @@ const loadToneStyles: Record<PlanLoadTone, LoadToneStyle> = {
   },
 };
 
-export function MonthLoadGrid({ onSelectDate, selectedDate, weeks }: MonthLoadGridProps) {
+export function MonthLoadGrid({ onSelectDate, selectedDate, todayDate, weeks }: MonthLoadGridProps) {
   return (
     <View>
       <View style={styles.headingRow}>
@@ -46,16 +47,16 @@ export function MonthLoadGrid({ onSelectDate, selectedDate, weeks }: MonthLoadGr
         {weeks.flatMap((week, weekIndex) => week.map((day, dayIndex) => (
           day === null
             ? <View key={`blank-${weekIndex}-${dayIndex}`} style={styles.blankCell} />
-            : <MonthLoadCell day={day} key={day.isoDate} onPress={onSelectDate} selected={day.isoDate === selectedDate} />
+            : <MonthLoadCell day={day} key={day.isoDate} onPress={onSelectDate} selected={day.isoDate === selectedDate} today={day.isoDate === todayDate} />
         )))}
       </View>
     </View>
   );
 }
 
-function MonthLoadCell({ day, onPress, selected }: { day: PlanLoadDay; onPress: (isoDate: string) => void; selected: boolean }) {
+function MonthLoadCell({ day, onPress, selected, today }: { day: PlanLoadDay; onPress: (isoDate: string) => void; selected: boolean; today: boolean }) {
   const tone = loadToneStyles[day.tone];
-  const label = `${formatPlanDate(day.isoDate)}: загрузка ${day.loadPercent}%`;
+  const label = `${formatPlanDate(day.isoDate)}: загрузка ${day.loadPercent}%${today ? ', сегодня' : ''}`;
 
   return (
     <Pressable
@@ -64,10 +65,11 @@ function MonthLoadCell({ day, onPress, selected }: { day: PlanLoadDay; onPress: 
       onPress={() => onPress(day.isoDate)}
       style={({ pressed }) => [
         styles.cell,
-        { backgroundColor: tone.surface, borderColor: selected ? designTokens.color.primary : tone.border },
+        { backgroundColor: tone.surface, borderColor: selected ? designTokens.color.primary : today ? designTokens.color.primaryStrong : tone.border },
         pressed && styles.pressed,
       ]}>
       <Text style={styles.dayNumber}>{day.dayOfMonth}</Text>
+      {today ? <View style={styles.todayIndicator} /> : null}
       <Text style={[styles.load, { color: tone.foreground }]}>{day.loadPercent}%</Text>
     </Pressable>
   );
@@ -113,6 +115,14 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.label,
     fontWeight: designTokens.typography.weight.bold,
     lineHeight: designTokens.typography.lineHeight.label,
+  },
+  todayIndicator: {
+    alignSelf: 'flex-start',
+    backgroundColor: designTokens.color.primaryStrong,
+    borderRadius: designTokens.radius.pill,
+    height: designTokens.space[6],
+    marginTop: designTokens.space[2],
+    width: designTokens.space[6],
   },
   load: {
     fontSize: designTokens.typography.size.micro,

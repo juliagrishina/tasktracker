@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
 import { useOptionalAppServices } from '../../application/app-services-provider';
+import { getDefaultSettings } from '../../data/default-settings';
+import { getDateInTimeZone } from '../../domain/planning';
 import type { RecurrenceOccurrence, Reminder, TaskItem } from '../../domain/entities';
 import { loadPlanReadModel, type PlanReadModel } from '../../application/plan-read-model';
 import { temporaryWebContentStyle } from '../screen-shell';
@@ -41,18 +43,14 @@ function getActionableItemKind(item: PlanActionableItem): 'task' | 'subtask' | '
   return 'kind' in item ? item.kind : 'reminder';
 }
 
-function getCurrentLocalDate(now = new Date()): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export function PlanScreen({ initialDate }: PlanScreenProps) {
   const services = useOptionalAppServices();
+  const timeZoneId = services?.settings.timeZoneId ?? getDefaultSettings().timeZoneId;
+  const todayDate = getDateInTimeZone(new Date().toISOString(), timeZoneId);
+  const shouldSetInitialDateAfterSettingsLoad = useRef(initialDate === undefined);
   const [mode, setMode] = useState<PlanViewMode>('day');
   const [isModeMenuVisible, setIsModeMenuVisible] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(() => initialDate ?? getCurrentLocalDate());
+  const [selectedDate, setSelectedDate] = useState(() => initialDate ?? todayDate);
   const [isTaskSheetVisible, setIsTaskSheetVisible] = useState(false);
   const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
@@ -60,6 +58,12 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
   const [refreshToken, setRefreshToken] = useState(0);
   const [planReadModel, setPlanReadModel] = useState<PlanReadModel | null>(null);
   const [isManualEnergyCheckInVisible, setIsManualEnergyCheckInVisible] = useState(false);
+
+  useEffect(() => {
+    if (!shouldSetInitialDateAfterSettingsLoad.current || services?.isReady !== true) return;
+    setSelectedDate(todayDate);
+    shouldSetInitialDateAfterSettingsLoad.current = false;
+  }, [services?.isReady, todayDate]);
 
   useEffect(() => {
     if (services === null) return;
@@ -105,6 +109,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
       {mode === 'day' ? (
         <DayDashboard
           mode={mode}
+          onChangeDate={(amount) => setSelectedDate((currentDate) => shiftPlanAnchor(currentDate, 'day', amount))}
           onCreateTask={() => setIsTaskSheetVisible(true)}
           onEditReminder={setEditingReminder}
           onEditTask={setEditingTask}
@@ -117,6 +122,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           refreshToken={refreshToken}
           dayPlan={services === null ? undefined : activePlanReadModel?.byDate[selectedDate] ?? null}
           onSelectMode={() => setIsModeMenuVisible(true)}
+          onSelectToday={() => setSelectedDate(todayDate)}
           selectedDate={selectedDate}
         />
       ) : (
@@ -126,8 +132,9 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
           onCreateTask={() => setIsTaskSheetVisible(true)}
           onSelectDate={selectDate}
           onSelectMode={() => setIsModeMenuVisible(true)}
-          onSelectToday={() => setSelectedDate(getCurrentLocalDate())}
+          onSelectToday={() => setSelectedDate(todayDate)}
           selectedDate={selectedDate}
+          todayDate={todayDate}
           getLoadPercent={(date) => activePlanReadModel?.byDate[date]?.loadPercent ?? 0}
         />
       )}
@@ -233,6 +240,7 @@ function PeriodPlanView({
   onSelectMode,
   onSelectToday,
   selectedDate,
+  todayDate,
   getLoadPercent,
 }: {
   mode: Exclude<PlanViewMode, 'day'>;
@@ -242,6 +250,7 @@ function PeriodPlanView({
   onSelectMode: () => void;
   onSelectToday: () => void;
   selectedDate: string;
+  todayDate: string;
   getLoadPercent: (isoDate: string) => number;
 }) {
   const isWeek = mode === 'week';
@@ -272,9 +281,9 @@ function PeriodPlanView({
         />
         <View style={styles.periodContent}>
           {isWeek ? (
-            <WeekLoadList days={getWeekLoadDays(selectedDate, getLoadPercent)} onSelectDate={onSelectDate} selectedDate={selectedDate} />
+            <WeekLoadList days={getWeekLoadDays(selectedDate, getLoadPercent)} onSelectDate={onSelectDate} selectedDate={selectedDate} todayDate={todayDate} />
           ) : (
-            <MonthLoadGrid onSelectDate={onSelectDate} selectedDate={selectedDate} weeks={getMonthLoadDays(selectedDate, getLoadPercent)} />
+            <MonthLoadGrid onSelectDate={onSelectDate} selectedDate={selectedDate} todayDate={todayDate} weeks={getMonthLoadDays(selectedDate, getLoadPercent)} />
           )}
         </View>
       </ScrollView>

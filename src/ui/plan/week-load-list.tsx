@@ -9,6 +9,7 @@ interface WeekLoadListProps {
   days: PlanLoadDay[];
   onSelectDate: (isoDate: string) => void;
   selectedDate: string;
+  todayDate: string;
 }
 
 interface LoadToneStyle {
@@ -31,21 +32,22 @@ const loadToneStyles: Record<PlanLoadTone, LoadToneStyle> = {
   },
 };
 
-export function WeekLoadList({ days, onSelectDate, selectedDate }: WeekLoadListProps) {
+export function WeekLoadList({ days, onSelectDate, selectedDate, todayDate }: WeekLoadListProps) {
   return (
     <View style={styles.list}>
       {days.map((day) => {
         const loadStyle = loadToneStyles[day.tone];
         const selected = day.isoDate === selectedDate;
-        const label = `${day.weekdayLabel}, ${formatPlanDate(day.isoDate)}: загрузка ${day.loadPercent}%`;
+        const isToday = day.isoDate === todayDate;
+        const label = `${day.weekdayLabel}, ${formatPlanDate(day.isoDate)}: загрузка ${day.loadPercent}%${isToday ? ', сегодня' : ''}`;
 
         return (
           <SurfaceCard
             accessibilityLabel={label}
             key={day.isoDate}
             onPress={() => onSelectDate(day.isoDate)}
-            style={[styles.row, selected && styles.selectedRow]}>
-            <View style={[styles.dateBadge, selected && styles.selectedDateBadge]}>
+            style={[styles.row, isToday && styles.todayRow, selected && styles.selectedRow]}>
+            <View style={[styles.dateBadge, isToday && styles.todayDateBadge, selected && styles.selectedDateBadge]}>
               <Text style={[styles.dateNumber, selected && styles.selectedDateNumber]}>{day.dayOfMonth}</Text>
             </View>
             <View style={styles.copy}>
@@ -83,6 +85,9 @@ const styles = StyleSheet.create({
   selectedRow: {
     borderColor: designTokens.color.primary,
   },
+  todayRow: {
+    borderColor: designTokens.color.primaryStrong,
+  },
   dateBadge: {
     alignItems: 'center',
     backgroundColor: designTokens.color.surface.subtle,
@@ -93,6 +98,10 @@ const styles = StyleSheet.create({
   },
   selectedDateBadge: {
     backgroundColor: designTokens.color.primary,
+  },
+  todayDateBadge: {
+    borderColor: designTokens.color.primaryStrong,
+    borderWidth: 2,
   },
   dateNumber: {
     color: designTokens.color.text.primary,

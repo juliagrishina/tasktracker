@@ -12,7 +12,7 @@ describe('PlanScreen view mode control', () => {
       jest.setSystemTime(new Date(2026, 7, 21, 12, 0));
       const view = await render(<PlanScreen />);
 
-      expect(view.getByText('2026-08-21')).toBeOnTheScreen();
+      expect(view.getAllByText('2026-08-21')).toHaveLength(2);
     } finally {
       jest.useRealTimers();
     }
@@ -53,6 +53,16 @@ describe('PlanScreen view mode control', () => {
 });
 
 describe('PlanScreen period views', () => {
+  test('navigates the Day view one calendar day across a year boundary', async () => {
+    const view = await render(<PlanScreen initialDate="2026-12-31" />);
+
+    fireEvent.press(view.getByLabelText('Следующий день'));
+    await waitFor(() => expect(view.getAllByText('2027-01-01')).toHaveLength(2));
+
+    fireEvent.press(view.getByLabelText('Предыдущий день'));
+    await waitFor(() => expect(view.getAllByText('2026-12-31')).toHaveLength(2));
+  });
+
   test('renders Week A as seven load-only days and opens the selected date in Day', async () => {
     const view = await render(<PlanScreen initialDate="2026-08-05" />);
 
@@ -84,8 +94,8 @@ describe('PlanScreen period views', () => {
       expect(view.getByLabelText('Режим просмотра: День')).toBeOnTheScreen();
     });
     expect(view.getByText('План')).toBeOnTheScreen();
-    expect(view.queryByText('Сегодня')).toBeNull();
-    expect(view.getByText('2026-08-05')).toBeOnTheScreen();
+    expect(view.getByLabelText('Перейти к сегодняшнему дню')).toBeOnTheScreen();
+    expect(view.getAllByText('2026-08-05')).toHaveLength(2);
   });
 
   test('renders Month B as a load heatmap and moves to the next month', async () => {

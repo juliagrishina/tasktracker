@@ -20,6 +20,7 @@ import { DeletePlanTaskDialog, PlanTaskActionsDialog, type PlanTaskAction } from
 
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
+import { PlanPeriodNavigator } from './plan-period-navigator';
 import type { PlanViewMode } from './plan-period-model';
 import { DayTimeline } from './day-timeline';
 import type { Reminder, ScheduleBlock, TaskItem } from '../../domain/entities';
@@ -28,6 +29,7 @@ import type { EveningReviewItem } from '../../application/evening-review';
 
 interface DayDashboardProps {
   mode?: PlanViewMode;
+  onChangeDate?: (amount: number) => void;
   onCreateTask?: () => void;
   onEditReminder?: (reminder: Reminder) => void;
   onEditTask?: (task: TaskItem) => void;
@@ -35,6 +37,7 @@ interface DayDashboardProps {
   onEditDailyEnergy?: () => void;
   onRefresh?: () => void;
   onSelectMode?: () => void;
+  onSelectToday?: () => void;
   refreshToken?: number;
   selectedDate?: string;
   dayPlan?: PlanDayReadModel | null;
@@ -45,7 +48,7 @@ type QuickActionTarget =
   | { isCompleted: boolean; item: import('../../application/planning-use-cases').PlanUntimedTask | TaskItem; itemKind: 'task'; occurrence: { seriesId: string; occursOn: string } | null }
   | { isCompleted: boolean; item: import('../../application/planning-use-cases').PlanUntimedReminder; itemKind: 'reminder'; occurrence: { seriesId: string; occursOn: string } | null };
 
-export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, onEditTask, onEditRecurrence, onEditDailyEnergy, onRefresh, onSelectMode, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
+export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, onEditReminder, onEditTask, onEditRecurrence, onEditDailyEnergy, onRefresh, onSelectMode, onSelectToday, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
   const services = useOptionalAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
@@ -334,7 +337,7 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       setIsCompleting(false);
     }
   };
-  const title = selectedDate === getCurrentLocalDate() ? 'Сегодня' : 'План';
+  const title = selectedDate === getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId) ? 'Сегодня' : 'План';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -374,6 +377,14 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       </View>
 
       <ScrollView contentContainerStyle={[styles.scrollContent, temporaryWebContentStyle()]}>
+        {onChangeDate === undefined || onSelectToday === undefined ? null : <PlanPeriodNavigator
+          label={selectedDate}
+          nextAccessibilityLabel="Следующий день"
+          onNext={() => onChangeDate(1)}
+          onPrevious={() => onChangeDate(-1)}
+          onToday={onSelectToday}
+          previousAccessibilityLabel="Предыдущий день"
+        />}
         <SurfaceCard style={styles.hero} tone="info">
           <View style={styles.heroRow}>
             <ProgressRing label={`${Math.round(loadPercent)}%`} value={Math.min(100, loadPercent)} />
@@ -463,13 +474,6 @@ export function DayDashboard({ mode = 'day', now, onCreateTask, onEditReminder, 
       {quickActionTarget === null ? null : <DeletePlanTaskDialog deletesSeries={quickActionTarget.occurrence !== null} itemKind={quickActionTarget.itemKind} onConfirm={() => void runQuickAction('delete', 'series')} onRequestClose={() => { setIsQuickDeleteConfirmVisible(false); setPendingQuickAction(null); }} visible={isQuickDeleteConfirmVisible} />}
     </SafeAreaView>
   );
-}
-
-function getCurrentLocalDate(now = new Date()): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 function formatBlockTime(block: import('../../domain/entities').ScheduleBlock, timeZoneId: string): string {
