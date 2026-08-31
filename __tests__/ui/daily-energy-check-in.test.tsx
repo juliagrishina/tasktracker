@@ -14,6 +14,10 @@ jest.mock('react-native', () => {
       mockReact.useImperativeHandle(ref, () => ({ scrollTo: mockScrollTo }));
       return mockReact.createElement(mockReact.Fragment, null, children);
     }),
+    Platform: {
+      OS: 'ios',
+      select: <T,>(values: { ios?: T; native?: T; default?: T }) => values.ios ?? values.native ?? values.default,
+    },
     StyleSheet: { create: <T,>(styles: T) => styles },
     Text: 'Text',
     View: 'View',
