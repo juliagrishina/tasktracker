@@ -7,7 +7,7 @@ import { formatPlanWeekRange } from '../../src/ui/plan/plan-period-model';
 
 describe('PlanScreen view mode control', () => {
   test('opens the Plan on the current local device date by default', async () => {
-    jest.useFakeTimers();
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
     try {
       jest.setSystemTime(new Date(2026, 7, 21, 12, 0));
       const view = await render(<PlanScreen />);
