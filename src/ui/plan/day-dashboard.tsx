@@ -49,7 +49,7 @@ type QuickActionTarget =
   | { isCompleted: boolean; item: import('../../application/planning-use-cases').PlanUntimedTask | TaskItem; itemKind: 'task'; occurrence: { seriesId: string; occursOn: string } | null }
   | { isCompleted: boolean; item: import('../../application/planning-use-cases').PlanUntimedReminder; itemKind: 'reminder'; occurrence: { seriesId: string; occursOn: string } | null };
 
-export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, onEditReminder, onEditTask, onEditRecurrence, onEditRecurrenceSeries, onEditDailyEnergy, onRefresh, onSelectMode, onSelectToday, refreshToken = 0, selectedDate = new Date().toISOString().slice(0, 10), dayPlan }: DayDashboardProps) {
+export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, onEditReminder, onEditTask, onEditRecurrence, onEditRecurrenceSeries, onEditDailyEnergy, onRefresh, onSelectMode, onSelectToday, refreshToken = 0, selectedDate: selectedDateOverride, dayPlan }: DayDashboardProps) {
   const services = useOptionalAppServices();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<readonly import('../../domain/entities').ScheduleBlock[]>([]);
@@ -80,6 +80,7 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
   const [pendingQuickAction, setPendingQuickAction] = useState<PlanTaskAction | null>(null);
   const [isQuickDeleteConfirmVisible, setIsQuickDeleteConfirmVisible] = useState(false);
   const settings = services?.settings ?? getDefaultSettings();
+  const selectedDate = selectedDateOverride ?? getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId);
   const completionPromptDate = getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId);
   const isCompletionPromptDeferred = completionPromptDeferredDate === completionPromptDate || settings.completionPromptDeferredOn === completionPromptDate;
   useEffect(() => {

@@ -61,6 +61,19 @@ describe('DayDashboard', () => {
     expect(view.getAllByText('Прошедший блок')).toHaveLength(1);
   });
 
+  test('uses the configured local date when the UTC date is still the previous day', async () => {
+    const source = createInMemoryDataSource();
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'local-date-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Задача локального дня', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-11', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-10T21:30:00.000Z')} /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Сегодня')).toBeOnTheScreen());
+    expect(view.getByText('2026-08-11')).toBeOnTheScreen();
+    expect(view.getByText('Задача локального дня')).toBeOnTheScreen();
+  });
+
   test('does not re-open a completion prompt for a task deferred with “Не сейчас” on the same day', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
@@ -427,8 +440,8 @@ describe('DayDashboard', () => {
     expect(view.getByText('7% · 1 блок')).toBeOnTheScreen();
   });
 
-  test('renders the approved Plan B hierarchy instead of the development task list', async () => {
-    const view = await render(<DayDashboard />);
+  test('renders the approved Plan B hierarchy from a fixed current date instead of the development task list', async () => {
+    const view = await render(<DayDashboard now={new Date('2026-08-10T12:00:00.000Z')} />);
 
     expect(view.getByText('Сегодня')).toBeOnTheScreen();
     expect(view.getByText('План в норме')).toBeOnTheScreen();
