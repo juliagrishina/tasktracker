@@ -6,7 +6,7 @@ test('opens the no-free-slot decision when a time block cannot be suggested', as
   const onNoFreeSlot = jest.fn();
   const view = await render(<TaskPlanningFields defaultBlock={null} onChange={() => {}} onNoFreeSlot={onNoFreeSlot} value={createInitialTaskPlanningDraft('2026-08-30')} />);
 
-  fireEvent.press(view.getByLabelText('Добавить блок времени'));
+  await fireEvent.press(view.getByLabelText('Добавить блок времени'));
 
   expect(onNoFreeSlot).toHaveBeenCalledTimes(1);
 });

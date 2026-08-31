@@ -7,6 +7,6 @@ test('shows the planned item and navigates to its actual date', async () => {
   expect(view.getByText('Подзадача успешно запланирована')).toBeOnTheScreen();
   expect(view.getByText('Подготовить повестку')).toBeOnTheScreen();
   expect(view.getByText('Перейти к дате 03.09.2026?')).toBeOnTheScreen();
-  fireEvent.press(view.getByLabelText('Перейти к запланированной дате'));
+  await fireEvent.press(view.getByLabelText('Перейти к запланированной дате'));
   expect(onGoToPlan).toHaveBeenCalledTimes(1);
 });

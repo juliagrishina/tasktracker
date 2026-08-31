@@ -34,7 +34,7 @@ describe('Backlog item actions', () => {
       expect(view.getByText('Завершить')).toBeTruthy();
     });
 
-    fireEvent.press(view.getByText('Завершить'));
+    await fireEvent.press(view.getByText('Завершить'));
     await waitFor(async () => {
       await expect(source.getTaskItem(task.id)).resolves.toMatchObject({
         completedAt: expect.any(String),
@@ -44,7 +44,7 @@ describe('Backlog item actions', () => {
       });
     });
 
-    fireEvent.press(view.getByText('Удалить'));
+    await fireEvent.press(view.getByText('Удалить'));
     await waitFor(() => {
       expect(deniedConfirmation).toHaveBeenCalledTimes(1);
     });
@@ -67,7 +67,7 @@ describe('Backlog item actions', () => {
     await waitFor(() => {
       expect(view.getByText('Удалить')).toBeTruthy();
     });
-    fireEvent.press(view.getByText('Удалить'));
+    await fireEvent.press(view.getByText('Удалить'));
 
     await waitFor(async () => {
       await expect(source.getTaskItem(task.id)).resolves.toBeNull();

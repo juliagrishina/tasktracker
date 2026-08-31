@@ -11,7 +11,7 @@ describe('FollowUpReminderDialog', () => {
     const onCreate = jest.fn();
     const view = await render(<FollowUpReminderDialog completedOn="2026-08-28" isCreating={false} onCreate={onCreate} onSkip={jest.fn()} taskTitle="Подготовить отчёт" visible />);
 
-    fireEvent.press(view.getByLabelText(label));
+    await fireEvent.press(view.getByLabelText(label));
 
     expect(onCreate).toHaveBeenCalledWith(expectedDate);
   });
@@ -20,13 +20,13 @@ describe('FollowUpReminderDialog', () => {
     const onCreate = jest.fn();
     const view = await render(<FollowUpReminderDialog completedOn="2026-08-28" isCreating={false} onCreate={onCreate} onSkip={jest.fn()} taskTitle="Подготовить отчёт" visible />);
 
-    fireEvent.press(view.getByLabelText('Выбрать свою дату напоминания'));
+    await fireEvent.press(view.getByLabelText('Выбрать свою дату напоминания'));
     await waitFor(() => expect(view.getByLabelText('Дата связанного напоминания')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Дата связанного напоминания'));
+    await fireEvent.press(view.getByLabelText('Дата связанного напоминания'));
     await waitFor(() => expect(view.getByLabelText(/30 Август 2026/)).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText(/30 Август 2026/));
+    await fireEvent.press(view.getByLabelText(/30 Август 2026/));
     await waitFor(() => expect(view.getByText('30.08.2026')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Создать напоминание на выбранную дату'));
+    await fireEvent.press(view.getByLabelText('Создать напоминание на выбранную дату'));
 
     expect(onCreate).toHaveBeenCalledWith('2026-08-30');
   });
@@ -36,7 +36,7 @@ describe('FollowUpReminderDialog', () => {
     const onSkip = jest.fn();
     const view = await render(<FollowUpReminderDialog completedOn="2026-08-28" isCreating={false} onCreate={onCreate} onSkip={onSkip} taskTitle="Подготовить отчёт" visible />);
 
-    fireEvent.press(view.getByLabelText('Не создавать связанное напоминание'));
+    await fireEvent.press(view.getByLabelText('Не создавать связанное напоминание'));
 
     expect(onCreate).not.toHaveBeenCalled();
     expect(onSkip).toHaveBeenCalledTimes(1);

@@ -27,23 +27,23 @@ describe('daily energy check-in', () => {
     );
 
     await waitFor(() => expect(view.getByLabelText('Пропустить оценку энергии')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Пропустить оценку энергии'));
+    await fireEvent.press(view.getByLabelText('Пропустить оценку энергии'));
 
     await waitFor(async () => {
       await expect(getDailyEnergyForCurrentDay(source)).resolves.toMatchObject({ energyPercent: null });
       expect(view.queryByText('Энергия на сегодня')).toBeNull();
     });
 
-    fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
+    await fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
     await waitFor(() => expect(view.getByText('Энергия за сегодня')).toBeOnTheScreen());
     expect(view.getByText('Не указана')).toBeOnTheScreen();
-    fireEvent.press(view.getByLabelText('Указать оценку энергии'));
+    await fireEvent.press(view.getByLabelText('Указать оценку энергии'));
     await waitFor(() => expect(view.getByLabelText('Энергия 80%')).toBeOnTheScreen());
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Энергия 80%'));
+      await fireEvent.press(view.getByLabelText('Энергия 80%'));
     });
     expect(view.getByLabelText('Энергия 80%').props.accessibilityState).toEqual({ selected: true });
-    fireEvent.press(view.getByLabelText('Сохранить оценку энергии'));
+    await fireEvent.press(view.getByLabelText('Сохранить оценку энергии'));
 
     await waitFor(async () => {
       await expect(getDailyEnergyForCurrentDay(source)).resolves.toMatchObject({ energyPercent: 80 });

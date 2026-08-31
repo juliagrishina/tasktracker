@@ -24,20 +24,20 @@ describe('recurrence move', () => {
     const view = await render(<AppServicesProvider notificationScheduler={notificationScheduler} source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-10" /></AppServicesProvider>);
     const recurringBlockLabel = 'Повторяемая задача, 09:00–10:00, колонка 1 из 1';
     await waitFor(() => expect(view.getByLabelText(recurringBlockLabel)).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText(recurringBlockLabel));
+    await fireEvent.press(view.getByLabelText(recurringBlockLabel));
     await waitFor(() => expect(view.getByLabelText('Перенести этот экземпляр')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Перенести этот экземпляр'));
+    await fireEvent.press(view.getByLabelText('Перенести этот экземпляр'));
 
     await waitFor(() => {
       expect(view.getByLabelText('Перенести только выбранный экземпляр')).toBeOnTheScreen();
       expect(view.getByLabelText('Перенести всю серию')).toBeOnTheScreen();
     });
-    fireEvent.press(view.getByLabelText('Дата переноса'));
+    await fireEvent.press(view.getByLabelText('Дата переноса'));
     await waitFor(() => expect(view.getByLabelText('11 Август 2026')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('11 Август 2026'));
+    await fireEvent.press(view.getByLabelText('11 Август 2026'));
     await waitFor(() => expect(view.getByText('11.08.2026')).toBeOnTheScreen());
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Перенести только выбранный экземпляр'));
+      await fireEvent.press(view.getByLabelText('Перенести только выбранный экземпляр'));
       await new Promise((resolve) => setTimeout(resolve, 1));
     });
 

@@ -33,7 +33,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await fireEvent.press(view.getByLabelText('Да, завершить дело'));
     await waitFor(async () => expect(await source.getTaskItem('completion-task')).toMatchObject({ completedAt: expect.any(String) }));
     await waitFor(() => expect(view.getByLabelText('Подготовить отчёт, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
     expect(view.getByLabelText('Загрузка 7%')).toBeOnTheScreen();
@@ -72,7 +72,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={now} refreshToken={0} selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Отложить решение о завершении'));
+    await fireEvent.press(view.getByLabelText('Отложить решение о завершении'));
     await waitFor(() => expect(view.queryByText('Удалось закончить?')).toBeNull());
     await waitFor(async () => expect(await source.getSettings()).toMatchObject({ completionPromptDeferredOn: '2026-08-28' }));
 
@@ -93,9 +93,9 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await fireEvent.press(view.getByLabelText('Да, завершить дело'));
     await waitFor(() => expect(view.getByText('Создать связанное напоминание?')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Напомнить через 3 дня'));
+    await fireEvent.press(view.getByLabelText('Напомнить через 3 дня'));
 
     await waitFor(async () => expect(await source.listReminders()).toMatchObject([{
       title: 'Проверить: Подготовить отчёт',
@@ -115,11 +115,11 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T18:30:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Открыть вечернюю проверку')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
+    await fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
     await waitFor(() => expect(view.getByText('Вечерняя проверка')).toBeOnTheScreen());
     expect(view.getAllByText('Отправить отчёт')).toHaveLength(2);
     expect(view.getAllByText('Проверить письмо')).toHaveLength(2);
-    fireEvent.press(view.getByLabelText('Закрыть вечернюю проверку'));
+    await fireEvent.press(view.getByLabelText('Закрыть вечернюю проверку'));
 
     await expect(source.getTaskItem('review-task')).resolves.toMatchObject({ completedAt: null, scheduledOn: '2026-08-28' });
     await expect(source.getReminder('review-reminder')).resolves.toMatchObject({ completedAt: null, remindsOn: '2026-08-28' });
@@ -133,7 +133,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Без времени: Подготовить материалы')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Без времени: Подготовить материалы'), 'longPress');
+    await fireEvent(view.getByLabelText('Без времени: Подготовить материалы'), 'longPress');
 
     await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
     expect(view.getByLabelText('Выполнить задачу')).toBeOnTheScreen();
@@ -149,7 +149,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Без времени: Подготовить повестку')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Без времени: Подготовить повестку'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Без времени: Подготовить повестку'), 'contextMenu', { preventDefault: jest.fn() });
 
     await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
   });
@@ -162,12 +162,12 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить бронирование')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Без времени: Подтвердить бронирование'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Без времени: Подтвердить бронирование'), 'contextMenu', { preventDefault: jest.fn() });
 
     await waitFor(() => expect(view.getByText('Действия с напоминанием')).toBeOnTheScreen());
     expect(view.getByLabelText('Выполнить напоминание')).toBeOnTheScreen();
     expect(view.getByLabelText('Удалить напоминание')).toBeOnTheScreen();
-    fireEvent.press(view.getByLabelText('Выполнить напоминание'));
+    await fireEvent.press(view.getByLabelText('Выполнить напоминание'));
     await waitFor(async () => expect(await source.getReminder('context-menu-reminder')).toMatchObject({ completedAt: expect.any(String) }));
   });
 
@@ -179,7 +179,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить участие')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Без времени: Подтвердить участие'), 'longPress');
+    await fireEvent(view.getByLabelText('Без времени: Подтвердить участие'), 'longPress');
 
     await waitFor(() => expect(view.getByText('Действия с напоминанием')).toBeOnTheScreen());
   });
@@ -192,9 +192,9 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Без времени: Выбрать подарок')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Без времени: Выбрать подарок'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Без времени: Выбрать подарок'), 'contextMenu', { preventDefault: jest.fn() });
     await waitFor(() => expect(view.getByLabelText('Вернуть напоминание в Backlog')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Вернуть напоминание в Backlog'));
+    await fireEvent.press(view.getByLabelText('Вернуть напоминание в Backlog'));
 
     await waitFor(async () => expect(await source.getReminder('return-reminder')).toMatchObject({ remindsOn: null, periodStartOn: null, periodEndOn: null }));
   });
@@ -208,7 +208,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Провести созвон, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Провести созвон, 09:00–10:00, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Провести созвон, 09:00–10:00, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
 
     await waitFor(() => expect(view.getByText('Действия с задачей')).toBeOnTheScreen());
   });
@@ -224,7 +224,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Завершённый повтор, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Завершённый повтор, 09:00–10:00, выполнено, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Завершённый повтор, 09:00–10:00, выполнено, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
 
     await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
   });
@@ -239,9 +239,9 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Повтор для завершения, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Повтор для завершения, 09:00–10:00, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Повтор для завершения, 09:00–10:00, колонка 1 из 1'), 'contextMenu', { preventDefault: jest.fn() });
     await waitFor(() => expect(view.getByLabelText('Выполнить задачу')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Выполнить задачу'));
+    await fireEvent.press(view.getByLabelText('Выполнить задачу'));
 
     await waitFor(async () => expect(await source.listRecurrenceOccurrences('quick-complete-recurring-series')).toMatchObject([{ occursOn: '2026-08-28', completedAt: expect.any(String) }]));
     expect(view.queryByText('К чему применить это изменение?')).toBeNull();
@@ -255,16 +255,16 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Без времени: Полить цветы')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Без времени: Полить цветы'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Без времени: Полить цветы'), 'contextMenu', { preventDefault: jest.fn() });
     await waitFor(() => expect(view.getByLabelText('Удалить напоминание')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Удалить напоминание'));
+    await fireEvent.press(view.getByLabelText('Удалить напоминание'));
     await waitFor(() => expect(view.getByText('Всю серию')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Всю серию'));
+    await fireEvent.press(view.getByText('Всю серию'));
 
     await waitFor(() => expect(view.getByText('Удалить всю серию?')).toBeOnTheScreen());
     expect(view.queryByText('К чему применить это изменение?')).toBeNull();
     await expect(source.getReminder('active-recurring-reminder')).resolves.toMatchObject({ id: 'active-recurring-reminder' });
-    fireEvent.press(view.getByLabelText('Подтвердить удаление всей серии'));
+    await fireEvent.press(view.getByLabelText('Подтвердить удаление всей серии'));
     await waitFor(async () => expect(await source.getReminder('active-recurring-reminder')).toBeNull());
   });
 
@@ -279,10 +279,10 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard onEditRecurrence={onEditRecurrence} selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Редактируемый повтор, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Редактируемый повтор, 09:00–10:00, колонка 1 из 1'));
+    await fireEvent.press(view.getByLabelText('Редактируемый повтор, 09:00–10:00, колонка 1 из 1'));
 
     await waitFor(() => expect(view.getByLabelText('Редактировать только выбранный экземпляр')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Редактировать только выбранный экземпляр'));
+    await fireEvent.press(view.getByLabelText('Редактировать только выбранный экземпляр'));
     await waitFor(() => expect(onEditRecurrence).toHaveBeenCalledWith(expect.objectContaining({ id: 'editable-recurring-task' }), 'editable-recurring-series', '2026-08-28'));
   });
 
@@ -297,12 +297,12 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} onEditTask={editTask} selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Нет, выбрать действие для незавершённого дела')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Нет, выбрать действие для незавершённого дела'));
+    await fireEvent.press(view.getByLabelText('Нет, выбрать действие для незавершённого дела'));
     await waitFor(() => expect(view.getByText('Что сделать с незавершённым делом?')).toBeOnTheScreen());
     expect(view.getByLabelText('Перенести дело на другое время')).toBeOnTheScreen();
     expect(view.getByLabelText('Причина возврата в Backlog')).toBeOnTheScreen();
     expect(view.getByLabelText('Вернуть дело в Backlog')).toBeOnTheScreen();
-    fireEvent.press(view.getByLabelText('Продолжить дело на 30 минут'));
+    await fireEvent.press(view.getByLabelText('Продолжить дело на 30 минут'));
     await waitFor(async () => expect(await source.getScheduleBlock('unfinished-block')).toMatchObject({ endsAt: '2026-08-28T07:30:00.000Z' }));
     expect(editTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'unfinished-task' }));
   });
@@ -330,7 +330,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-28T07:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Удалось закончить?')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await fireEvent.press(view.getByLabelText('Да, завершить дело'));
     await waitFor(async () => expect(await source.listRecurrenceOccurrences('recurring-completion-series')).toMatchObject([{ occursOn: '2026-08-28', completedAt: expect.any(String) }]));
     await waitFor(() => expect(view.getByLabelText('Повторяющийся отчёт, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
     await expect(source.getTaskItem('recurring-completion-task')).resolves.toMatchObject({ completedAt: null });
@@ -347,7 +347,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DashboardWithTimeZoneSwitch /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getAllByText('10:00–11:00')).toHaveLength(2));
-    fireEvent.press(view.getByLabelText('Переключить пояс на Berlin'));
+    await fireEvent.press(view.getByLabelText('Переключить пояс на Berlin'));
     await waitFor(() => expect(view.getAllByText('09:00–10:00')).toHaveLength(2));
     await expect(source.getSettings()).resolves.toMatchObject({ timeZoneId: 'Europe/Berlin' });
   });
@@ -372,7 +372,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard onEditTask={onEditTask} selectedDate="2026-08-10" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Задача без времени')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Задача без времени'));
+    await fireEvent.press(view.getByText('Задача без времени'));
     await waitFor(() => expect(onEditTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'date-task' })));
   });
 

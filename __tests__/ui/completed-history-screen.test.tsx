@@ -22,13 +22,13 @@ describe('CompletedHistoryScreen', () => {
     await source.saveTaskItem({ id: 'task-2', kind: 'task', projectId: null, parentTaskId: null, title: 'Согласовать структуру', description: null, estimatedDurationMinutes: null, completedAt, createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
     const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
 
-    fireEvent.changeText(view.getByPlaceholderText('Поиск по названию'), 'обратную');
+    await fireEvent.changeText(view.getByPlaceholderText('Поиск по названию'), 'обратную');
 
     await waitFor(() => {
       expect(view.getByText('Собрать обратную связь')).toBeOnTheScreen();
       expect(view.queryByText('Согласовать структуру')).toBeNull();
     });
-    fireEvent.press(view.getByLabelText('Открыть действия: Собрать обратную связь'));
+    await fireEvent.press(view.getByLabelText('Открыть действия: Собрать обратную связь'));
     await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
   });
 
@@ -39,7 +39,7 @@ describe('CompletedHistoryScreen', () => {
     const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Открыть детали: Закрыть итоги встречи')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Открыть детали: Закрыть итоги встречи'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Открыть детали: Закрыть итоги встречи'), 'contextMenu', { preventDefault: jest.fn() });
 
     await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
   });
@@ -53,7 +53,7 @@ describe('CompletedHistoryScreen', () => {
 
     await waitFor(() => expect(view.getByLabelText('Открыть детали: Подготовить релиз')).toBeOnTheScreen());
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Открыть детали: Подготовить релиз'));
+      await fireEvent.press(view.getByLabelText('Открыть детали: Подготовить релиз'));
     });
 
     await waitFor(() => {
@@ -73,14 +73,14 @@ describe('CompletedHistoryScreen', () => {
     const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Открыть действия: Старый черновик')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Открыть действия: Старый черновик'));
+    await fireEvent.press(view.getByLabelText('Открыть действия: Старый черновик'));
     await waitFor(() => expect(view.getByLabelText('Удалить экземпляр')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Удалить экземпляр'));
+    await fireEvent.press(view.getByLabelText('Удалить экземпляр'));
 
     await waitFor(() => expect(view.getByText('Удалить экземпляр?')).toBeOnTheScreen());
     await expect(source.getTaskItem('permanent-delete-task')).resolves.toMatchObject({ id: 'permanent-delete-task' });
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Подтвердить удаление экземпляра'));
+      await fireEvent.press(view.getByLabelText('Подтвердить удаление экземпляра'));
     });
     await waitFor(async () => expect(await source.getTaskItem('permanent-delete-task')).toBeNull());
   });
@@ -94,13 +94,13 @@ describe('CompletedHistoryScreen', () => {
     const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Открыть действия: Еженедельный обзор')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Открыть действия: Еженедельный обзор'));
+    await fireEvent.press(view.getByLabelText('Открыть действия: Еженедельный обзор'));
     await waitFor(() => expect(view.getByLabelText('Удалить всю серию')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Удалить всю серию'));
+    await fireEvent.press(view.getByLabelText('Удалить всю серию'));
 
     await waitFor(() => expect(view.getByText('Удалить всю серию?')).toBeOnTheScreen());
     await act(async () => {
-      fireEvent.press(view.getByLabelText('Подтвердить удаление всей серии'));
+      await fireEvent.press(view.getByLabelText('Подтвердить удаление всей серии'));
     });
     await waitFor(async () => expect(await source.getTaskItem('delete-series-task')).toBeNull());
   });
@@ -112,9 +112,9 @@ describe('CompletedHistoryScreen', () => {
     const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Открыть детали: Подтвердить бронирование')).toBeOnTheScreen());
-    fireEvent(view.getByLabelText('Открыть детали: Подтвердить бронирование'), 'contextMenu', { preventDefault: jest.fn() });
+    await fireEvent(view.getByLabelText('Открыть детали: Подтвердить бронирование'), 'contextMenu', { preventDefault: jest.fn() });
     await waitFor(() => expect(view.getByLabelText('Вернуть напоминание в Backlog')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Вернуть напоминание в Backlog'));
+    await fireEvent.press(view.getByLabelText('Вернуть напоминание в Backlog'));
 
     await waitFor(async () => expect(await source.getReminder('completed-reminder')).toMatchObject({ completedAt: null, remindsOn: null, periodStartOn: null, periodEndOn: null }));
   });

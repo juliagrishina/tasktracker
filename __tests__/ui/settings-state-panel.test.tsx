@@ -10,14 +10,14 @@ describe('SettingsStatePanel', () => {
     const onUseDeviceTimeZone = jest.fn().mockResolvedValue(undefined);
     const view = await render(<SettingsStatePanel onTimeZoneChange={onTimeZoneChange} onUseDeviceTimeZone={onUseDeviceTimeZone} settings={{ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' }} />);
 
-    fireEvent.press(view.getByLabelText('Часовой пояс'));
+    await fireEvent.press(view.getByLabelText('Часовой пояс'));
     await waitFor(() => expect(view.getByLabelText('Поиск часового пояса')).toBeOnTheScreen());
-    fireEvent.changeText(view.getByLabelText('Поиск часового пояса'), 'berlin');
+    await fireEvent.changeText(view.getByLabelText('Поиск часового пояса'), 'berlin');
     await waitFor(() => expect(view.getByRole('button', { name: 'Europe/Berlin' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: 'Europe/Berlin' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Europe/Berlin' }));
 
     await waitFor(() => expect(onTimeZoneChange).toHaveBeenCalledWith('Europe/Berlin'));
-    fireEvent.press(view.getByRole('button', { name: 'Использовать пояс устройства' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Использовать пояс устройства' }));
     await waitFor(() => expect(onUseDeviceTimeZone).toHaveBeenCalledTimes(1));
   });
 
@@ -25,21 +25,21 @@ describe('SettingsStatePanel', () => {
     const onPlanningSettingsChange = jest.fn().mockResolvedValue(undefined);
     const view = await render(<SettingsStatePanel onPlanningSettingsChange={onPlanningSettingsChange} settings={getDefaultSettings()} />);
 
-    fireEvent.press(view.getByRole('button', { name: 'Изменить' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Изменить' }));
     await waitFor(() => expect(view.getByLabelText('Начало рабочего дня')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Начало рабочего дня'));
+    await fireEvent.press(view.getByLabelText('Начало рабочего дня'));
     await waitFor(() => expect(view.getByRole('button', { name: '07:00' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: '07:00' }));
+    await fireEvent.press(view.getByRole('button', { name: '07:00' }));
     await waitFor(() => expect(view.getByLabelText('Начало рабочего дня')).toHaveTextContent(/07:00/));
-    fireEvent.press(view.getByLabelText('Конец рабочего дня'));
+    await fireEvent.press(view.getByLabelText('Конец рабочего дня'));
     await waitFor(() => expect(view.getByRole('button', { name: '21:00' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: '21:00' }));
+    await fireEvent.press(view.getByRole('button', { name: '21:00' }));
     await waitFor(() => expect(view.getByLabelText('Конец рабочего дня')).toHaveTextContent(/21:00/));
-    fireEvent.press(view.getByLabelText('Время вечерней проверки'));
+    await fireEvent.press(view.getByLabelText('Время вечерней проверки'));
     await waitFor(() => expect(view.getByRole('button', { name: '20:45' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: '20:45' }));
+    await fireEvent.press(view.getByRole('button', { name: '20:45' }));
     await waitFor(() => expect(view.getByLabelText('Время вечерней проверки')).toHaveTextContent(/20:45/));
-    fireEvent.press(view.getByRole('button', { name: 'Сохранить параметры плана' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Сохранить параметры плана' }));
 
     await waitFor(() => expect(onPlanningSettingsChange).toHaveBeenCalledWith({
       workdayStartsAt: '07:00',
@@ -53,13 +53,13 @@ describe('SettingsStatePanel', () => {
     const onPlanningSettingsChange = jest.fn().mockResolvedValue(undefined);
     const view = await render(<SettingsStatePanel onPlanningSettingsChange={onPlanningSettingsChange} settings={getDefaultSettings()} />);
 
-    fireEvent.press(view.getByLabelText('Предварительное'));
+    await fireEvent.press(view.getByLabelText('Предварительное'));
     await waitFor(() => expect(view.getByLabelText('Интервал уведомления')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Интервал уведомления'));
+    await fireEvent.press(view.getByLabelText('Интервал уведомления'));
     await waitFor(() => expect(view.getByRole('button', { name: '30 минут' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: '30 минут' }));
+    await fireEvent.press(view.getByRole('button', { name: '30 минут' }));
     await waitFor(() => expect(view.getByLabelText('Интервал уведомления')).toHaveTextContent(/30 минут/));
-    fireEvent.press(view.getByRole('button', { name: 'Сохранить интервал' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Сохранить интервал' }));
 
     await waitFor(() => expect(onPlanningSettingsChange).toHaveBeenCalledWith({
       workdayStartsAt: '08:00',
@@ -86,7 +86,7 @@ describe('SettingsStatePanel', () => {
   test('keeps the Microsoft 365 refresh action inside local demo state', async () => {
     const view = await render(<SettingsStatePanel settings={getDefaultSettings()} />);
 
-    fireEvent.press(view.getByRole('button', { name: 'Обновить сейчас' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Обновить сейчас' }));
 
     await waitFor(() => {
       expect(view.getByText('Статус обновлён в демо-режиме')).toBeOnTheScreen();
@@ -101,9 +101,9 @@ describe('SettingsStatePanel', () => {
     const view = await render(<SettingsStatePanel notificationPermissions={notificationPermissions} settings={getDefaultSettings()} />);
 
     await waitFor(() => expect(view.getByRole('button', { name: 'Настроить уведомления' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: 'Настроить уведомления' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Настроить уведомления' }));
     await waitFor(() => expect(view.getByRole('button', { name: 'Разрешить уведомления' })).toBeOnTheScreen());
-    fireEvent.press(view.getByRole('button', { name: 'Разрешить уведомления' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Разрешить уведомления' }));
 
     await waitFor(() => {
       expect(notificationPermissions.requestPermission).toHaveBeenCalledTimes(1);

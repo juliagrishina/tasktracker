@@ -21,7 +21,7 @@ describe('PlanScreen view mode control', () => {
   test('switches from Day to Week through the approved three-option menu', async () => {
     const view = await render(<PlanScreen initialDate="2026-08-05" />);
 
-    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await fireEvent.press(view.getByLabelText('Режим просмотра: День'));
 
     await waitFor(() => {
       expect(view.getByRole('button', { name: 'День' })).toBeOnTheScreen();
@@ -29,7 +29,7 @@ describe('PlanScreen view mode control', () => {
       expect(view.getByRole('button', { name: 'Месяц' })).toBeOnTheScreen();
     });
 
-    fireEvent.press(view.getByLabelText('Неделя'));
+    await fireEvent.press(view.getByLabelText('Неделя'));
 
     await waitFor(() => {
       expect(view.getByLabelText('Режим просмотра: Неделя')).toBeOnTheScreen();
@@ -39,11 +39,11 @@ describe('PlanScreen view mode control', () => {
   test('switches to Month without adding another view mode', async () => {
     const view = await render(<PlanScreen initialDate="2026-08-05" />);
 
-    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await fireEvent.press(view.getByLabelText('Режим просмотра: День'));
     await waitFor(() => {
       expect(view.getByRole('button', { name: 'Месяц' })).toBeOnTheScreen();
     });
-    fireEvent.press(view.getByLabelText('Месяц'));
+    await fireEvent.press(view.getByLabelText('Месяц'));
 
     await waitFor(() => {
       expect(view.getByLabelText('Режим просмотра: Месяц')).toBeOnTheScreen();
@@ -56,21 +56,21 @@ describe('PlanScreen period views', () => {
   test('navigates the Day view one calendar day across a year boundary', async () => {
     const view = await render(<PlanScreen initialDate="2026-12-31" />);
 
-    fireEvent.press(view.getByLabelText('Следующий день'));
+    await fireEvent.press(view.getByLabelText('Следующий день'));
     await waitFor(() => expect(view.getAllByText('2027-01-01')).toHaveLength(2));
 
-    fireEvent.press(view.getByLabelText('Предыдущий день'));
+    await fireEvent.press(view.getByLabelText('Предыдущий день'));
     await waitFor(() => expect(view.getAllByText('2026-12-31')).toHaveLength(2));
   });
 
   test('renders Week A as seven load-only days and opens the selected date in Day', async () => {
     const view = await render(<PlanScreen initialDate="2026-08-05" />);
 
-    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await fireEvent.press(view.getByLabelText('Режим просмотра: День'));
     await waitFor(() => {
       expect(view.getByLabelText('Неделя')).toBeOnTheScreen();
     });
-    fireEvent.press(view.getByLabelText('Неделя'));
+    await fireEvent.press(view.getByLabelText('Неделя'));
 
     await waitFor(() => {
       expect(view.getAllByText('3–9 августа')).toHaveLength(2);
@@ -79,17 +79,17 @@ describe('PlanScreen period views', () => {
     });
     expect(view.queryByText('Собрать прототип')).toBeNull();
 
-    fireEvent.press(view.getByLabelText('Следующая неделя'));
+    await fireEvent.press(view.getByLabelText('Следующая неделя'));
     await waitFor(() => {
       expect(view.getAllByText('10–16 августа')).toHaveLength(2);
     });
 
-    fireEvent.press(view.getByLabelText('Предыдущая неделя'));
+    await fireEvent.press(view.getByLabelText('Предыдущая неделя'));
     await waitFor(() => {
       expect(view.getAllByText('3–9 августа')).toHaveLength(2);
     });
 
-    fireEvent.press(view.getByLabelText('Среда, 5 августа: загрузка 0%'));
+    await fireEvent.press(view.getByLabelText('Среда, 5 августа: загрузка 0%'));
     await waitFor(() => {
       expect(view.getByLabelText('Режим просмотра: День')).toBeOnTheScreen();
     });
@@ -101,11 +101,11 @@ describe('PlanScreen period views', () => {
   test('renders Month B as a load heatmap and moves to the next month', async () => {
     const view = await render(<PlanScreen initialDate="2026-08-05" />);
 
-    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await fireEvent.press(view.getByLabelText('Режим просмотра: День'));
     await waitFor(() => {
       expect(view.getByLabelText('Месяц')).toBeOnTheScreen();
     });
-    fireEvent.press(view.getByLabelText('Месяц'));
+    await fireEvent.press(view.getByLabelText('Месяц'));
 
     await waitFor(() => {
       expect(view.getAllByText('Август 2026')).toHaveLength(2);
@@ -113,7 +113,7 @@ describe('PlanScreen period views', () => {
     });
     expect(view.queryByText('Планёрка команды')).toBeNull();
 
-    fireEvent.press(view.getByLabelText('Следующий месяц'));
+    await fireEvent.press(view.getByLabelText('Следующий месяц'));
     await waitFor(() => {
       expect(view.getAllByText('Сентябрь 2026')).toHaveLength(2);
     });
@@ -129,14 +129,14 @@ describe('PlanScreen period views', () => {
     oneWeekEarlier.setDate(oneWeekEarlier.getDate() - 7);
     const view = await render(<PlanScreen initialDate={toLocalIsoDate(twoWeeksEarlier)} />);
 
-    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await fireEvent.press(view.getByLabelText('Режим просмотра: День'));
     await waitFor(() => expect(view.getByLabelText('Неделя')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Неделя'));
+    await fireEvent.press(view.getByLabelText('Неделя'));
     await waitFor(() => expect(view.getAllByText(formatPlanWeekRange(toLocalIsoDate(twoWeeksEarlier)))).toHaveLength(2));
-    fireEvent.press(view.getByLabelText('Следующая неделя'));
+    await fireEvent.press(view.getByLabelText('Следующая неделя'));
     await waitFor(() => expect(view.getAllByText(formatPlanWeekRange(toLocalIsoDate(oneWeekEarlier)))).toHaveLength(2));
 
-    fireEvent.press(view.getByLabelText('Перейти к сегодняшнему дню'));
+    await fireEvent.press(view.getByLabelText('Перейти к сегодняшнему дню'));
 
     await waitFor(() => expect(view.getAllByText(formatPlanWeekRange(today))).toHaveLength(2));
   });
@@ -148,14 +148,14 @@ describe('PlanScreen period views', () => {
     await source.saveScheduleBlock({ id: 'load-block', taskItemId: 'load-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
-    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await fireEvent.press(view.getByLabelText('Режим просмотра: День'));
     await waitFor(() => expect(view.getByLabelText('Неделя')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Неделя'));
+    await fireEvent.press(view.getByLabelText('Неделя'));
     await waitFor(() => expect(view.getByLabelText('Среда, 5 августа: загрузка 7%')).toBeOnTheScreen());
 
-    fireEvent.press(view.getByLabelText('Режим просмотра: Неделя'));
+    await fireEvent.press(view.getByLabelText('Режим просмотра: Неделя'));
     await waitFor(() => expect(view.getByLabelText('Месяц')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Месяц'));
+    await fireEvent.press(view.getByLabelText('Месяц'));
     await waitFor(() => expect(view.getByLabelText('5 августа: загрузка 7%')).toBeOnTheScreen());
   });
 
@@ -167,7 +167,7 @@ describe('PlanScreen period views', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Редактируемая задача, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Редактируемая задача, 09:00–10:00, колонка 1 из 1'));
+    await fireEvent.press(view.getByLabelText('Редактируемая задача, 09:00–10:00, колонка 1 из 1'));
 
     await waitFor(() => expect(view.getByDisplayValue('Редактируемая задача')).toBeOnTheScreen());
   });
@@ -179,17 +179,17 @@ describe('PlanScreen period views', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Подтвердить бронирование')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Подтвердить бронирование'));
+    await fireEvent.press(view.getByText('Подтвердить бронирование'));
 
     await waitFor(() => expect(view.getByDisplayValue('Подтвердить бронирование')).toBeOnTheScreen());
     expect(view.getByLabelText('Выполнить дело из редактора')).toBeOnTheScreen();
     expect(view.getByLabelText('Удалить дело из редактора')).toBeOnTheScreen();
-    fireEvent.press(view.getByLabelText('Выполнить дело из редактора'));
+    await fireEvent.press(view.getByLabelText('Выполнить дело из редактора'));
 
     await waitFor(async () => expect(await source.getReminder('editable-plan-reminder')).toMatchObject({ completedAt: expect.any(String) }));
     await waitFor(() => expect(view.getByLabelText('Без времени: Подтвердить бронирование, выполнено')).toBeOnTheScreen());
-    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
-    fireEvent.press(view.getByLabelText('Без времени: Подтвердить бронирование, выполнено'));
+    expect(view.getByLabelText('Загрузка 7%')).toBeOnTheScreen();
+    await fireEvent.press(view.getByLabelText('Без времени: Подтвердить бронирование, выполнено'));
     await waitFor(() => expect(view.getByLabelText('Возобновить дело из редактора')).toBeOnTheScreen());
   });
 
@@ -202,7 +202,7 @@ describe('PlanScreen period views', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Связанная подзадача, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Связанная подзадача, 09:00–10:00, колонка 1 из 1'));
+    await fireEvent.press(view.getByLabelText('Связанная подзадача, 09:00–10:00, колонка 1 из 1'));
 
     await waitFor(() => expect(view.getByDisplayValue('Связанная подзадача')).toBeOnTheScreen());
     expect(view.queryByDisplayValue('Родительская задача')).toBeNull();
@@ -217,17 +217,17 @@ describe('PlanScreen period views', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Повторяющаяся задача, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Повторяющаяся задача, 09:00–10:00, колонка 1 из 1'));
+    await fireEvent.press(view.getByLabelText('Повторяющаяся задача, 09:00–10:00, колонка 1 из 1'));
     await waitFor(() => expect(view.getByText('К чему применить это изменение?')).toBeOnTheScreen());
     expect(view.getByText('Серию с этой даты')).toBeOnTheScreen();
-    fireEvent.press(view.getByText('Только этот экземпляр'));
+    await fireEvent.press(view.getByText('Только этот экземпляр'));
     await waitFor(() => expect(view.getByDisplayValue('Повторяющаяся задача')).toBeOnTheScreen());
     expect(view.getByLabelText('Выбрать проект')).toBeOnTheScreen();
     expect(view.getByLabelText('Дата задачи')).toBeOnTheScreen();
     expect(view.getByLabelText('Дата блока 1')).toBeOnTheScreen();
-    fireEvent.changeText(view.getByDisplayValue('Повторяющаяся задача'), 'Изменённый экземпляр');
+    await fireEvent.changeText(view.getByDisplayValue('Повторяющаяся задача'), 'Изменённый экземпляр');
     await waitFor(() => expect(view.getByDisplayValue('Изменённый экземпляр')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Сохранить'));
+    await fireEvent.press(view.getByText('Сохранить'));
     await waitFor(async () => expect((await source.listRecurrenceOccurrences('recurring-plan-series'))[0]).toMatchObject({ taskPatch: { title: 'Изменённый экземпляр' } }));
     await expect(source.getTaskItem('recurring-plan-task')).resolves.toMatchObject({ title: 'Повторяющаяся задача' });
   });
@@ -241,13 +241,13 @@ describe('PlanScreen period views', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-12" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Исходная серия, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Исходная серия, 09:00–10:00, колонка 1 из 1'));
+    await fireEvent.press(view.getByLabelText('Исходная серия, 09:00–10:00, колонка 1 из 1'));
     await waitFor(() => expect(view.getByText('Серию с этой даты')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Серию с этой даты'));
+    await fireEvent.press(view.getByText('Серию с этой даты'));
     await waitFor(() => expect(view.getByDisplayValue('Исходная серия')).toBeOnTheScreen());
-    fireEvent.changeText(view.getByDisplayValue('Исходная серия'), 'Обновлённая серия');
+    await fireEvent.changeText(view.getByDisplayValue('Исходная серия'), 'Обновлённая серия');
     await waitFor(() => expect(view.getByDisplayValue('Обновлённая серия')).toBeOnTheScreen());
-    fireEvent.press(view.getByText('Сохранить'));
+    await fireEvent.press(view.getByText('Сохранить'));
 
     await waitFor(async () => expect(await source.listRecurrenceRevisions('forward-series')).toMatchObject([
       { effectiveFrom: '2026-08-12', taskPatch: { title: 'Обновлённая серия' } },
@@ -267,7 +267,7 @@ describe('PlanScreen period views', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-06" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Перенесённая серия, 09:00–10:00, колонка 1 из 1')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Перенесённая серия, 09:00–10:00, колонка 1 из 1'));
+    await fireEvent.press(view.getByLabelText('Перенесённая серия, 09:00–10:00, колонка 1 из 1'));
     await waitFor(() => expect(view.getByLabelText('Редактировать повторение')).toBeOnTheScreen());
   });
 
@@ -277,15 +277,15 @@ describe('PlanScreen period views', () => {
     await source.saveTaskItem({ id: 'estimated-plan-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Оценённая задача', description: null, estimatedDurationMinutes: 120, scheduledOn: '2026-08-05', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
-    await waitFor(() => expect(view.getByLabelText('Выполнено 14%')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Режим просмотра: День'));
+    await waitFor(() => expect(view.getByLabelText('Загрузка 14%')).toBeOnTheScreen());
+    await fireEvent.press(view.getByLabelText('Режим просмотра: День'));
     await waitFor(() => expect(view.getByLabelText('Неделя')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Неделя'));
+    await fireEvent.press(view.getByLabelText('Неделя'));
     await waitFor(() => expect(view.getByLabelText('Среда, 5 августа: загрузка 14%')).toBeOnTheScreen());
 
-    fireEvent.press(view.getByLabelText('Режим просмотра: Неделя'));
+    await fireEvent.press(view.getByLabelText('Режим просмотра: Неделя'));
     await waitFor(() => expect(view.getByLabelText('Месяц')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Месяц'));
+    await fireEvent.press(view.getByLabelText('Месяц'));
     await waitFor(() => expect(view.getByLabelText('5 августа: загрузка 14%')).toBeOnTheScreen());
   });
 

@@ -14,7 +14,7 @@ describe('UI primitives', () => {
       </SurfaceCard>,
     );
 
-    fireEvent.press(view.getByRole('button', { name: 'Напоминания' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Напоминания' }));
 
     expect(onPress).toHaveBeenCalledTimes(1);
   });

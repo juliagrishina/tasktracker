@@ -103,7 +103,7 @@ describe('AppServicesProvider', () => {
     });
 
     await act(async () => {
-      fireEvent.press(view.getByText('Создать задачу'));
+      await fireEvent.press(view.getByText('Создать задачу'));
     });
 
     await waitFor(() => {
@@ -122,7 +122,7 @@ describe('AppServicesProvider', () => {
 
     await waitFor(() => expect(view.getByText('manual')).toBeOnTheScreen());
     await act(async () => {
-      fireEvent.press(view.getByText('manual'));
+      await fireEvent.press(view.getByText('manual'));
     });
 
     await waitFor(async () => {
@@ -142,7 +142,7 @@ describe('AppServicesProvider', () => {
 
     await waitFor(() => expect(view.getByText('08:00-22:00:21:00:10')).toBeOnTheScreen());
     await act(async () => {
-      fireEvent.press(view.getByText('08:00-22:00:21:00:10'));
+      await fireEvent.press(view.getByText('08:00-22:00:21:00:10'));
     });
 
     await waitFor(async () => {

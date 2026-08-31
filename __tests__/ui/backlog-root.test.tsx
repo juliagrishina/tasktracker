@@ -39,19 +39,19 @@ describe('BacklogRootScreen', () => {
       expect(view.getByLabelText('Добавить элемент')).toBeOnTheScreen();
     });
 
-    fireEvent.press(view.getByLabelText('Добавить элемент'));
+    await fireEvent.press(view.getByLabelText('Добавить элемент'));
     await waitFor(() => {
       expect(view.getByText('Новое напоминание')).toBeTruthy();
     });
-    fireEvent.press(view.getByText('Новое напоминание'));
+    await fireEvent.press(view.getByText('Новое напоминание'));
     await waitFor(() => {
       expect(view.getByLabelText('Название')).toBeTruthy();
     });
-    fireEvent.changeText(view.getByLabelText('Название'), 'Проверить ответ');
+    await fireEvent.changeText(view.getByLabelText('Название'), 'Проверить ответ');
     await waitFor(() => {
       expect(view.getByLabelText('Название').props.value).toBe('Проверить ответ');
     });
-    fireEvent.press(view.getByText('Сохранить'));
+    await fireEvent.press(view.getByText('Сохранить'));
 
     await waitFor(() => {
       expect(view.getByText('Проверить ответ')).toBeTruthy();

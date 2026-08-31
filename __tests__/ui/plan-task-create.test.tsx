@@ -40,7 +40,7 @@ describe('Plan task creation sheet', () => {
     await waitFor(() => {
       expect(view.getByLabelText('Добавить в план')).toBeOnTheScreen();
     });
-    fireEvent.press(view.getByLabelText('Добавить в план'));
+    await fireEvent.press(view.getByLabelText('Добавить в план'));
 
     await waitFor(() => {
       expect(view.getByText('Новая задача')).toBeOnTheScreen();
@@ -48,18 +48,18 @@ describe('Plan task creation sheet', () => {
       expect(view.getByText('Повторение')).toBeOnTheScreen();
     });
 
-    fireEvent.press(view.getByText('Период'));
+    await fireEvent.press(view.getByText('Период'));
     await waitFor(() => {
       expect(view.getByLabelText('Начало периода задачи')).toBeOnTheScreen();
       expect(view.getByLabelText('Конец периода задачи')).toBeOnTheScreen();
     });
 
-    fireEvent.press(view.getByText('Каждую неделю'));
+    await fireEvent.press(view.getByText('Каждую неделю'));
     await waitFor(() => {
       expect(view.getByLabelText('Интервал повторения')).toBeOnTheScreen();
     });
 
-    fireEvent.press(view.getByText('Добавить блок времени'));
+    await fireEvent.press(view.getByText('Добавить блок времени'));
     await waitFor(() => {
       expect(view.getByLabelText('Начало блока 1')).toBeOnTheScreen();
       expect(view.getByLabelText('Длительность блока 1')).toBeOnTheScreen();
@@ -77,19 +77,19 @@ describe('Plan task creation sheet', () => {
     await waitFor(() => {
       expect(view.getByLabelText('Добавить в план')).toBeOnTheScreen();
     });
-    fireEvent.press(view.getByLabelText('Добавить в план'));
+    await fireEvent.press(view.getByLabelText('Добавить в план'));
     await waitFor(() => {
       expect(view.getByLabelText('Название')).toBeOnTheScreen();
     });
-    fireEvent.changeText(view.getByLabelText('Название'), 'Подготовить план релиза');
+    await fireEvent.changeText(view.getByLabelText('Название'), 'Подготовить план релиза');
     await waitFor(() => {
       expect(view.getByLabelText('Название').props.value).toBe('Подготовить план релиза');
     });
-    fireEvent.press(view.getByLabelText('Добавить блок времени'));
+    await fireEvent.press(view.getByLabelText('Добавить блок времени'));
     await waitFor(() => {
       expect(view.getByLabelText('Начало блока 1')).toBeOnTheScreen();
     });
-    fireEvent.press(view.getByText('Создать'));
+    await fireEvent.press(view.getByText('Создать'));
 
     await waitFor(async () => {
       expect((await source.listTaskItems()).map((task) => task.title)).toContain('Подготовить план релиза');
@@ -107,14 +107,14 @@ describe('Plan task creation sheet', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Добавить в план')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('Добавить в план'));
+    await fireEvent.press(view.getByLabelText('Добавить в план'));
     if (view.queryByLabelText('Пропустить оценку энергии') !== null) {
-      fireEvent.press(view.getByLabelText('Пропустить оценку энергии'));
+      await fireEvent.press(view.getByLabelText('Пропустить оценку энергии'));
     }
     await waitFor(() => expect(view.getByLabelText('Название')).toBeOnTheScreen());
-    fireEvent.changeText(view.getByLabelText('Название'), 'Задача выбранного дня');
+    await fireEvent.changeText(view.getByLabelText('Название'), 'Задача выбранного дня');
     await waitFor(() => expect(view.getByLabelText('Название').props.value).toBe('Задача выбранного дня'));
-    fireEvent.press(view.getByText('Создать'));
+    await fireEvent.press(view.getByText('Создать'));
 
     await waitFor(async () => {
       expect(await source.listTaskItems()).toEqual(expect.arrayContaining([

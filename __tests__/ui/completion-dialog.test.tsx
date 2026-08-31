@@ -18,7 +18,7 @@ describe('CompletionDialog', () => {
 
     expect(view.getByText('Удалось закончить?')).toBeOnTheScreen();
     expect(view.getByText('«Подготовить отчёт» завершено?')).toBeOnTheScreen();
-    fireEvent.press(view.getByLabelText('Да, завершить дело'));
+    await fireEvent.press(view.getByLabelText('Да, завершить дело'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onRequestClose).not.toHaveBeenCalled();
@@ -37,7 +37,7 @@ describe('CompletionDialog', () => {
       />,
     );
 
-    fireEvent.press(view.getByLabelText('Отложить решение о завершении'));
+    await fireEvent.press(view.getByLabelText('Отложить решение о завершении'));
 
     expect(onComplete).not.toHaveBeenCalled();
     expect(onRequestClose).toHaveBeenCalledTimes(1);
