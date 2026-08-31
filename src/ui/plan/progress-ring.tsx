@@ -19,7 +19,7 @@ export function ProgressRing({ label, value }: ProgressRingProps) {
 
   return (
     <View
-      accessibilityLabel={`Выполнено ${label}`}
+      accessibilityLabel={`Загрузка ${label}`}
       accessibilityRole="progressbar"
       accessibilityValue={{ max: 100, min: 0, now: normalizedValue }}
       style={styles.container}>

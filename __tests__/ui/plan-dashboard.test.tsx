@@ -9,10 +9,10 @@ import { ProgressRing } from '../../src/ui/plan/progress-ring';
 import type { PlanDayReadModel } from '../../src/application/plan-read-model';
 
 describe('ProgressRing', () => {
-  test('announces the approved completion percentage to assistive technology', async () => {
+  test('announces the day load percentage to assistive technology', async () => {
     const view = await render(<ProgressRing label="35%" value={35} />);
 
-    expect(view.getByLabelText('Выполнено 35%')).toBeOnTheScreen();
+    expect(view.getByLabelText('Загрузка 35%')).toBeOnTheScreen();
   });
 
   test('does not pass a boolean accessible prop to the decorative SVG', async () => {
@@ -36,7 +36,7 @@ describe('DayDashboard', () => {
     fireEvent.press(view.getByLabelText('Да, завершить дело'));
     await waitFor(async () => expect(await source.getTaskItem('completion-task')).toMatchObject({ completedAt: expect.any(String) }));
     await waitFor(() => expect(view.getByLabelText('Подготовить отчёт, 09:00–10:00, выполнено, колонка 1 из 1')).toBeOnTheScreen());
-    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
+    expect(view.getByLabelText('Загрузка 7%')).toBeOnTheScreen();
   });
 
   test('does not re-open a completion prompt for a task deferred with “Не сейчас” on the same day', async () => {
@@ -294,7 +294,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByLabelText('Без времени: Завершённое дело без времени, выполнено')).toBeOnTheScreen());
-    expect(view.getByLabelText('Выполнено 7%')).toBeOnTheScreen();
+    expect(view.getByLabelText('Загрузка 7%')).toBeOnTheScreen();
   });
 
   test('completes only the prompted recurring occurrence', async () => {
