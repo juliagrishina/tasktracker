@@ -6,12 +6,10 @@
     "orientation": "portrait",
     "scheme": "tasktracker",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": false
     },
     "android": {
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -21,7 +19,10 @@
     "plugins": [
       "expo-router",
       "expo-asset",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-font",
+      "expo-sqlite",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

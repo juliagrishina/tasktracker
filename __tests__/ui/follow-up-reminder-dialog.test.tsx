@@ -23,8 +23,8 @@ describe('FollowUpReminderDialog', () => {
     fireEvent.press(view.getByLabelText('Выбрать свою дату напоминания'));
     await waitFor(() => expect(view.getByLabelText('Дата связанного напоминания')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Дата связанного напоминания'));
-    await waitFor(() => expect(view.getByLabelText('30 Август 2026, сегодня')).toBeOnTheScreen());
-    fireEvent.press(view.getByLabelText('30 Август 2026, сегодня'));
+    await waitFor(() => expect(view.getByLabelText(/30 Август 2026/)).toBeOnTheScreen());
+    fireEvent.press(view.getByLabelText(/30 Август 2026/));
     await waitFor(() => expect(view.getByText('30.08.2026')).toBeOnTheScreen());
     fireEvent.press(view.getByLabelText('Создать напоминание на выбранную дату'));
 
