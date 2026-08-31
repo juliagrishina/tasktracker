@@ -39,6 +39,28 @@ describe('DayDashboard', () => {
     expect(view.getByLabelText('Загрузка 7%')).toBeOnTheScreen();
   });
 
+  test('shows the next future schedule block instead of an earlier stored block', async () => {
+    const createdAt = '2026-08-01T00:00:00.000Z';
+    const model: PlanDayReadModel = {
+      blocks: [
+        { id: 'past-block', taskItemId: 'past-block-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null },
+        { id: 'future-block', taskItemId: 'future-block-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T12:00:00+03:00', endsAt: '2026-08-28T13:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null },
+      ],
+      loadPercent: 20,
+      taskById: new Map([
+        ['past-block-task', { id: 'past-block-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Прошедший блок', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null }],
+        ['future-block-task', { id: 'future-block-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Ближайший блок', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null }],
+      ]),
+      untimedReminders: [],
+      untimedTasks: [],
+    };
+
+    const view = await render(<AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}><DayDashboard dayPlan={model} now={new Date('2026-08-28T08:00:00.000Z')} selectedDate="2026-08-28" /></AppServicesProvider>);
+
+    expect(view.getAllByText('Ближайший блок')).toHaveLength(2);
+    expect(view.getAllByText('Прошедший блок')).toHaveLength(1);
+  });
+
   test('does not re-open a completion prompt for a task deferred with “Не сейчас” on the same day', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';

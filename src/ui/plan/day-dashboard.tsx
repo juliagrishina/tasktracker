@@ -157,7 +157,12 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
   const timelineTitles = services === null
     ? new Map([['demo-plan-task', 'Планёрка команды']])
     : new Map([...currentBlockTasks.entries()].map(([taskId, task]) => [taskId, task.title]));
-  const nextBlock = currentBlocks[0];
+  const nextBlock = useMemo(() => {
+    const ordered = [...currentBlocks].sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+    if (selectedDate !== getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId)) return ordered[0];
+    const currentOrFuture = ordered.find((block) => new Date(block.endsAt).getTime() > (now ?? new Date()).getTime());
+    return currentOrFuture;
+  }, [currentBlocks, now, selectedDate, settings.timeZoneId]);
   const nextBlockTitle = nextBlock === undefined ? null : timelineTitles.get(nextBlock.taskItemId) ?? 'Ближайший временной блок';
   const handleBlockPress = (block: ScheduleBlock) => {
     const parts = block.occurrenceId?.split(':');
