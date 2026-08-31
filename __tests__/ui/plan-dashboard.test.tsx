@@ -14,6 +14,12 @@ describe('ProgressRing', () => {
 
     expect(view.getByLabelText('Выполнено 35%')).toBeOnTheScreen();
   });
+
+  test('does not pass a boolean accessible prop to the decorative SVG', async () => {
+    const view = await render(<ProgressRing label="35%" value={35} />);
+
+    expect(JSON.stringify(view.toJSON())).not.toContain('"accessible":false');
+  });
 });
 
 describe('DayDashboard', () => {

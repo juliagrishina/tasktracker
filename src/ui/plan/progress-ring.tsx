@@ -23,7 +23,7 @@ export function ProgressRing({ label, value }: ProgressRingProps) {
       accessibilityRole="progressbar"
       accessibilityValue={{ max: 100, min: 0, now: normalizedValue }}
       style={styles.container}>
-      <Svg accessible={false} height={ringSize} width={ringSize}>
+      <Svg height={ringSize} width={ringSize}>
         <Circle
           cx={ringSize / 2}
           cy={ringSize / 2}
