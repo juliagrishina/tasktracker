@@ -3,18 +3,28 @@
     "name": "TaskTracker",
     "slug": "tasktracker",
     "version": "1.0.0",
+    "icon": "./assets/plan-my-plan-512.png",
     "orientation": "portrait",
     "scheme": "tasktracker",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "icon": "./assets/plan-my-plan-512.png"
     },
     "android": {
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "favicon": "./public/favicon.png",
+      "name": "Plan My Plan",
+      "shortName": "Plan My Plan",
+      "lang": "ru",
+      "display": "standalone",
+      "startUrl": "/",
+      "themeColor": "#061E42",
+      "backgroundColor": "#061E42"
     },
     "plugins": [
       "expo-router",
