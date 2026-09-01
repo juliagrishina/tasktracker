@@ -26,7 +26,7 @@ describe('evening review', () => {
   test('schedules one future review notification and stores its identifier', async () => {
     const source = createInMemoryDataSource();
     const scheduler = { cancel: jest.fn(), schedule: jest.fn().mockResolvedValue('evening-notification-1') };
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'review-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить отчёт', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
 
     await synchronizeEveningReviewNotification({ source, scheduler, now: new Date('2026-08-28T17:00:00.000Z') });
@@ -38,7 +38,7 @@ describe('evening review', () => {
   test('removes a prior notification after the review time without scheduling a replacement', async () => {
     const source = createInMemoryDataSource();
     const scheduler = { cancel: jest.fn(), schedule: jest.fn() };
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', eveningReviewNotificationId: 'old-review-notification' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual', eveningReviewNotificationId: 'old-review-notification' });
 
     await synchronizeEveningReviewNotification({ source, scheduler, now: new Date('2026-08-28T18:30:00.000Z') });
 

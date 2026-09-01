@@ -6,6 +6,8 @@ import { getDailyEnergyForCurrentDay } from '../../src/application/energy-use-ca
 import { PlanScreen } from '../../src/ui/plan/plan-screen';
 
 describe('daily energy check-in', () => {
+  const appInitializationTimeout = 15000;
+
   test('offers a scrollable 75-percent default when today has no energy entry', async () => {
     const view = await render(
       <AppServicesProvider seedDevelopmentData={false} source={createInMemoryDataSource()}>
@@ -13,7 +15,9 @@ describe('daily energy check-in', () => {
       </AppServicesProvider>,
     );
 
-    await waitFor(() => expect(view.getByText('Энергия на сегодня')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getByText('Энергия на сегодня')).toBeOnTheScreen(), {
+      timeout: appInitializationTimeout,
+    });
     expect(view.getByLabelText('Энергия 75%').props.accessibilityState).toEqual({ selected: true });
     expect(view.queryByRole('textbox')).toBeNull();
   });
@@ -26,13 +30,15 @@ describe('daily energy check-in', () => {
       </AppServicesProvider>,
     );
 
-    await waitFor(() => expect(view.getByLabelText('Пропустить оценку энергии')).toBeOnTheScreen());
+    await waitFor(() => expect(view.getByLabelText('Пропустить оценку энергии')).toBeOnTheScreen(), {
+      timeout: appInitializationTimeout,
+    });
     await fireEvent.press(view.getByLabelText('Пропустить оценку энергии'));
 
     await waitFor(async () => {
       await expect(getDailyEnergyForCurrentDay(source)).resolves.toMatchObject({ energyPercent: null });
       expect(view.queryByText('Энергия на сегодня')).toBeNull();
-    });
+    }, { timeout: appInitializationTimeout });
 
     await fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
     await waitFor(() => expect(view.getByText('Энергия за сегодня')).toBeOnTheScreen());

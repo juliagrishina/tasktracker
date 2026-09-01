@@ -26,7 +26,7 @@ describe('DayDashboard', () => {
   test('keeps a completed block in the plan and marks it as completed', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'completion-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'completion-block', taskItemId: 'completion-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
 
@@ -64,7 +64,7 @@ describe('DayDashboard', () => {
   test('uses the configured local date when the UTC date is still the previous day', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'local-date-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Задача локального дня', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-11', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
 
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-10T21:30:00.000Z')} /></AppServicesProvider>);
@@ -77,7 +77,7 @@ describe('DayDashboard', () => {
   test('does not re-open a completion prompt for a task deferred with “Не сейчас” on the same day', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'deferred-completion-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Отложенная задача', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'deferred-completion-block', taskItemId: 'deferred-completion-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
 
@@ -99,7 +99,7 @@ describe('DayDashboard', () => {
   test('offers a linked follow-up reminder after completion and creates it for the chosen date', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'follow-up-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Подготовить отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'follow-up-block', taskItemId: 'follow-up-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
 
@@ -121,7 +121,7 @@ describe('DayDashboard', () => {
   test('opens an evening review without changing unfinished items', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'review-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Отправить отчёт', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveReminder({ id: 'review-reminder', title: 'Проверить письмо', remindsOn: '2026-08-28', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
 
@@ -215,6 +215,7 @@ describe('DayDashboard', () => {
   test('opens explicit actions for a scheduled task on a browser context-menu click', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'scheduled-context-menu-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Провести созвон', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'scheduled-context-menu-block', taskItemId: 'scheduled-context-menu-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
 
@@ -229,6 +230,7 @@ describe('DayDashboard', () => {
   test('shows resume for a completed recurring instance in plan actions', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'completed-recurring-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Завершённый повтор', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'completed-recurring-block', taskItemId: 'completed-recurring-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveRecurrenceSeries({ id: 'completed-recurring-series', itemKind: 'task', itemId: 'completed-recurring-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
@@ -245,6 +247,7 @@ describe('DayDashboard', () => {
   test('completes a recurring plan instance without asking for a series scope', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'quick-complete-recurring-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Повтор для завершения', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'quick-complete-recurring-block', taskItemId: 'quick-complete-recurring-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveRecurrenceSeries({ id: 'quick-complete-recurring-series', itemKind: 'task', itemId: 'quick-complete-recurring-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
@@ -285,6 +288,7 @@ describe('DayDashboard', () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     const onEditRecurrence = jest.fn();
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'editable-recurring-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Редактируемый повтор', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'editable-recurring-block', taskItemId: 'editable-recurring-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveRecurrenceSeries({ id: 'editable-recurring-series', itemKind: 'task', itemId: 'editable-recurring-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-28', createdAt, updatedAt: createdAt, deletedAt: null });
@@ -302,7 +306,7 @@ describe('DayDashboard', () => {
   test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'unfinished-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Незавершённый отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'unfinished-block', taskItemId: 'unfinished-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-28T09:00:00+03:00', endsAt: '2026-08-28T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
 
@@ -323,7 +327,7 @@ describe('DayDashboard', () => {
   test('shows a completed date-only task and keeps its estimate in the day load', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'completed-date-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Завершённое дело без времени', description: null, estimatedDurationMinutes: 60, scheduledOn: '2026-08-28', periodStartOn: null, periodEndOn: null, completedAt: '2026-08-28T10:00:00.000Z', createdAt, updatedAt: createdAt, deletedAt: null });
 
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard selectedDate="2026-08-28" /></AppServicesProvider>);
@@ -335,7 +339,7 @@ describe('DayDashboard', () => {
   test('completes only the prompted recurring occurrence', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'recurring-completion-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Повторяющийся отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'recurring-completion-block', taskItemId: 'recurring-completion-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-21T09:00:00+03:00', endsAt: '2026-08-21T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveRecurrenceSeries({ id: 'recurring-completion-series', itemKind: 'task', itemId: 'recurring-completion-task', frequency: 'weekly', interval: 1, startsOn: '2026-08-21', createdAt, updatedAt: createdAt, deletedAt: null });
@@ -353,7 +357,7 @@ describe('DayDashboard', () => {
   test('updates existing cards immediately after changing the planning timezone', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
-    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
     await source.saveTaskItem({ id: 'live-timezone-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Созвон', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'live-timezone-block', taskItemId: 'live-timezone-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-03T07:00:00.000Z', endsAt: '2026-08-03T08:00:00.000Z', createdAt, updatedAt: createdAt, deletedAt: null });
 

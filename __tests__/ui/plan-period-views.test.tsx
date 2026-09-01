@@ -3,7 +3,14 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { PlanScreen } from '../../src/ui/plan/plan-screen';
 import { AppServicesProvider } from '../../src/application/app-services-provider';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import { getDefaultSettings } from '../../src/data/default-settings';
 import { formatPlanWeekRange } from '../../src/ui/plan/plan-period-model';
+
+async function createMoscowDataSource() {
+  const source = createInMemoryDataSource();
+  await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
+  return source;
+}
 
 describe('PlanScreen view mode control', () => {
   test('opens the Plan on the current local device date by default', async () => {
@@ -142,7 +149,7 @@ describe('PlanScreen period views', () => {
   });
 
   test('derives Week and Month load from stored schedule blocks', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveTaskItem({ id: 'load-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Нагрузка', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'load-block', taskItemId: 'load-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
@@ -160,7 +167,7 @@ describe('PlanScreen period views', () => {
   });
 
   test('opens a planned task in the editor from the Day view', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveTaskItem({ id: 'editable-plan-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Редактируемая задача', description: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'editable-plan-block', taskItemId: 'editable-plan-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
@@ -173,7 +180,7 @@ describe('PlanScreen period views', () => {
   });
 
   test('opens a one-time reminder in the editor from the Day view', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveReminder({ id: 'editable-plan-reminder', title: 'Подтвердить бронирование', remindsOn: '2026-08-05', periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
@@ -194,7 +201,7 @@ describe('PlanScreen period views', () => {
   });
 
   test('opens the task linked to a timeline block in the editor', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveTaskItem({ id: 'parent-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Родительская задача', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveTaskItem({ id: 'timeline-subtask', kind: 'subtask', projectId: null, parentTaskId: 'parent-task', title: 'Связанная подзадача', description: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
@@ -209,7 +216,7 @@ describe('PlanScreen period views', () => {
   });
 
   test('lets a recurring task instance choose its editing scope from the Day view', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveTaskItem({ id: 'recurring-plan-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Повторяющаяся задача', description: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'recurring-plan-block', taskItemId: 'recurring-plan-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
@@ -233,7 +240,7 @@ describe('PlanScreen period views', () => {
   });
 
   test('edits a recurring task series forward from the selected plan date', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveTaskItem({ id: 'forward-series-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Исходная серия', description: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveScheduleBlock({ id: 'forward-series-block', taskItemId: 'forward-series-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-05T09:00:00+03:00', endsAt: '2026-08-05T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null });
@@ -257,7 +264,7 @@ describe('PlanScreen period views', () => {
   });
 
   test('keeps scope selection for a moved recurring task instance', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     const occurrenceId = 'occurrence-moved-plan-series-2026-08-05';
     await source.saveTaskItem({ id: 'moved-plan-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Перенесённая серия', description: null, estimatedDurationMinutes: 60, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
@@ -272,7 +279,7 @@ describe('PlanScreen period views', () => {
   });
 
   test('uses the estimate of a date-only task in Day, Week and Month load', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveTaskItem({ id: 'estimated-plan-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Оценённая задача', description: null, estimatedDurationMinutes: 120, scheduledOn: '2026-08-05', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);

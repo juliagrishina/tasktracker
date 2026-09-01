@@ -3,12 +3,19 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { AppServicesProvider } from '../../src/application/app-services-provider';
 import type { LocalNotificationScheduler } from '../../src/application/notification-scheduling';
 import { saveTaskPlanning } from '../../src/application/planning-use-cases';
+import { getDefaultSettings } from '../../src/data/default-settings';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { DayDashboard } from '../../src/ui/plan/day-dashboard';
 
+async function createMoscowDataSource() {
+  const source = createInMemoryDataSource();
+  await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
+  return source;
+}
+
 describe('recurrence move', () => {
   test('asks whether to move only the selected instance or the full series', async () => {
-    const source = createInMemoryDataSource();
+    const source = await createMoscowDataSource();
     const notificationScheduler: LocalNotificationScheduler = {
       schedule: async () => 'notification-1',
       cancel: async () => undefined,
