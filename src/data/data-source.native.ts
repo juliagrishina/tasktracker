@@ -21,6 +21,11 @@ import {
 
 import type { AppDataSource } from './contracts';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
+import {
+  migrateLegacyDatabaseToAutonomousScope,
+  type ScopeMigrationDatabase,
+} from './local-data-scope-migration';
+import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
 import { migrateDatabase } from './migrations';
 
 interface SettingsRow {
@@ -145,6 +150,8 @@ interface RecurrenceRevisionRow {
 class NativeDataSource implements AppDataSource {
   private databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
   private initializationPromise: Promise<void> | null = null;
+
+  constructor(private readonly scope: LocalDataScope) {}
 
   async initialize(): Promise<void> {
     if (this.initializationPromise === null) {
@@ -1122,19 +1129,31 @@ class NativeDataSource implements AppDataSource {
   }
 
   private async initializeDatabase(): Promise<void> {
+    if (this.scope.kind === 'autonomous') {
+      await migrateLegacyDatabaseToAutonomousScope({
+        openDatabaseAsync: (name) =>
+          SQLite.openDatabaseAsync(name) as unknown as Promise<ScopeMigrationDatabase>,
+        backupDatabaseAsync: ({ sourceDatabase, destDatabase }) =>
+          SQLite.backupDatabaseAsync({
+            sourceDatabase: sourceDatabase as SQLite.SQLiteDatabase,
+            destDatabase: destDatabase as SQLite.SQLiteDatabase,
+          }),
+      });
+    }
+
     const database = await this.getDatabase();
     await migrateDatabase(database);
   }
 
   private getDatabase(): Promise<SQLite.SQLiteDatabase> {
     if (this.databasePromise === null) {
-      this.databasePromise = SQLite.openDatabaseAsync('tasktracker.db');
+      this.databasePromise = SQLite.openDatabaseAsync(databaseNameForScope(this.scope));
     }
 
     return this.databasePromise;
   }
 }
 
-export function createDataSource(): AppDataSource {
-  return new NativeDataSource();
+export function createDataSource(scope: LocalDataScope = { kind: 'autonomous' }): AppDataSource {
+  return new NativeDataSource(scope);
 }

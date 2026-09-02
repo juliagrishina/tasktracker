@@ -19,10 +19,29 @@ import {
 
 import type { AppDataSource } from './contracts';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
+import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
 
 export interface InMemoryDataSource extends AppDataSource {
   debugSettingsRowCount(): number;
   debugRowExists(id: EntityId): boolean;
+}
+
+export interface BrowserScopeStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+interface BrowserDataSnapshot {
+  settings: AppSettings | null;
+  dailyEnergyEntries: DailyEnergyEntry[];
+  projects: Project[];
+  taskItems: TaskItem[];
+  reminders: Reminder[];
+  scheduleBlocks: ScheduleBlock[];
+  recurrenceSeries: RecurrenceSeries[];
+  recurrenceOccurrences: RecurrenceOccurrence[];
+  recurrenceRevisions: RecurrenceRevision[];
+  transferHistories: TransferHistory[];
 }
 
 function compareByCreatedAt<T extends { id: EntityId; createdAt: string }>(
@@ -50,6 +69,12 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   private readonly recurrenceOccurrences = new Map<EntityId, RecurrenceOccurrence>();
   private readonly recurrenceRevisions = new Map<EntityId, RecurrenceRevision>();
   private readonly transferHistories = new Map<EntityId, TransferHistory>();
+
+  constructor(snapshot?: BrowserDataSnapshot) {
+    if (snapshot !== undefined) {
+      this.restoreSnapshot(snapshot);
+    }
+  }
 
   async initialize(): Promise<void> {
     if (this.settings === null) {
@@ -393,6 +418,34 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     );
   }
 
+  exportSnapshot(): BrowserDataSnapshot {
+    return {
+      settings: this.settings,
+      dailyEnergyEntries: [...this.dailyEnergyEntries.values()],
+      projects: [...this.projects.values()],
+      taskItems: [...this.taskItems.values()],
+      reminders: [...this.reminders.values()],
+      scheduleBlocks: [...this.scheduleBlocks.values()],
+      recurrenceSeries: [...this.recurrenceSeries.values()],
+      recurrenceOccurrences: [...this.recurrenceOccurrences.values()],
+      recurrenceRevisions: [...this.recurrenceRevisions.values()],
+      transferHistories: [...this.transferHistories.values()],
+    };
+  }
+
+  private restoreSnapshot(snapshot: BrowserDataSnapshot): void {
+    this.settings = snapshot.settings;
+    replaceMap(this.dailyEnergyEntries, new Map(snapshot.dailyEnergyEntries.map((entry) => [entry.recordedOn, entry])));
+    replaceMap(this.projects, new Map(snapshot.projects.map((project) => [project.id, project])));
+    replaceMap(this.taskItems, new Map(snapshot.taskItems.map((task) => [task.id, task])));
+    replaceMap(this.reminders, new Map(snapshot.reminders.map((reminder) => [reminder.id, reminder])));
+    replaceMap(this.scheduleBlocks, new Map(snapshot.scheduleBlocks.map((block) => [block.id, block])));
+    replaceMap(this.recurrenceSeries, new Map(snapshot.recurrenceSeries.map((series) => [series.id, series])));
+    replaceMap(this.recurrenceOccurrences, new Map(snapshot.recurrenceOccurrences.map((occurrence) => [occurrence.id, occurrence])));
+    replaceMap(this.recurrenceRevisions, new Map(snapshot.recurrenceRevisions.map((revision) => [revision.id, revision])));
+    replaceMap(this.transferHistories, new Map(snapshot.transferHistories.map((history) => [history.id, history])));
+  }
+
   private deleteTaskRelatedRows(taskItemId: EntityId, deletedAt: string): void {
     for (const [id, block] of this.scheduleBlocks) {
       if (block.taskItemId === taskItemId) {
@@ -442,6 +495,115 @@ export function createInMemoryDataSource(): InMemoryDataSource {
   return new BrowserInMemoryDataSource();
 }
 
-export function createDataSource(): AppDataSource {
-  return createInMemoryDataSource();
+const scopedDataSources = new Map<string, AppDataSource>();
+
+export function createDataSource(scope: LocalDataScope = { kind: 'autonomous' }): AppDataSource {
+  const scopeKey = databaseNameForScope(scope);
+  const existing = scopedDataSources.get(scopeKey);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const browserStorage = getBrowserStorage();
+  const source = browserStorage === null
+    ? createInMemoryDataSource()
+    : createPersistentBrowserDataSource(scope, browserStorage);
+  scopedDataSources.set(scopeKey, source);
+  return source;
+}
+
+export function createPersistentBrowserDataSource(
+  scope: LocalDataScope,
+  storage: BrowserScopeStorage,
+): AppDataSource {
+  const storageKey = `tasktracker.browser-data.${databaseNameForScope(scope)}.v1`;
+  const source = new BrowserInMemoryDataSource(parseSnapshot(storage.getItem(storageKey)));
+  return createPersistedDataSource(source, () => {
+    storage.setItem(storageKey, JSON.stringify(source.exportSnapshot()));
+  });
+}
+
+function createPersistedDataSource(
+  source: BrowserInMemoryDataSource,
+  persist: () => void,
+): AppDataSource {
+  let transactionDepth = 0;
+  let changedDuringTransaction = false;
+
+  return new Proxy(source, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') {
+        return value;
+      }
+
+      if (property === 'transaction') {
+        return async (operation: () => Promise<unknown>) => {
+          transactionDepth += 1;
+          let completed = false;
+          try {
+            const result = await value.call(target, operation);
+            completed = true;
+            return result;
+          } finally {
+            transactionDepth -= 1;
+            if (transactionDepth === 0) {
+              if (completed && changedDuringTransaction) {
+                persist();
+              }
+              changedDuringTransaction = false;
+            }
+          }
+        };
+      }
+
+      return async (...args: unknown[]) => {
+        const result = await value.apply(target, args);
+        if (isMutation(property)) {
+          if (transactionDepth > 0) {
+            changedDuringTransaction = true;
+          } else {
+            persist();
+          }
+        }
+        return result;
+      };
+    },
+  }) as AppDataSource;
+}
+
+function isMutation(property: PropertyKey): boolean {
+  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete'));
+}
+
+function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  try {
+    const snapshot = JSON.parse(value) as Partial<BrowserDataSnapshot>;
+    if (!Array.isArray(snapshot.projects) || !Array.isArray(snapshot.taskItems)) {
+      return undefined;
+    }
+
+    return {
+      settings: snapshot.settings ?? null,
+      dailyEnergyEntries: snapshot.dailyEnergyEntries ?? [],
+      projects: snapshot.projects,
+      taskItems: snapshot.taskItems,
+      reminders: snapshot.reminders ?? [],
+      scheduleBlocks: snapshot.scheduleBlocks ?? [],
+      recurrenceSeries: snapshot.recurrenceSeries ?? [],
+      recurrenceOccurrences: snapshot.recurrenceOccurrences ?? [],
+      recurrenceRevisions: snapshot.recurrenceRevisions ?? [],
+      transferHistories: snapshot.transferHistories ?? [],
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function getBrowserStorage(): BrowserScopeStorage | null {
+  return (globalThis as { localStorage?: BrowserScopeStorage }).localStorage ?? null;
 }
