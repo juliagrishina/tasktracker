@@ -22,6 +22,7 @@ export interface AuthScreenProps {
   onForgotPassword?: () => void;
   onSignIn?: (input: { email: string; password: string }) => void;
   onSignUp?: (input: { displayName: string; email: string; password: string; passwordConfirmation: string; termsAccepted: boolean }) => void;
+  registrationError?: string | null;
 }
 
 export function AuthScreen({
@@ -29,6 +30,7 @@ export function AuthScreen({
   onForgotPassword = () => {},
   onSignIn = () => {},
   onSignUp = () => {},
+  registrationError = null,
 }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>('registration');
   const [displayName, setDisplayName] = useState('');
@@ -124,6 +126,10 @@ export function AuthScreen({
                   </Text>
                 </Pressable>
               </>
+            ) : null}
+
+            {isRegistration && registrationError !== null ? (
+              <Text accessibilityRole="alert" style={styles.error}>{registrationError}</Text>
             ) : null}
 
             <ActionButton
@@ -246,6 +252,11 @@ const styles = StyleSheet.create({
     color: designTokens.color.text.secondary,
     fontSize: designTokens.typography.size.meta,
     lineHeight: designTokens.typography.lineHeight.meta,
+  },
+  error: {
+    color: designTokens.color.feedback.danger.foreground,
+    fontSize: designTokens.typography.size.label,
+    lineHeight: designTokens.typography.lineHeight.label,
   },
   textAction: {
     alignSelf: 'center',
