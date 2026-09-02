@@ -46,9 +46,19 @@ export const authSessionStorage: AuthSessionStorage =
 
 function getWebSessionStorage(): WebSessionStorage {
   const storage = (globalThis as { localStorage?: WebSessionStorage }).localStorage;
-  if (storage === undefined) {
-    throw new Error('Browser storage is unavailable for the Auth session.');
-  }
+  return storage ?? createMemoryWebSessionStorage();
+}
 
-  return storage;
+function createMemoryWebSessionStorage(): WebSessionStorage {
+  const values = new Map<string, string>();
+
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+    removeItem: (key) => {
+      values.delete(key);
+    },
+  };
 }
