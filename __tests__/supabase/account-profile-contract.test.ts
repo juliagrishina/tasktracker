@@ -13,13 +13,19 @@ describe('Epic 11 account profile contracts', () => {
     expect(migration).toContain('update public.profiles');
   });
 
-  test('cancels only the authenticated user pending email change through server-only Admin Auth', () => {
+  test('cancels only the authenticated user pending email change through a user-scoped database function', () => {
+    const migration = readRepositoryFile('supabase', 'migrations', '20260903021000_cancel_pending_email_change.sql');
     const edgeFunction = readRepositoryFile('supabase', 'functions', 'cancel-email-change', 'index.ts');
 
-    expect(edgeFunction).toContain("requireEnvironment('SUPABASE_SERVICE_ROLE_KEY')");
+    expect(migration).toContain('create or replace function public.cancel_pending_email_change()');
+    expect(migration).toContain('auth.uid()');
+    expect(migration).toContain('email_change = \'\'');
+    expect(migration).toContain("grant execute on function public.cancel_pending_email_change() to authenticated");
     expect(edgeFunction).toContain('auth.getUser(token)');
     expect(edgeFunction).toContain('user.new_email');
-    expect(edgeFunction).toContain('auth.admin.updateUserById(user.id, { email: user.email })');
+    expect(edgeFunction).toContain("rpc('cancel_pending_email_change')");
+    expect(edgeFunction).not.toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(edgeFunction).not.toContain('auth.admin.updateUserById');
     expect(edgeFunction).not.toContain('request.json');
   });
 });
