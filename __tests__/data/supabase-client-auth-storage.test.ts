@@ -51,4 +51,23 @@ describe('Supabase Auth client session storage', () => {
       }),
     );
   });
+
+  test('creates a transient password-verification client without persistent storage', () => {
+    process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
+    process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'publishable-key';
+    jest.resetModules();
+
+    const { createClient } = jest.requireMock('@supabase/supabase-js') as { createClient: jest.Mock };
+    const { createTransientSupabaseAuthClient } = jest.requireActual('../../src/data/supabase-client') as typeof import('../../src/data/supabase-client');
+
+    createTransientSupabaseAuthClient();
+
+    expect(createClient).toHaveBeenLastCalledWith(
+      'https://example.supabase.co',
+      'publishable-key',
+      expect.objectContaining({
+        auth: expect.objectContaining({ autoRefreshToken: false, detectSessionInUrl: false, persistSession: false }),
+      }),
+    );
+  });
 });

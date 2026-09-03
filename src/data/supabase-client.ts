@@ -18,6 +18,21 @@ export const supabase = supabaseUrl && supabasePublishableKey
     })
   : null;
 
+/**
+ * Verifies the current password without replacing the app's persisted session.
+ * The temporary session is explicitly revoked by the password-management gateway.
+ */
+export function createTransientSupabaseAuthClient() {
+  if (!supabaseUrl || !supabasePublishableKey) return null;
+  return createClient(supabaseUrl, supabasePublishableKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+}
+
 if (Platform.OS !== 'web' && supabase !== null) {
   AppState.addEventListener('change', (state) => {
     if (state === 'active') {

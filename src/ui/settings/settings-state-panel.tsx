@@ -10,6 +10,7 @@ import {
   type WebNotificationPermissionGateway,
 } from '../../application/notification-permissions';
 import type { AccountProfileResult, AccountProfileState } from '../../application/account-profile';
+import type { PasswordManagementResult } from '../../application/password-management';
 import type { UpdatePlanningSettingsInput } from '../../application/settings-use-cases';
 import type { AppSettings } from '../../domain/entities';
 import { PlanningValuePicker } from '../backlog/planning-value-picker';
@@ -28,7 +29,9 @@ interface SettingsStatePanelProps {
   account?: AccountProfileState;
   notificationPermissions?: NotificationPermissionGateway;
   onAccountCancelEmailChange?: () => Promise<AccountProfileResult>;
+  onChangePassword?: (input: { currentPassword: string; code: string; password: string; passwordConfirmation: string }) => Promise<PasswordManagementResult>;
   onAccountConfirmEmailChange?: (input: { code: string }) => Promise<AccountProfileResult>;
+  onRequestPasswordChangeCode?: () => Promise<PasswordManagementResult>;
   onAccountStartEmailChange?: (input: { currentPassword: string; email: string }) => Promise<AccountProfileResult>;
   onAccountUpdateDisplayName?: (displayName: string) => Promise<AccountProfileResult>;
   onPlanningSettingsChange?: (input: UpdatePlanningSettingsInput) => Promise<void>;
@@ -39,7 +42,7 @@ interface SettingsStatePanelProps {
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onAccountConfirmEmailChange, onAccountStartEmailChange, onAccountUpdateDisplayName, onPlanningSettingsChange, onSignIn, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onPlanningSettingsChange, onSignIn, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -130,7 +133,9 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
         <AccountSettingsCard
           account={account}
           onCancelEmailChange={onAccountCancelEmailChange}
+          onChangePassword={onChangePassword}
           onConfirmEmailChange={onAccountConfirmEmailChange}
+          onRequestPasswordChangeCode={onRequestPasswordChangeCode}
           onSignIn={onSignIn}
           onSignUp={onSignUp}
           onStartEmailChange={onAccountStartEmailChange}

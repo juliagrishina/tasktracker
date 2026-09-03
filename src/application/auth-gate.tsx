@@ -16,11 +16,14 @@ import { createDataSource } from '../data/data-source';
 import { designTokens } from '../ui/design/tokens';
 import { AuthScreen } from '../ui/auth/auth-screen';
 import { EmailVerificationScreen } from '../ui/auth/email-verification-screen';
+import { PasswordRecoveryScreen } from '../ui/auth/password-recovery-screen';
 import { WorkspaceTransferChoice } from '../ui/auth/workspace-transfer-choice';
 import {
   accountRegistration as defaultAccountRegistration,
 } from './account-registration-provider';
 import type { AccountRegistration } from './account-registration';
+import { passwordManagement as defaultPasswordManagement } from './password-management-provider';
+import type { PasswordManagement, PasswordManagementResult } from './password-management';
 import { validateAccountRegistrationInput } from './account-registration';
 import {
   createWorkspaceTransferService,
@@ -38,10 +41,11 @@ interface AuthGateProps {
   entryState?: AuthEntryState;
   scopeRegistry?: DataScopeRegistry;
   registration?: AccountRegistration;
+  passwordManagement?: PasswordManagement;
   workspaceTransfer?: WorkspaceTransferService;
 }
 
-type GateState = 'loading' | 'auth' | 'verification' | 'workspaceTransfer' | 'app';
+type GateState = 'loading' | 'auth' | 'verification' | 'passwordRecovery' | 'workspaceTransfer' | 'app';
 type AuthScreenMode = 'registration' | 'login';
 
 interface AuthGateNavigation {
@@ -60,6 +64,7 @@ export function AuthGate({
   entryState = authEntryState,
   scopeRegistry = localDataScopeRegistry,
   registration = defaultAccountRegistration,
+  passwordManagement = defaultPasswordManagement,
   workspaceTransfer = createWorkspaceTransferService({ sourceForScope: createDataSource }),
 }: AuthGateProps) {
   const [gateState, setGateState] = useState<GateState>('loading');
@@ -73,6 +78,9 @@ export function AuthGate({
   const [resendAvailableAtMs, setResendAvailableAtMs] = useState(0);
   const [signedInAccountId, setSignedInAccountId] = useState<string | null>(null);
   const [workspaceTransferError, setWorkspaceTransferError] = useState<string | null>(null);
+  const [passwordRecoveryEmail, setPasswordRecoveryEmail] = useState<string | null>(null);
+  const [passwordRecoveryError, setPasswordRecoveryError] = useState<string | null>(null);
+  const [passwordRecoveryInfo, setPasswordRecoveryInfo] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -247,6 +255,45 @@ export function AuthGate({
     setGateState('app');
   };
 
+  const requestPasswordRecovery = async ({ email }: { email: string }) => {
+    setPasswordRecoveryError(null);
+    setPasswordRecoveryInfo(null);
+    const result = await passwordManagement.requestPasswordRecovery(email);
+    if (result.kind === 'recoveryRequested') {
+      setPasswordRecoveryEmail(email.trim());
+      setPasswordRecoveryInfo('Если такой аккаунт существует, код отправлен.');
+      return;
+    }
+    setPasswordRecoveryError(messageForPasswordResult(result));
+  };
+
+  const resendPasswordRecovery = async () => {
+    setPasswordRecoveryError(null);
+    setPasswordRecoveryInfo(null);
+    const result = await passwordManagement.resendPasswordRecoveryCode();
+    if (result.kind === 'recoveryRequested') {
+      setPasswordRecoveryInfo('Если такой аккаунт существует, новый код отправлен.');
+      return;
+    }
+    setPasswordRecoveryError(messageForPasswordResult(result));
+  };
+
+  const completePasswordRecovery = async (input: { email: string; code: string; password: string; passwordConfirmation: string }) => {
+    setPasswordRecoveryError(null);
+    setPasswordRecoveryInfo(null);
+    const result = await passwordManagement.completePasswordRecovery(input);
+    if (result.kind !== 'passwordRecovered') {
+      setPasswordRecoveryError(messageForPasswordResult(result));
+      return;
+    }
+    const session = await gateway.restoreSession();
+    if (session.kind !== 'authenticated') {
+      setPasswordRecoveryError('Не удалось открыть обновлённый аккаунт. Войдите с новым паролем.');
+      return;
+    }
+    await openAccount(session.userId);
+  };
+
   if (gateState === 'loading') {
     return (
       <View style={styles.loading}>
@@ -268,6 +315,12 @@ export function AuthGate({
         onSignIn={(input) => {
           void signIn(input);
         }}
+        onForgotPassword={() => {
+          setPasswordRecoveryEmail(null);
+          setPasswordRecoveryError(null);
+          setPasswordRecoveryInfo(null);
+          setGateState('passwordRecovery');
+        }}
         registrationError={registrationError}
         signInError={signInError}
       />
@@ -286,6 +339,27 @@ export function AuthGate({
         }}
       />
     );
+  }
+
+  if (gateState === 'passwordRecovery') {
+    return <PasswordRecoveryScreen
+      email={passwordRecoveryEmail}
+      errorMessage={passwordRecoveryError}
+      infoMessage={passwordRecoveryInfo}
+      onBack={() => {
+        setAuthScreenMode('login');
+        setGateState('auth');
+      }}
+      onConfirm={(input) => {
+        void completePasswordRecovery(input);
+      }}
+      onRequest={(input) => {
+        void requestPasswordRecovery(input);
+      }}
+      onResend={() => {
+        void resendPasswordRecovery();
+      }}
+    />;
   }
 
   if (gateState === 'verification' && pendingEmail !== null) {
@@ -315,6 +389,29 @@ export function AuthGate({
   }
 
   return <AuthGateNavigationContext.Provider value={{ openAuth }}>{children}</AuthGateNavigationContext.Provider>;
+}
+
+function messageForPasswordResult(result: PasswordManagementResult): string {
+  switch (result.kind) {
+    case 'codeSent':
+    case 'passwordChanged':
+    case 'recoveryRequested':
+    case 'passwordRecovered':
+      return 'Операция завершена.';
+    case 'validationError':
+    case 'requestFailed':
+      return result.message;
+    case 'resendCooldown':
+      return 'Новый код можно запросить через минуту.';
+    case 'missingCodeRequest':
+      return 'Сначала запросите новый код.';
+    case 'expiredCode':
+      return 'Срок действия кода истёк. Отправьте новый код.';
+    case 'codeInvalidated':
+      return 'Код аннулирован. Отправьте новый код.';
+    case 'incorrectCode':
+      return `Неверный код. Осталось попыток: ${result.attemptsRemaining}.`;
+  }
 }
 
 function messageForConfirmationResult(

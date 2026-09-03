@@ -246,8 +246,12 @@ content_path = "./supabase/templates/auth-confirmation.html"
 subject = "Подтвердите новый email в Plan My Plan"
 content_path = "./supabase/templates/auth-email-change.html"
 
+[auth.email.template.magic_link]
+subject = "Код для смены пароля Plan My Plan"
+content_path = "./supabase/templates/auth-magic-link.html"
+
 [auth.email.template.recovery]
-subject = "Код для восстановления пароля Plan My Plan"
+subject = "Код для смены или восстановления пароля Plan My Plan"
 content_path = "./supabase/templates/auth-recovery.html"
 
 [auth.email.notification.password_changed]

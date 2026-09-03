@@ -23,9 +23,11 @@ describe('Epic 11 Auth protection contract', () => {
 
   test('keeps every Russian Auth and sensitive-action email template in the release contract', () => {
     const config = readRepositoryFile('supabase', 'config.toml');
+    const checklist = readRepositoryFile('supabase', 'production-auth-release-checklist.md');
     const templates = [
       'auth-confirmation.html',
       'auth-email-change.html',
+      'auth-magic-link.html',
       'auth-recovery.html',
       'auth-password-changed.html',
       'auth-email-changed.html',
@@ -35,12 +37,16 @@ describe('Epic 11 Auth protection contract', () => {
 
     expect(config).toContain('[auth.email.template.confirmation]');
     expect(config).toContain('[auth.email.template.email_change]');
+    expect(config).toContain('[auth.email.template.magic_link]');
     expect(config).toContain('[auth.email.template.recovery]');
+    expect(config).toContain('Код для смены или восстановления пароля Plan My Plan');
     expect(config).toContain('[auth.email.notification.password_changed]');
     expect(config).toContain('[auth.email.notification.email_changed]');
     for (const template of templates) {
       expect(readRepositoryFile('supabase', 'templates', template)).toMatch(/Plan My Plan/u);
     }
+    expect(readRepositoryFile('supabase', 'templates', 'auth-recovery.html')).toContain('смены или восстановления пароля');
+    expect(checklist).toContain('Require current password when updating');
   });
 
   test('stores only ticket hashes and consumes tickets atomically for the matching account action', () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { type AccountProfileResult, type AccountProfileService, type AccountProfileState } from '../../application/account-profile';
 import { createCurrentAccountProfileService } from '../../application/account-profile-provider';
+import { passwordManagement } from '../../application/password-management-provider';
 import { useAppServices } from '../../application/app-services-provider';
 import { useAuthGateNavigation } from '../../application/auth-gate';
 import { notificationPermissionGateway } from '../../application/notification-permission-gateway';
@@ -45,10 +46,12 @@ export default function SettingsScreen() {
     account={account}
     notificationPermissions={notificationPermissionGateway}
     onAccountCancelEmailChange={() => runAccountAction((service) => service.cancelEmailChange())}
+    onChangePassword={(input) => passwordManagement.changePassword(input)}
     onAccountConfirmEmailChange={(input) => runAccountAction((service) => service.confirmEmailChange(input))}
     onAccountStartEmailChange={(input) => runAccountAction((service) => service.startEmailChange(input))}
     onAccountUpdateDisplayName={(displayName) => runAccountAction((service) => service.updateDisplayName(displayName))}
     onPlanningSettingsChange={settingsActions.updatePlanningSettings}
+    onRequestPasswordChangeCode={() => passwordManagement.requestPasswordChangeCode()}
     onSignIn={() => authNavigation?.openAuth('login')}
     onSignUp={() => authNavigation?.openAuth('registration')}
     onTimeZoneChange={settingsActions.updateTimeZone}

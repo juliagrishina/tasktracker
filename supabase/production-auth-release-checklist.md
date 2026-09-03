@@ -15,11 +15,14 @@ committed.
   from the secure deployment secret store. Send a real registration,
   email-change and recovery message before release.
 - Copy the Russian HTML in `supabase/templates/` into the matching dashboard
-  templates: confirmation, email change, recovery, password changed and email
-  changed. The two account-action messages are sent by the protected account
-  action workflow when it is deployed.
+  templates: confirmation, email change, password-change code, recovery,
+  password changed and email changed. The two account-action messages are sent
+  by the protected account action workflow when it is deployed.
 - Set email OTP length to 6, expiry to 600 seconds and resend interval to 60
   seconds. Apply the rate limits documented in `supabase/config.toml`.
+- Enable **Require current password when updating**. The password-change flow
+  sends `current_password` to Auth so the current device stays signed in while
+  every other session is revoked.
 - Register an hCaptcha site for both `planmeplan.ru` and local development,
   then configure its **secret** in the dashboard. Enable CAPTCHA only together
   with a web and native client implementation that supplies a CAPTCHA token;

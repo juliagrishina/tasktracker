@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 
 import { AuthGate } from '../../src/application/auth-gate';
 import { createAccountRegistration, createMemoryPendingRegistrationStore } from '../../src/application/account-registration';
+import { createPasswordManagement } from '../../src/application/password-management';
 import { createAuthEntryState } from '../../src/data/auth-entry-state';
 import { createDataScopeRegistry } from '../../src/data/local-data-scopes';
 
@@ -305,6 +306,40 @@ describe('AuthGate', () => {
     await fireEvent.press(view.getByLabelText('Продолжить локально'));
 
     await waitFor(() => expect(view.getByText('Основной экран')).toBeOnTheScreen());
+  });
+
+  test('opens the neutral password recovery flow from the login form', async () => {
+    const storage = createMemoryStorage();
+    const passwordManagement = createPasswordManagement({
+      gateway: {
+        sendChangeCode: async () => ({ email: 'maria@example.com' }),
+        verifyChangeCode: async () => {},
+        setPassword: async () => {},
+        sendRecoveryCode: async () => {},
+        verifyRecoveryCode: async () => {},
+        setRecoveredPassword: async () => {},
+      },
+    });
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => ({ kind: 'signedOut' }),
+          startAutonomousSession: async () => ({ kind: 'autonomous', userId: null }),
+        }}
+        entryState={createAuthEntryState(storage)}
+        passwordManagement={passwordManagement}
+        scopeRegistry={createDataScopeRegistry(storage)}>
+        <Text>Основной экран</Text>
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByText('Создать аккаунт')).toBeOnTheScreen());
+    await fireEvent.press(view.getByLabelText('Перейти ко входу'));
+    await fireEvent.press(view.getByLabelText('Забыли пароль?'));
+    await waitFor(() => expect(view.getByLabelText('Email для восстановления')).toBeOnTheScreen());
+    await fireEvent.changeText(view.getByLabelText('Email для восстановления'), 'maria@example.com');
+    await fireEvent.press(view.getByRole('button', { name: 'Отправить код' }));
+    await waitFor(() => expect(view.getByLabelText('Код восстановления')).toBeOnTheScreen());
   });
 });
 

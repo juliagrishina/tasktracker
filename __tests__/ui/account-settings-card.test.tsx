@@ -1,6 +1,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import type { AccountProfileResult, AccountProfileState } from '../../src/application/account-profile';
+import type { PasswordManagementResult } from '../../src/application/password-management';
 import { AccountSettingsCard } from '../../src/ui/settings/account-settings-card';
 
 const authenticatedAccount: AccountProfileState = {
@@ -72,5 +73,34 @@ describe('AccountSettingsCard', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Сохранить имя' }));
 
     await waitFor(() => expect(view.getByText('Не удалось обновить данные аккаунта. Проверьте подключение к интернету.')).toBeOnTheScreen());
+  });
+
+  test('changes the password with the current password, email code and confirmation', async () => {
+    const onRequestPasswordChangeCode = jest.fn<Promise<PasswordManagementResult>, []>().mockResolvedValue({ kind: 'codeSent' });
+    const onChangePassword = jest.fn<Promise<PasswordManagementResult>, [{ currentPassword: string; code: string; password: string; passwordConfirmation: string }]>().mockResolvedValue({ kind: 'passwordChanged' });
+    const view = await render(
+      <AccountSettingsCard
+        account={authenticatedAccount}
+        onChangePassword={onChangePassword}
+        onRequestPasswordChangeCode={onRequestPasswordChangeCode}
+      />,
+    );
+
+    await fireEvent.press(view.getByRole('button', { name: 'Изменить пароль' }));
+    await fireEvent.changeText(view.getByLabelText('Текущий пароль'), 'Current!123');
+    await fireEvent.press(view.getByRole('button', { name: 'Отправить код для смены пароля' }));
+    await waitFor(() => expect(onRequestPasswordChangeCode).toHaveBeenCalledWith());
+    expect(view.getByRole('button', { name: 'Отправить новый код' })).toBeOnTheScreen();
+    await fireEvent.changeText(view.getByLabelText('Код для смены пароля'), '123456');
+    await fireEvent.changeText(view.getByLabelText('Новый пароль'), 'NewPassword!42');
+    await fireEvent.changeText(view.getByLabelText('Повторите новый пароль'), 'NewPassword!42');
+    await fireEvent.press(view.getByRole('button', { name: 'Сохранить новый пароль' }));
+
+    await waitFor(() => expect(onChangePassword).toHaveBeenCalledWith({
+      currentPassword: 'Current!123',
+      code: '123456',
+      password: 'NewPassword!42',
+      passwordConfirmation: 'NewPassword!42',
+    }));
   });
 });
