@@ -1,7 +1,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 
-import { AuthGate } from '../../src/application/auth-gate';
+import { AuthGate, useAuthGateNavigation } from '../../src/application/auth-gate';
 import { createAccountRegistration, createMemoryPendingRegistrationStore } from '../../src/application/account-registration';
 import { createPasswordManagement } from '../../src/application/password-management';
 import { createAuthEntryState } from '../../src/data/auth-entry-state';
@@ -341,7 +341,49 @@ describe('AuthGate', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Отправить код' }));
     await waitFor(() => expect(view.getByLabelText('Код восстановления')).toBeOnTheScreen());
   });
+
+  test('signs out into the separate autonomous area even when remote revocation is unavailable, then restores the account area after sign-in', async () => {
+    const storage = createMemoryStorage();
+    const scopes = createDataScopeRegistry(storage);
+    const signOut = jest.fn().mockRejectedValue(new Error('Offline'));
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => ({ kind: 'authenticated', userId: 'account-17', email: 'anna@example.com' }),
+          startAutonomousSession: async () => ({ kind: 'autonomous', userId: null }),
+          signInWithPassword: async () => ({ kind: 'authenticated', userId: 'account-17', email: 'anna@example.com' }),
+          signOut,
+        }}
+        entryState={createAuthEntryState(storage)}
+        scopeRegistry={scopes}
+        workspaceTransfer={{ hasAutonomousData: async () => false, importIntoAccount: async () => {} }}>
+        <SignOutProbe />
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByLabelText('Выйти из аккаунта')).toBeOnTheScreen());
+    await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'account', accountId: 'account-17' });
+
+    await fireEvent.press(view.getByLabelText('Выйти из аккаунта'));
+
+    await waitFor(() => expect(view.getByText('Создать аккаунт')).toBeOnTheScreen());
+    expect(signOut).toHaveBeenCalledTimes(1);
+    await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'autonomous' });
+
+    await fireEvent.press(view.getByLabelText('Перейти ко входу'));
+    await fireEvent.changeText(view.getByLabelText('Email'), 'anna@example.com');
+    await fireEvent.changeText(view.getByLabelText('Пароль'), 'P@ssword2026');
+    await fireEvent.press(view.getByText('Войти'));
+
+    await waitFor(() => expect(view.getByLabelText('Выйти из аккаунта')).toBeOnTheScreen());
+    await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'account', accountId: 'account-17' });
+  });
 });
+
+function SignOutProbe() {
+  const navigation = useAuthGateNavigation();
+  return <Pressable accessibilityLabel="Выйти из аккаунта" onPress={() => { void navigation?.signOut(); }} />;
+}
 
 function createMemoryStorage() {
   const values = new Map<string, string>();

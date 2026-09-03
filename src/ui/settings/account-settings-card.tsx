@@ -16,6 +16,7 @@ interface AccountSettingsCardProps {
   onRequestPasswordChangeCode?: () => Promise<PasswordManagementResult>;
   onChangePassword?: (input: { currentPassword: string; code: string; password: string; passwordConfirmation: string }) => Promise<PasswordManagementResult>;
   onSignIn?: () => void;
+  onSignOut?: () => void;
   onSignUp?: () => void;
 }
 
@@ -28,6 +29,7 @@ export function AccountSettingsCard({
   onRequestPasswordChangeCode,
   onChangePassword,
   onSignIn,
+  onSignOut,
   onSignUp,
 }: AccountSettingsCardProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -140,6 +142,7 @@ export function AccountSettingsCard({
           return !value;
         });
       }} tone="soft" />
+      {onSignOut === undefined ? null : <ActionButton label="Выйти" onPress={onSignOut} tone="secondary" />}
 
       {isEditing ? <View style={styles.editor}>
         <Text style={styles.fieldLabel}>Имя</Text>

@@ -11,7 +11,7 @@ import {
 import type { AuthEntryState } from '../data/auth-entry-state';
 import { authEntryState } from '../data/auth-entry-state-provider';
 import { localDataScopeRegistry } from '../data/local-data-scope-registry';
-import type { DataScopeRegistry } from '../data/local-data-scopes';
+import type { DataScopeRegistry, LocalDataScope } from '../data/local-data-scopes';
 import { createDataSource } from '../data/data-source';
 import { designTokens } from '../ui/design/tokens';
 import { AuthScreen } from '../ui/auth/auth-screen';
@@ -33,6 +33,7 @@ import {
 interface AutonomousAuthGateway extends AuthGateway {
   startAutonomousSession(): Promise<AuthSessionState>;
   signInWithPassword?(input: { email: string; password: string }): Promise<AuthSessionState>;
+  signOut?(): Promise<void>;
 }
 
 interface AuthGateProps {
@@ -50,12 +51,20 @@ type AuthScreenMode = 'registration' | 'login';
 
 interface AuthGateNavigation {
   openAuth(mode: AuthScreenMode): void;
+  signOut(): Promise<void>;
 }
 
 const AuthGateNavigationContext = createContext<AuthGateNavigation | null>(null);
+const AuthGateWorkspaceContext = createContext<LocalDataScope | null>(null);
 
 export function useAuthGateNavigation(): AuthGateNavigation | null {
   return useContext(AuthGateNavigationContext);
+}
+
+export function useAuthGateWorkspace(): LocalDataScope {
+  const scope = useContext(AuthGateWorkspaceContext);
+  if (scope === null) throw new Error('useAuthGateWorkspace должен использоваться внутри AuthGate.');
+  return scope;
 }
 
 export function AuthGate({
@@ -81,6 +90,7 @@ export function AuthGate({
   const [passwordRecoveryEmail, setPasswordRecoveryEmail] = useState<string | null>(null);
   const [passwordRecoveryError, setPasswordRecoveryError] = useState<string | null>(null);
   const [passwordRecoveryInfo, setPasswordRecoveryInfo] = useState<string | null>(null);
+  const [activeScope, setActiveScope] = useState<LocalDataScope>({ kind: 'autonomous' });
 
   useEffect(() => {
     let isMounted = true;
@@ -91,6 +101,13 @@ export function AuthGate({
         const shouldOpenApp = await entryState.shouldOpenApp(session);
         if (isMounted) {
           if (shouldOpenApp) {
+            if (session.kind === 'authenticated') {
+              await scopeRegistry.openAccountScope(session.userId);
+              setActiveScope({ kind: 'account', accountId: session.userId });
+            } else {
+              await scopeRegistry.openAutonomousScope();
+              setActiveScope({ kind: 'autonomous' });
+            }
             setGateState('app');
             return;
           }
@@ -124,6 +141,7 @@ export function AuthGate({
       // Локальная автономная область доступна и без сети/Supabase.
     }
     await scopeRegistry.openAutonomousScope();
+    setActiveScope({ kind: 'autonomous' });
     await entryState.continueWithoutAccount();
     setGateState('app');
   };
@@ -137,9 +155,25 @@ export function AuthGate({
 
   const openAccount = async (accountId: string) => {
     await scopeRegistry.openAccountScope(accountId);
+    setActiveScope({ kind: 'account', accountId });
     setSignedInAccountId(null);
     setWorkspaceTransferError(null);
     setGateState('app');
+  };
+
+  const signOut = async () => {
+    const session = await gateway.restoreSession();
+    if (session.kind === 'authenticated') {
+      try {
+        await gateway.signOut?.();
+      } catch {
+        // Offline logout still hides this device's local account replica.
+      }
+      await scopeRegistry.hideAccountScope(session.userId);
+    }
+    await scopeRegistry.openAutonomousScope();
+    setActiveScope({ kind: 'autonomous' });
+    setGateState('auth');
   };
 
   const signIn = async (input: { email: string; password: string }) => {
@@ -388,7 +422,9 @@ export function AuthGate({
     );
   }
 
-  return <AuthGateNavigationContext.Provider value={{ openAuth }}>{children}</AuthGateNavigationContext.Provider>;
+  return <AuthGateNavigationContext.Provider value={{ openAuth, signOut }}>
+    <AuthGateWorkspaceContext.Provider value={activeScope}>{children}</AuthGateWorkspaceContext.Provider>
+  </AuthGateNavigationContext.Provider>;
 }
 
 function messageForPasswordResult(result: PasswordManagementResult): string {

@@ -23,6 +23,7 @@ export interface AuthGateway {
 export interface SupabaseAuthGateway extends AuthGateway {
   startAutonomousSession(): Promise<AuthSessionState>;
   signInWithPassword(input: { email: string; password: string }): Promise<AuthSessionState>;
+  signOut(): Promise<void>;
   subscribe(listener: (state: AuthSessionState) => void): () => void;
 }
 
@@ -50,6 +51,7 @@ export interface SupabaseAuthGatewayClient {
     getSession(): Promise<{ data: { session: SupabaseSessionLike | null } }>;
     signInAnonymously?(): Promise<SupabaseSignInResult>;
     signInWithPassword?(input: { email: string; password: string }): Promise<SupabaseSignInResult>;
+    signOut?(input: { scope: 'local' }): Promise<{ error: Error | null }>;
     onAuthStateChange?(
       listener: (event: string, session: SupabaseSessionLike | null) => void,
     ): { data: { subscription: { unsubscribe(): void } } };
@@ -108,6 +110,11 @@ export function createSupabaseAuthGateway(
       }
 
       return resolveAuthSessionState(toAuthSessionSnapshot(data.session));
+    },
+    signOut: async () => {
+      if (client === null || client.auth.signOut === undefined) return;
+      const { error } = await client.auth.signOut({ scope: 'local' });
+      if (error !== null) throw error;
     },
     subscribe: (listener) => {
       if (client === null || client.auth.onAuthStateChange === undefined) {

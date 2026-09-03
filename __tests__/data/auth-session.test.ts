@@ -169,6 +169,20 @@ describe('Auth session state machine', () => {
     });
   });
 
+  test('removes only the current persisted session on sign-out', async () => {
+    const signOut = jest.fn().mockResolvedValue({ error: null });
+    const gateway = createSupabaseAuthGateway({
+      auth: {
+        getSession: jest.fn(),
+        signOut,
+      },
+    });
+
+    await gateway.signOut();
+
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
   test('notifies subscribers when Supabase reports an Auth state change', () => {
     const unsubscribe = jest.fn();
     const listener = jest.fn();

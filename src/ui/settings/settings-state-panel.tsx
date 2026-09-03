@@ -36,13 +36,14 @@ interface SettingsStatePanelProps {
   onAccountUpdateDisplayName?: (displayName: string) => Promise<AccountProfileResult>;
   onPlanningSettingsChange?: (input: UpdatePlanningSettingsInput) => Promise<void>;
   onSignIn?: () => void;
+  onSignOut?: () => void;
   onSignUp?: () => void;
   onTimeZoneChange?: (timeZoneId: string) => Promise<void>;
   onUseDeviceTimeZone?: () => Promise<void>;
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onPlanningSettingsChange, onSignIn, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -137,6 +138,7 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
           onConfirmEmailChange={onAccountConfirmEmailChange}
           onRequestPasswordChangeCode={onRequestPasswordChangeCode}
           onSignIn={onSignIn}
+          onSignOut={onSignOut}
           onSignUp={onSignUp}
           onStartEmailChange={onAccountStartEmailChange}
           onUpdateDisplayName={onAccountUpdateDisplayName}

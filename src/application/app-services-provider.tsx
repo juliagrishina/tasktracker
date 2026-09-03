@@ -12,6 +12,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { AppSettings, DailyEnergyEntry, Project, RecurrenceOccurrence, RecurrenceRevision, RecurrenceSeries, Reminder, TaskItem } from '../domain/entities';
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
+import type { LocalDataScope } from '../data/local-data-scopes';
 import { getDefaultSettings } from '../data/default-settings';
 import { ProjectRepository } from '../data/repositories/project-repository';
 import {
@@ -143,6 +144,7 @@ interface AppServicesContextValue {
 interface AppServicesProviderProps {
   children: ReactNode;
   source?: AppDataSource;
+  scope?: LocalDataScope;
   seedDevelopmentData?: boolean;
   notificationScheduler?: LocalNotificationScheduler;
 }
@@ -159,10 +161,11 @@ const emptyBacklogView: BacklogView = {
 export function AppServicesProvider({
   children,
   source,
+  scope,
   seedDevelopmentData = __DEV__,
   notificationScheduler = localNotificationScheduler,
 }: AppServicesProviderProps) {
-  const [appSource] = useState<AppDataSource>(() => source ?? createDataSource());
+  const [appSource] = useState<AppDataSource>(() => source ?? createDataSource(scope));
   const repositories = useMemo(() => createAppRepositories(appSource), [appSource]);
   const [isReady, setIsReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);

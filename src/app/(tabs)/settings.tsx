@@ -53,6 +53,7 @@ export default function SettingsScreen() {
     onPlanningSettingsChange={settingsActions.updatePlanningSettings}
     onRequestPasswordChangeCode={() => passwordManagement.requestPasswordChangeCode()}
     onSignIn={() => authNavigation?.openAuth('login')}
+    onSignOut={() => { void authNavigation?.signOut(); }}
     onSignUp={() => authNavigation?.openAuth('registration')}
     onTimeZoneChange={settingsActions.updateTimeZone}
     onUseDeviceTimeZone={settingsActions.useDeviceTimeZone}
