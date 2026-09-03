@@ -20,8 +20,9 @@ import {
 import type { AppDataSource } from './contracts';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
+import { createLocalSyncId, createSyncTrackingDataSource, type SyncMetadataDataSource, type SyncOutboxMutation, type SyncTrackingDataSource } from './sync-outbox';
 
-export interface InMemoryDataSource extends AppDataSource {
+export interface InMemoryDataSource extends SyncTrackingDataSource {
   debugSettingsRowCount(): number;
   debugRowExists(id: EntityId): boolean;
 }
@@ -42,6 +43,9 @@ interface BrowserDataSnapshot {
   recurrenceOccurrences: RecurrenceOccurrence[];
   recurrenceRevisions: RecurrenceRevision[];
   transferHistories: TransferHistory[];
+  syncState: { deviceId: string; dataGeneration: number } | null;
+  syncEntityVersions: readonly [string, number][];
+  syncOutbox: SyncOutboxMutation[];
 }
 
 function compareByCreatedAt<T extends { id: EntityId; createdAt: string }>(
@@ -58,7 +62,7 @@ function replaceMap<T>(target: Map<EntityId, T>, source: Map<EntityId, T>): void
   }
 }
 
-class BrowserInMemoryDataSource implements InMemoryDataSource {
+class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource {
   private settings: AppSettings | null = null;
   private readonly dailyEnergyEntries = new Map<string, DailyEnergyEntry>();
   private readonly projects = new Map<EntityId, Project>();
@@ -69,6 +73,9 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   private readonly recurrenceOccurrences = new Map<EntityId, RecurrenceOccurrence>();
   private readonly recurrenceRevisions = new Map<EntityId, RecurrenceRevision>();
   private readonly transferHistories = new Map<EntityId, TransferHistory>();
+  private syncState: { deviceId: string; dataGeneration: number } | null = null;
+  private readonly syncEntityVersions = new Map<string, number>();
+  private readonly syncOutbox = new Map<string, SyncOutboxMutation>();
 
   constructor(snapshot?: BrowserDataSnapshot) {
     if (snapshot !== undefined) {
@@ -96,6 +103,22 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   async getDailyEnergyEntry(recordedOn: string): Promise<DailyEnergyEntry | null> {
     await this.initialize();
     return this.dailyEnergyEntries.get(recordedOn) ?? null;
+  }
+
+  async enqueueSyncMutation(input: Omit<SyncOutboxMutation, 'mutationId' | 'deviceId' | 'expectedVersion' | 'dataGeneration' | 'createdAt'>): Promise<SyncOutboxMutation> {
+    await this.initialize();
+    if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1 };
+    const versionKey = `${input.entityType}:${input.entityId}`;
+    const expectedVersion = this.syncEntityVersions.get(versionKey) ?? 0;
+    this.syncEntityVersions.set(versionKey, expectedVersion + 1);
+    const mutation: SyncOutboxMutation = { ...input, mutationId: createLocalSyncId(), deviceId: this.syncState.deviceId, expectedVersion, dataGeneration: this.syncState.dataGeneration, createdAt: new Date().toISOString() };
+    this.syncOutbox.set(mutation.mutationId, mutation);
+    return mutation;
+  }
+
+  async listSyncOutbox(): Promise<readonly SyncOutboxMutation[]> {
+    await this.initialize();
+    return [...this.syncOutbox.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.mutationId.localeCompare(right.mutationId));
   }
 
   async clearAll(): Promise<void> {
@@ -397,6 +420,9 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       recurrenceOccurrences: new Map(this.recurrenceOccurrences),
       recurrenceRevisions: new Map(this.recurrenceRevisions),
       transferHistories: new Map(this.transferHistories),
+      syncState: this.syncState === null ? null : { ...this.syncState },
+      syncEntityVersions: new Map(this.syncEntityVersions),
+      syncOutbox: new Map(this.syncOutbox),
     };
 
     try {
@@ -412,6 +438,9 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       replaceMap(this.recurrenceOccurrences, snapshot.recurrenceOccurrences);
       replaceMap(this.recurrenceRevisions, snapshot.recurrenceRevisions);
       replaceMap(this.transferHistories, snapshot.transferHistories);
+      this.syncState = snapshot.syncState;
+      replaceMap(this.syncEntityVersions, snapshot.syncEntityVersions);
+      replaceMap(this.syncOutbox, snapshot.syncOutbox);
       throw error;
     }
   }
@@ -444,6 +473,9 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       recurrenceOccurrences: [...this.recurrenceOccurrences.values()],
       recurrenceRevisions: [...this.recurrenceRevisions.values()],
       transferHistories: [...this.transferHistories.values()],
+      syncState: this.syncState,
+      syncEntityVersions: [...this.syncEntityVersions.entries()],
+      syncOutbox: [...this.syncOutbox.values()],
     };
   }
 
@@ -458,6 +490,9 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     replaceMap(this.recurrenceOccurrences, new Map(snapshot.recurrenceOccurrences.map((occurrence) => [occurrence.id, occurrence])));
     replaceMap(this.recurrenceRevisions, new Map(snapshot.recurrenceRevisions.map((revision) => [revision.id, revision])));
     replaceMap(this.transferHistories, new Map(snapshot.transferHistories.map((history) => [history.id, history])));
+    this.syncState = snapshot.syncState;
+    replaceMap(this.syncEntityVersions, new Map(snapshot.syncEntityVersions));
+    replaceMap(this.syncOutbox, new Map(snapshot.syncOutbox.map((mutation) => [mutation.mutationId, mutation])));
   }
 
   private deleteTaskRelatedRows(taskItemId: EntityId, deletedAt: string): void {
@@ -505,8 +540,10 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   }
 }
 
-export function createInMemoryDataSource(): InMemoryDataSource {
-  return new BrowserInMemoryDataSource();
+export function createInMemoryDataSource(
+  scope: LocalDataScope = { kind: 'autonomous' },
+): InMemoryDataSource {
+  return createSyncTrackingDataSource(new BrowserInMemoryDataSource(), scope) as InMemoryDataSource;
 }
 
 const scopedDataSources = new Map<string, AppDataSource>();
@@ -520,7 +557,7 @@ export function createDataSource(scope: LocalDataScope = { kind: 'autonomous' })
 
   const browserStorage = getBrowserStorage();
   const source = browserStorage === null
-    ? createInMemoryDataSource()
+    ? createInMemoryDataSource(scope)
     : createPersistentBrowserDataSource(scope, browserStorage);
   scopedDataSources.set(scopeKey, source);
   return source;
@@ -532,9 +569,10 @@ export function createPersistentBrowserDataSource(
 ): AppDataSource {
   const storageKey = `tasktracker.browser-data.${databaseNameForScope(scope)}.v1`;
   const source = new BrowserInMemoryDataSource(parseSnapshot(storage.getItem(storageKey)));
-  return createPersistedDataSource(source, () => {
+  const persisted = createPersistedDataSource(source, () => {
     storage.setItem(storageKey, JSON.stringify(source.exportSnapshot()));
   });
+  return createSyncTrackingDataSource(persisted, scope);
 }
 
 function createPersistedDataSource(
@@ -587,7 +625,7 @@ function createPersistedDataSource(
 }
 
 function isMutation(property: PropertyKey): boolean {
-  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll');
+  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll' || property === 'enqueueSyncMutation');
 }
 
 function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
@@ -612,6 +650,9 @@ function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
       recurrenceOccurrences: snapshot.recurrenceOccurrences ?? [],
       recurrenceRevisions: snapshot.recurrenceRevisions ?? [],
       transferHistories: snapshot.transferHistories ?? [],
+      syncState: snapshot.syncState ?? null,
+      syncEntityVersions: Array.isArray(snapshot.syncEntityVersions) ? snapshot.syncEntityVersions : [],
+      syncOutbox: Array.isArray(snapshot.syncOutbox) ? snapshot.syncOutbox : [],
     };
   } catch {
     return undefined;

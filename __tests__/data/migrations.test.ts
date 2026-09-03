@@ -32,7 +32,7 @@ class MigrationDatabase {
 }
 
 function expectedVersions(from: number): number[] {
-  return Array.from({ length: 20 - from }, (_, index) => from + index);
+  return Array.from({ length: 21 - from }, (_, index) => from + index);
 }
 
 describe('migrateDatabase', () => {
@@ -46,7 +46,7 @@ describe('migrateDatabase', () => {
   });
 
   test('does not reapply migrations after the latest version is installed', async () => {
-    const database = new MigrationDatabase(19);
+    const database = new MigrationDatabase(20);
 
     await migrateDatabase(database as never);
 
@@ -224,6 +224,18 @@ describe('migrateDatabase', () => {
     expect(sql).toContain('CREATE TABLE recurrence_revisions');
     expect(sql).toContain('effective_from TEXT NOT NULL');
     expect(sql).toContain('block_templates_json TEXT NOT NULL');
-    expect(database.appliedVersions).toEqual([19]);
+    expect(database.appliedVersions).toEqual([19, 20]);
+  });
+
+  test('stores local sync metadata and an outbox in migration twenty', async () => {
+    const database = new MigrationDatabase(19);
+
+    await migrateDatabase(database as never);
+
+    const sql = database.executedSql.join('\n');
+    expect(sql).toContain('CREATE TABLE sync_state');
+    expect(sql).toContain('CREATE TABLE sync_entity_versions');
+    expect(sql).toContain('CREATE TABLE sync_outbox');
+    expect(database.appliedVersions).toEqual([20]);
   });
 });

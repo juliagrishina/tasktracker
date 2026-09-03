@@ -27,6 +27,7 @@ import {
 } from './local-data-scope-migration';
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
 import { migrateDatabase } from './migrations';
+import { createLocalSyncId, createSyncTrackingDataSource, type SyncMetadataDataSource, type SyncOutboxMutation } from './sync-outbox';
 
 interface SettingsRow {
   time_zone_id: string | null;
@@ -147,7 +148,7 @@ interface RecurrenceRevisionRow {
   updated_at: string | null;
 }
 
-class NativeDataSource implements AppDataSource {
+class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
   private databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
   private initializationPromise: Promise<void> | null = null;
 
@@ -159,6 +160,84 @@ class NativeDataSource implements AppDataSource {
     }
 
     await this.initializationPromise;
+  }
+
+  async enqueueSyncMutation(input: Omit<SyncOutboxMutation, 'mutationId' | 'deviceId' | 'expectedVersion' | 'dataGeneration' | 'createdAt'>): Promise<SyncOutboxMutation> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const now = new Date().toISOString();
+    let state = await database.getFirstAsync<{ device_id: string; data_generation: number }>(
+      'SELECT device_id, data_generation FROM sync_state WHERE id = 1',
+    );
+    if (state === null) {
+      state = { device_id: createLocalSyncId(), data_generation: 1 };
+      await database.runAsync(
+        'INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at) VALUES (1, ?, ?, NULL, ?)',
+        [state.device_id, state.data_generation, now],
+      );
+    }
+
+    const versionRow = await database.getFirstAsync<{ version: number }>(
+      'SELECT version FROM sync_entity_versions WHERE entity_type = ? AND entity_id = ?',
+      [input.entityType, input.entityId],
+    );
+    const expectedVersion = versionRow?.version ?? 0;
+    await database.runAsync(
+      `INSERT INTO sync_entity_versions (entity_type, entity_id, version)
+       VALUES (?, ?, ?)
+       ON CONFLICT(entity_type, entity_id) DO UPDATE SET version = excluded.version`,
+      [input.entityType, input.entityId, expectedVersion + 1],
+    );
+
+    const mutation: SyncOutboxMutation = {
+      ...input,
+      mutationId: createLocalSyncId(),
+      deviceId: state.device_id,
+      expectedVersion,
+      dataGeneration: state.data_generation,
+      createdAt: now,
+    };
+    await database.runAsync(
+      `INSERT INTO sync_outbox (
+        mutation_id, device_id, entity_type, entity_id, operation,
+        expected_version, data_generation, payload_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        mutation.mutationId,
+        mutation.deviceId,
+        mutation.entityType,
+        mutation.entityId,
+        mutation.operation,
+        mutation.expectedVersion,
+        mutation.dataGeneration,
+        JSON.stringify(mutation.payload),
+        mutation.createdAt,
+      ],
+    );
+    return mutation;
+  }
+
+  async listSyncOutbox(): Promise<readonly SyncOutboxMutation[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<{
+      mutation_id: string; device_id: string; entity_type: SyncOutboxMutation['entityType']; entity_id: string;
+      operation: SyncOutboxMutation['operation']; expected_version: number; data_generation: number;
+      payload_json: string; created_at: string;
+    }>(`SELECT mutation_id, device_id, entity_type, entity_id, operation,
+          expected_version, data_generation, payload_json, created_at
+        FROM sync_outbox ORDER BY created_at ASC, mutation_id ASC`);
+    return rows.map((row) => ({
+      mutationId: row.mutation_id,
+      deviceId: row.device_id,
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      operation: row.operation,
+      expectedVersion: row.expected_version,
+      dataGeneration: row.data_generation,
+      payload: JSON.parse(row.payload_json),
+      createdAt: row.created_at,
+    }));
   }
 
   async getSettings(): Promise<AppSettings> {
@@ -1178,5 +1257,5 @@ class NativeDataSource implements AppDataSource {
 }
 
 export function createDataSource(scope: LocalDataScope = { kind: 'autonomous' }): AppDataSource {
-  return new NativeDataSource(scope);
+  return createSyncTrackingDataSource(new NativeDataSource(scope), scope);
 }

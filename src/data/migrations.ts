@@ -378,6 +378,36 @@ const schemaVersionNineteen = `
     ON recurrence_revisions (series_id, effective_from) WHERE deleted_at IS NULL;
 `;
 
+const schemaVersionTwenty = `
+  CREATE TABLE sync_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    device_id TEXT NOT NULL,
+    data_generation INTEGER NOT NULL CHECK (data_generation > 0),
+    pull_cursor TEXT,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE sync_entity_versions (
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (version >= 0),
+    PRIMARY KEY (entity_type, entity_id)
+  );
+
+  CREATE TABLE sync_outbox (
+    mutation_id TEXT PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    operation TEXT NOT NULL CHECK (operation IN ('upsert', 'delete')),
+    expected_version INTEGER NOT NULL CHECK (expected_version >= 0),
+    data_generation INTEGER NOT NULL CHECK (data_generation > 0),
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX sync_outbox_created_at ON sync_outbox (created_at, mutation_id);
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -515,6 +545,12 @@ const migrations: readonly Migration[] = [
     version: 19,
     async apply(database) {
       await database.execAsync(schemaVersionNineteen);
+    },
+  },
+  {
+    version: 20,
+    async apply(database) {
+      await database.execAsync(schemaVersionTwenty);
     },
   },
 ];
