@@ -62,7 +62,7 @@ describe('Epic 11 Auth protection contract', () => {
   });
 
   test('keeps account deletion durable, blocks new cloud writes and clears data in one database transaction', () => {
-    const migration = readRepositoryFile('supabase', 'migrations', '20260903020000_account_deletion.sql');
+    const migration = readRepositoryFile('supabase', 'migrations', '20260903020500_account_deletion.sql');
     const functionSource = readRepositoryFile('supabase', 'functions', 'account-data-action', 'index.ts');
     const deletionService = readRepositoryFile('supabase', 'functions', '_shared', 'account-deletion.ts');
     const config = readRepositoryFile('supabase', 'config.toml');
