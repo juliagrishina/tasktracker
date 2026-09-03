@@ -141,6 +141,34 @@ describe('Auth session state machine', () => {
     expect(signInAnonymously).toHaveBeenCalledTimes(1);
   });
 
+  test('signs in with email and password and returns the confirmed account state', async () => {
+    const gateway = createSupabaseAuthGateway({
+      auth: {
+        getSession: jest.fn(),
+        signInWithPassword: jest.fn().mockResolvedValue({
+          data: {
+            session: {
+              expires_at: null,
+              user: {
+                id: 'account-user',
+                is_anonymous: false,
+                email: 'anna@example.com',
+                email_confirmed_at: '2026-09-02T08:00:00.000Z',
+              },
+            },
+          },
+          error: null,
+        }),
+      },
+    });
+
+    await expect(gateway.signInWithPassword({ email: 'anna@example.com', password: 'P@ssword2026' })).resolves.toEqual({
+      kind: 'authenticated',
+      userId: 'account-user',
+      email: 'anna@example.com',
+    });
+  });
+
   test('notifies subscribers when Supabase reports an Auth state change', () => {
     const unsubscribe = jest.fn();
     const listener = jest.fn();

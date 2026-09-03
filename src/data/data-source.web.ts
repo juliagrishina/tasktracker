@@ -98,6 +98,13 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     return this.dailyEnergyEntries.get(recordedOn) ?? null;
   }
 
+  async listDailyEnergyEntries(): Promise<readonly DailyEnergyEntry[]> {
+    await this.initialize();
+    return [...this.dailyEnergyEntries.values()].sort((left, right) =>
+      left.recordedOn.localeCompare(right.recordedOn),
+    );
+  }
+
   async saveDailyEnergyEntry(entry: DailyEnergyEntry): Promise<void> {
     await this.initialize();
     this.dailyEnergyEntries.set(entry.recordedOn, { ...entry });

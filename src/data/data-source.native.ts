@@ -243,6 +243,22 @@ class NativeDataSource implements AppDataSource {
         };
   }
 
+  async listDailyEnergyEntries(): Promise<readonly DailyEnergyEntry[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<DailyEnergyEntryRow>(
+      `SELECT recorded_on, energy_percent, created_at, updated_at
+      FROM daily_energy_entries
+      ORDER BY recorded_on ASC`,
+    );
+    return rows.map((row) => ({
+      recordedOn: row.recorded_on,
+      energyPercent: row.energy_percent,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
   async saveDailyEnergyEntry(entry: DailyEnergyEntry): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();

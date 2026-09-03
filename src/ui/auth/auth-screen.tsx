@@ -23,6 +23,7 @@ export interface AuthScreenProps {
   onSignIn?: (input: { email: string; password: string }) => void;
   onSignUp?: (input: { displayName: string; email: string; password: string; passwordConfirmation: string; termsAccepted: boolean }) => void;
   registrationError?: string | null;
+  signInError?: string | null;
 }
 
 export function AuthScreen({
@@ -31,6 +32,7 @@ export function AuthScreen({
   onSignIn = () => {},
   onSignUp = () => {},
   registrationError = null,
+  signInError = null,
 }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>('registration');
   const [displayName, setDisplayName] = useState('');
@@ -128,8 +130,8 @@ export function AuthScreen({
               </>
             ) : null}
 
-            {isRegistration && registrationError !== null ? (
-              <Text accessibilityRole="alert" style={styles.error}>{registrationError}</Text>
+            {(isRegistration ? registrationError : signInError) !== null ? (
+              <Text accessibilityRole="alert" style={styles.error}>{isRegistration ? registrationError : signInError}</Text>
             ) : null}
 
             <ActionButton

@@ -12,17 +12,24 @@ import type { AuthEntryState } from '../data/auth-entry-state';
 import { authEntryState } from '../data/auth-entry-state-provider';
 import { localDataScopeRegistry } from '../data/local-data-scope-registry';
 import type { DataScopeRegistry } from '../data/local-data-scopes';
+import { createDataSource } from '../data/data-source';
 import { designTokens } from '../ui/design/tokens';
 import { AuthScreen } from '../ui/auth/auth-screen';
 import { EmailVerificationScreen } from '../ui/auth/email-verification-screen';
+import { WorkspaceTransferChoice } from '../ui/auth/workspace-transfer-choice';
 import {
   accountRegistration as defaultAccountRegistration,
 } from './account-registration-provider';
 import type { AccountRegistration } from './account-registration';
 import { validateAccountRegistrationInput } from './account-registration';
+import {
+  createWorkspaceTransferService,
+  type WorkspaceTransferService,
+} from './workspace-import';
 
 interface AutonomousAuthGateway extends AuthGateway {
   startAutonomousSession(): Promise<AuthSessionState>;
+  signInWithPassword?(input: { email: string; password: string }): Promise<AuthSessionState>;
 }
 
 interface AuthGateProps {
@@ -31,9 +38,10 @@ interface AuthGateProps {
   entryState?: AuthEntryState;
   scopeRegistry?: DataScopeRegistry;
   registration?: AccountRegistration;
+  workspaceTransfer?: WorkspaceTransferService;
 }
 
-type GateState = 'loading' | 'auth' | 'verification' | 'app';
+type GateState = 'loading' | 'auth' | 'verification' | 'workspaceTransfer' | 'app';
 
 export function AuthGate({
   children,
@@ -41,14 +49,18 @@ export function AuthGate({
   entryState = authEntryState,
   scopeRegistry = localDataScopeRegistry,
   registration = defaultAccountRegistration,
+  workspaceTransfer = createWorkspaceTransferService({ sourceForScope: createDataSource }),
 }: AuthGateProps) {
   const [gateState, setGateState] = useState<GateState>('loading');
   const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [signInError, setSignInError] = useState<string | null>(null);
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationInfo, setVerificationInfo] = useState<string | null>(null);
   const [pendingPassword, setPendingPassword] = useState<string | null>(null);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [resendAvailableAtMs, setResendAvailableAtMs] = useState(0);
+  const [signedInAccountId, setSignedInAccountId] = useState<string | null>(null);
+  const [workspaceTransferError, setWorkspaceTransferError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -94,6 +106,48 @@ export function AuthGate({
     await scopeRegistry.openAutonomousScope();
     await entryState.continueWithoutAccount();
     setGateState('app');
+  };
+
+  const openAccount = async (accountId: string) => {
+    await scopeRegistry.openAccountScope(accountId);
+    setSignedInAccountId(null);
+    setWorkspaceTransferError(null);
+    setGateState('app');
+  };
+
+  const signIn = async (input: { email: string; password: string }) => {
+    setSignInError(null);
+    if (gateway.signInWithPassword === undefined || input.email.trim() === '' || input.password === '') {
+      setSignInError('Введите email и пароль.');
+      return;
+    }
+    try {
+      const session = await gateway.signInWithPassword({ email: input.email.trim(), password: input.password });
+      if (session.kind !== 'authenticated') {
+        setSignInError('Не удалось войти. Проверьте email и пароль.');
+        return;
+      }
+      if (await workspaceTransfer.hasAutonomousData()) {
+        setSignedInAccountId(session.userId);
+        setWorkspaceTransferError(null);
+        setGateState('workspaceTransfer');
+        return;
+      }
+      await openAccount(session.userId);
+    } catch {
+      setSignInError('Не удалось войти. Проверьте email и пароль.');
+    }
+  };
+
+  const mergeAutonomousWorkspace = async () => {
+    if (signedInAccountId === null) return;
+    setWorkspaceTransferError(null);
+    try {
+      await workspaceTransfer.importIntoAccount(signedInAccountId);
+      await openAccount(signedInAccountId);
+    } catch {
+      setWorkspaceTransferError('Не удалось перенести данные. Исходные планы сохранены — попробуйте ещё раз.');
+    }
   };
 
   const startRegistration = async (input: {
@@ -191,7 +245,25 @@ export function AuthGate({
         onSignUp={(input) => {
           void startRegistration(input);
         }}
+        onSignIn={(input) => {
+          void signIn(input);
+        }}
         registrationError={registrationError}
+        signInError={signInError}
+      />
+    );
+  }
+
+  if (gateState === 'workspaceTransfer' && signedInAccountId !== null) {
+    return (
+      <WorkspaceTransferChoice
+        errorMessage={workspaceTransferError}
+        onMerge={() => {
+          void mergeAutonomousWorkspace();
+        }}
+        onKeepSeparate={() => {
+          void openAccount(signedInAccountId);
+        }}
       />
     );
   }

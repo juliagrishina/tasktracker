@@ -53,6 +53,76 @@ describe('AuthGate', () => {
     await waitFor(() => expect(view.getByText('Основной экран')).toBeOnTheScreen());
   });
 
+  test('offers an explicit import choice after signing in when autonomous data exist', async () => {
+    const storage = createMemoryStorage();
+    const scopes = createDataScopeRegistry(storage);
+    const importIntoAccount = jest.fn().mockResolvedValue(undefined);
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => ({ kind: 'signedOut' }),
+          startAutonomousSession: async () => ({ kind: 'autonomous', userId: null }),
+          signInWithPassword: async () => ({ kind: 'authenticated', userId: 'account-17', email: 'anna@example.com' }),
+        }}
+        entryState={createAuthEntryState(storage)}
+        scopeRegistry={scopes}
+        workspaceTransfer={{
+          hasAutonomousData: async () => true,
+          importIntoAccount,
+        }}>
+        <Text>Основной экран</Text>
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByText('Создать аккаунт')).toBeOnTheScreen());
+    await fireEvent.press(view.getByLabelText('Перейти ко входу'));
+    await fireEvent.changeText(view.getByLabelText('Email'), 'anna@example.com');
+    await fireEvent.changeText(view.getByLabelText('Пароль'), 'P@ssword2026');
+    await fireEvent.press(view.getByText('Войти'));
+
+    await waitFor(() => expect(view.getByText('Как поступить с данными на этом устройстве?')).toBeOnTheScreen());
+    await fireEvent.press(view.getByLabelText('Объединить с данными аккаунта'));
+
+    await waitFor(() => expect(view.getByText('Основной экран')).toBeOnTheScreen());
+    expect(importIntoAccount).toHaveBeenCalledWith('account-17');
+    await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'account', accountId: 'account-17' });
+  });
+
+  test('opens an empty account replica without altering autonomous data when the user declines import', async () => {
+    const storage = createMemoryStorage();
+    const scopes = createDataScopeRegistry(storage);
+    const importIntoAccount = jest.fn();
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => ({ kind: 'signedOut' }),
+          startAutonomousSession: async () => ({ kind: 'autonomous', userId: null }),
+          signInWithPassword: async () => ({ kind: 'authenticated', userId: 'account-17', email: 'anna@example.com' }),
+        }}
+        entryState={createAuthEntryState(storage)}
+        scopeRegistry={scopes}
+        workspaceTransfer={{
+          hasAutonomousData: async () => true,
+          importIntoAccount,
+        }}>
+        <Text>Основной экран</Text>
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByText('Создать аккаунт')).toBeOnTheScreen());
+    await fireEvent.press(view.getByLabelText('Перейти ко входу'));
+    await fireEvent.changeText(view.getByLabelText('Email'), 'anna@example.com');
+    await fireEvent.changeText(view.getByLabelText('Пароль'), 'P@ssword2026');
+    await fireEvent.press(view.getByText('Войти'));
+    await waitFor(() => expect(view.getByText('Как поступить с данными на этом устройстве?')).toBeOnTheScreen());
+
+    await fireEvent.press(view.getByLabelText('Не переносить'));
+
+    await waitFor(() => expect(view.getByText('Основной экран')).toBeOnTheScreen());
+    expect(importIntoAccount).not.toHaveBeenCalled();
+    await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'account', accountId: 'account-17' });
+  });
+
   test('moves a valid registration into masked email verification without persisting the password', async () => {
     const storage = createMemoryStorage();
     const pendingStore = createMemoryPendingRegistrationStore();

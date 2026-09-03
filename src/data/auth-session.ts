@@ -22,6 +22,7 @@ export interface AuthGateway {
 
 export interface SupabaseAuthGateway extends AuthGateway {
   startAutonomousSession(): Promise<AuthSessionState>;
+  signInWithPassword(input: { email: string; password: string }): Promise<AuthSessionState>;
   subscribe(listener: (state: AuthSessionState) => void): () => void;
 }
 
@@ -48,6 +49,7 @@ export interface SupabaseAuthGatewayClient {
   auth: {
     getSession(): Promise<{ data: { session: SupabaseSessionLike | null } }>;
     signInAnonymously?(): Promise<SupabaseSignInResult>;
+    signInWithPassword?(input: { email: string; password: string }): Promise<SupabaseSignInResult>;
     onAuthStateChange?(
       listener: (event: string, session: SupabaseSessionLike | null) => void,
     ): { data: { subscription: { unsubscribe(): void } } };
@@ -89,6 +91,18 @@ export function createSupabaseAuthGateway(
       }
 
       const { data, error } = await signInAnonymously();
+      if (error !== null) {
+        throw error;
+      }
+
+      return resolveAuthSessionState(toAuthSessionSnapshot(data.session));
+    },
+    signInWithPassword: async (input) => {
+      if (client === null || client.auth.signInWithPassword === undefined) {
+        throw new Error('Email and password sign-in is unavailable.');
+      }
+
+      const { data, error } = await client.auth.signInWithPassword(input);
       if (error !== null) {
         throw error;
       }

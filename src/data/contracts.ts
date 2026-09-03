@@ -17,6 +17,7 @@ export interface AppDataSource {
   getSettings(): Promise<AppSettings>;
   saveSettings(settings: AppSettings): Promise<void>;
   getDailyEnergyEntry(recordedOn: string): Promise<DailyEnergyEntry | null>;
+  listDailyEnergyEntries(): Promise<readonly DailyEnergyEntry[]>;
   saveDailyEnergyEntry(entry: DailyEnergyEntry): Promise<void>;
   saveProject(project: Project): Promise<void>;
   getProject(id: EntityId): Promise<Project | null>;
