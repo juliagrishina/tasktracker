@@ -95,6 +95,27 @@ describe('SettingsStatePanel', () => {
     await waitFor(() => expect(onClearAutonomousData).toHaveBeenCalledTimes(1));
   });
 
+  test('requires password and a six-digit email code before deleting an authenticated account', async () => {
+    const onAccountDataAction = jest.fn().mockResolvedValue(true);
+    const onRequestAccountDataCode = jest.fn().mockResolvedValue({ kind: 'codeSent' });
+    const view = await render(<SettingsStatePanel
+      account={{ kind: 'authenticated', displayName: 'Юлия', email: 'julia@example.com', emailConfirmed: true, pendingEmail: null }}
+      onAccountDataAction={onAccountDataAction}
+      onRequestAccountDataCode={onRequestAccountDataCode}
+      settings={getDefaultSettings()}
+    />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Удалить аккаунт' }));
+    expect(view.getByText(/будут безвозвратно удалены аккаунт/u)).toBeOnTheScreen();
+    await fireEvent.changeText(view.getByLabelText('Текущий пароль для удаления'), 'Current!Pass1');
+    await fireEvent.press(view.getByRole('button', { name: 'Отправить код подтверждения' }));
+    await fireEvent.changeText(view.getByLabelText('Код подтверждения удаления'), '123456');
+    await fireEvent.press(view.getByRole('button', { name: 'Удалить аккаунт безвозвратно' }));
+
+    await waitFor(() => expect(onRequestAccountDataCode).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onAccountDataAction).toHaveBeenCalledWith({ operation: 'delete_account', password: 'Current!Pass1', code: '123456' }));
+  });
+
   test('keeps the Microsoft 365 refresh action inside local demo state', async () => {
     const view = await render(<SettingsStatePanel settings={getDefaultSettings()} />);
 

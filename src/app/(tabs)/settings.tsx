@@ -3,13 +3,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { type AccountProfileResult, type AccountProfileService, type AccountProfileState } from '../../application/account-profile';
 import { createCurrentAccountProfileService } from '../../application/account-profile-provider';
 import { passwordManagement } from '../../application/password-management-provider';
+import { performAccountDataAction } from '../../application/account-data-actions-provider';
 import { useAppServices } from '../../application/app-services-provider';
 import { useAuthGateNavigation } from '../../application/auth-gate';
 import { notificationPermissionGateway } from '../../application/notification-permission-gateway';
 import { SettingsStatePanel } from '../../ui/settings/settings-state-panel';
 
 export default function SettingsScreen() {
-  const { clearAutonomousData, settings, settingsActions } = useAppServices();
+  const { clearAccountData, clearAutonomousData, settings, settingsActions } = useAppServices();
   const authNavigation = useAuthGateNavigation();
   const [account, setAccount] = useState<AccountProfileState>({ kind: 'withoutAccount' });
   const [accountService, setAccountService] = useState<AccountProfileService | null>(null);
@@ -51,6 +52,8 @@ export default function SettingsScreen() {
     onAccountStartEmailChange={(input) => runAccountAction((service) => service.startEmailChange(input))}
     onAccountUpdateDisplayName={(displayName) => runAccountAction((service) => service.updateDisplayName(displayName))}
     onClearAutonomousData={clearAutonomousData}
+    onAccountDataAction={async (input) => { const completed = await performAccountDataAction(input); if (completed) await clearAccountData(); if (completed && input.operation === 'delete_account') await authNavigation?.signOut(); return completed; }}
+    onRequestAccountDataCode={() => passwordManagement.requestPasswordChangeCode()}
     onPlanningSettingsChange={settingsActions.updatePlanningSettings}
     onRequestPasswordChangeCode={() => passwordManagement.requestPasswordChangeCode()}
     onSignIn={() => authNavigation?.openAuth('login')}

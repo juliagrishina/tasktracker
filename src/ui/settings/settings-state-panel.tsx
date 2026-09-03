@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -38,13 +38,15 @@ interface SettingsStatePanelProps {
   onSignIn?: () => void;
   onSignOut?: () => void;
   onClearAutonomousData?: () => Promise<void>;
+  onAccountDataAction?: (input: { operation: 'clear_account_data' | 'delete_account'; password: string; code: string }) => Promise<boolean>;
+  onRequestAccountDataCode?: () => Promise<PasswordManagementResult>;
   onSignUp?: () => void;
   onTimeZoneChange?: (timeZoneId: string) => Promise<void>;
   onUseDeviceTimeZone?: () => Promise<void>;
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onAccountDataAction, onRequestAccountDataCode, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -53,6 +55,9 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
   const [isTimeZonePickerVisible, setIsTimeZonePickerVisible] = useState(false);
   const [planningSettingsEditorPlacement, setPlanningSettingsEditorPlacement] = useState<'plan' | 'notifications' | null>(null);
   const [isClearConfirmationVisible, setIsClearConfirmationVisible] = useState(false);
+  const [accountOperation, setAccountOperation] = useState<'clear_account_data' | 'delete_account' | null>(null);
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountCode, setAccountCode] = useState('');
   const [isSavingPlanningSettings, setIsSavingPlanningSettings] = useState(false);
   const [planningSettings, setPlanningSettings] = useState<UpdatePlanningSettingsInput>(() => getPlanningSettings(settings));
   const notificationPermissionService = useMemo(
@@ -69,6 +74,26 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
   const refreshDemoStatus = () => {
     setSyncLabel('синхр. только что');
     setFeedback('Статус обновлён в демо-режиме');
+  };
+  const openAccountOperation = (operation: 'clear_account_data' | 'delete_account') => {
+    setAccountPassword('');
+    setAccountCode('');
+    setAccountOperation(operation);
+  };
+  const requestAccountDataCode = async () => {
+    const result = await onRequestAccountDataCode?.();
+    setFeedback(result?.kind === 'codeSent' ? 'Код подтверждения отправлен на email.' : 'Не удалось отправить код. Проверьте подключение или запросите его позднее.');
+  };
+  const completeAccountOperation = async () => {
+    if (accountOperation === null || onAccountDataAction === undefined) return;
+    const completed = await onAccountDataAction({ operation: accountOperation, password: accountPassword, code: accountCode });
+    if (completed) {
+      setAccountOperation(null);
+      setAccountPassword('');
+      setAccountCode('');
+      return;
+    }
+    setFeedback('Операцию не удалось завершить. Проверьте пароль, код и подключение к интернету.');
   };
   const selectTimeZone = async (timeZoneId: string) => {
     if (onTimeZoneChange === undefined) return;
@@ -199,6 +224,14 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
           </View>
           <Text style={styles.storageDescription}>Анонимная учётная запись и история поведения не являются резервной копией и не восстанавливают ваши данные.</Text>
           {account.kind === 'withoutAccount' && onClearAutonomousData !== undefined ? <ActionButton label="Очистить все данные" onPress={() => setIsClearConfirmationVisible(true)} tone="secondary" /> : null}
+          {account.kind === 'authenticated' ? <><ActionButton label="Очистить все данные" onPress={() => openAccountOperation('clear_account_data')} tone="secondary" /><ActionButton label="Удалить аккаунт" onPress={() => openAccountOperation('delete_account')} tone="danger" />
+          {accountOperation !== null ? <View style={styles.warning}>
+            <Text style={styles.warningText}>{accountOperation === 'delete_account' ? 'При удалении аккаунта будут безвозвратно удалены аккаунт, профиль и все связанные данные на всех устройствах.' : 'Вы действительно хотите удалить все данные аккаунта? Сам аккаунт, имя, email и пароль сохранятся.'}</Text>
+            <TextInput accessibilityLabel="Текущий пароль для удаления" secureTextEntry onChangeText={setAccountPassword} value={accountPassword} style={styles.input} />
+            <ActionButton label="Отправить код подтверждения" onPress={() => { void requestAccountDataCode(); }} tone="secondary" />
+            <TextInput accessibilityLabel="Код подтверждения удаления" keyboardType="number-pad" maxLength={6} onChangeText={setAccountCode} value={accountCode} style={styles.input} />
+            <View style={styles.buttonRow}><View style={styles.actionWrap}><ActionButton label="Отмена" onPress={() => setAccountOperation(null)} tone="secondary" /></View><View style={styles.actionWrap}><ActionButton disabled={accountPassword === '' || !/^\d{6}$/u.test(accountCode)} label={accountOperation === 'delete_account' ? 'Удалить аккаунт безвозвратно' : 'Удалить все данные'} onPress={() => { void completeAccountOperation(); }} tone="danger" /></View></View>
+          </View> : null}</> : null}
           {isClearConfirmationVisible ? <View style={styles.warning}>
             <Text style={styles.warningText}>Вы действительно хотите удалить все локальные данные на этом устройстве?</Text>
             <View style={styles.buttonRow}><View style={styles.actionWrap}><ActionButton label="Отмена" onPress={() => setIsClearConfirmationVisible(false)} tone="secondary" /></View><View style={styles.actionWrap}><ActionButton label="Удалить все данные" onPress={() => { void onClearAutonomousData?.().then(() => setIsClearConfirmationVisible(false)); }} tone="danger" /></View></View>
@@ -487,6 +520,7 @@ const styles = StyleSheet.create({
   editorTitle: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.label, fontWeight: designTokens.typography.weight.bold, lineHeight: designTokens.typography.lineHeight.label },
   fieldLabel: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.meta, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.meta, marginTop: designTokens.space[4] },
   fieldHint: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.micro, lineHeight: designTokens.typography.lineHeight.micro, marginBottom: designTokens.space[4] },
+  input: { backgroundColor: designTokens.color.surface.canvas, borderColor: designTokens.color.border.subtle, borderWidth: 1, borderRadius: designTokens.radius.row, color: designTokens.color.text.primary, minHeight: designTokens.size.touchTargetMin, paddingHorizontal: designTokens.space[10] },
   pickerRow: { flexDirection: 'row', gap: designTokens.space[8] },
   pickerColumn: { flex: 1 },
   dangerText: {

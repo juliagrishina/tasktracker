@@ -60,4 +60,26 @@ describe('Epic 11 Auth protection contract', () => {
     expect(migration).toContain('and consumed_at is null');
     expect(migration).toContain('and expires_at > now()');
   });
+
+  test('keeps account deletion durable, blocks new cloud writes and clears data in one database transaction', () => {
+    const migration = readRepositoryFile('supabase', 'migrations', '20260903020000_account_deletion.sql');
+    const functionSource = readRepositoryFile('supabase', 'functions', 'account-data-action', 'index.ts');
+    const deletionService = readRepositoryFile('supabase', 'functions', '_shared', 'account-deletion.ts');
+    const config = readRepositoryFile('supabase', 'config.toml');
+
+    expect(migration).toContain('create table if not exists public.deletion_requests');
+    expect(migration).toContain("status in ('processing', 'retry_required', 'completed')");
+    expect(migration).not.toContain('user_id uuid not null references auth.users');
+    expect(migration).toContain('create policy "events_block_account_deletion"');
+    expect(migration).toContain('create or replace function public.clear_account_business_data');
+    expect(migration).toContain('delete from public.events where user_id = p_user_id');
+    expect(migration).toContain('set data_generation = data_generation + 1');
+    expect(functionSource).toContain("return value === 'clear_account_data' || value === 'delete_account'");
+    expect(functionSource).toContain("admin.rpc('clear_account_business_data'");
+    expect(functionSource).toContain('admin.auth.admin.deleteUser(userId, true)');
+    expect(functionSource).toContain("status: 'retry_required'");
+    expect(functionSource).toContain("status: 'completed'");
+    expect(deletionService).toContain("return { kind: 'pending', reason: 'auth_delete_failed' }");
+    expect(config).toContain('[functions.account-data-action]');
+  });
 });

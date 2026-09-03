@@ -141,6 +141,7 @@ interface AppServicesContextValue {
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
   clearAutonomousData(): Promise<void>;
+  clearAccountData(): Promise<void>;
 }
 
 interface AppServicesProviderProps {
@@ -389,6 +390,12 @@ export function AppServicesProvider({
         runStorageDiagnostic,
         clearAutonomousData: async () => {
           await clearAutonomousWorkspace({ scope: scope ?? { kind: 'autonomous' }, source: appSource });
+          await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy()]);
+        },
+        clearAccountData: async () => {
+          await appSource.clearAll();
+          setSettings(await appSource.getSettings());
+          setDemoTasks(emptyDemoTaskGroups);
           await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy()]);
         },
       }}>

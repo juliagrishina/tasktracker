@@ -154,6 +154,7 @@ describe('importAutonomousWorkspace', () => {
 function bindDataSource(source: ReturnType<typeof createInMemoryDataSource>) {
   return {
     initialize: source.initialize.bind(source),
+    clearAll: source.clearAll.bind(source),
     getSettings: source.getSettings.bind(source),
     saveSettings: source.saveSettings.bind(source),
     getDailyEnergyEntry: source.getDailyEnergyEntry.bind(source),

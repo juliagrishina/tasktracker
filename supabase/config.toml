@@ -405,6 +405,10 @@ allow_dynamic_registration = false
 [functions.cancel-email-change]
 verify_jwt = true
 
+[functions.account-data-action]
+verify_jwt = true
+
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
