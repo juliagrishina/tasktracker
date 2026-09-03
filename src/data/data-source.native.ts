@@ -243,6 +243,13 @@ class NativeDataSource implements AppDataSource {
         };
   }
 
+  async clearAll(): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.execAsync('DELETE FROM recurrence_revisions; DELETE FROM recurrence_occurrences; DELETE FROM recurrence_series; DELETE FROM schedule_blocks; DELETE FROM transfer_history; DELETE FROM reminders; DELETE FROM task_items; DELETE FROM projects; DELETE FROM daily_energy_entries;');
+    await this.saveSettings(getDefaultSettings());
+  }
+
   async listDailyEnergyEntries(): Promise<readonly DailyEnergyEntry[]> {
     await this.initialize();
     const database = await this.getDatabase();

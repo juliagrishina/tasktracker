@@ -78,9 +78,21 @@ describe('SettingsStatePanel', () => {
     expect(view.getByRole('button', { name: 'Управление' })).toBeOnTheScreen();
     expect(view.getByText('Рабочий диапазон')).toBeOnTheScreen();
     expect(view.getByText('Уведомления')).toBeOnTheScreen();
-    expect(view.getByText('Данные на этом устройстве')).toBeOnTheScreen();
+    expect(view.getByText('Данные аккаунта и устройства')).toBeOnTheScreen();
     expect(view.getByText(/При удалении приложения или переходе на другое устройство эти данные не восстанавливаются/)).toBeOnTheScreen();
     expect(view.getByText(/Версия/)).toBeOnTheScreen();
+  });
+
+  test('requires explicit confirmation before clearing only autonomous data', async () => {
+    const onClearAutonomousData = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel account={{ kind: 'withoutAccount' }} onClearAutonomousData={onClearAutonomousData} settings={getDefaultSettings()} />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Очистить все данные' }));
+    expect(view.getByText('Вы действительно хотите удалить все локальные данные на этом устройстве?')).toBeOnTheScreen();
+    expect(onClearAutonomousData).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByRole('button', { name: 'Удалить все данные' }));
+
+    await waitFor(() => expect(onClearAutonomousData).toHaveBeenCalledTimes(1));
   });
 
   test('keeps the Microsoft 365 refresh action inside local demo state', async () => {

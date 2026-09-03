@@ -9,7 +9,7 @@ import { notificationPermissionGateway } from '../../application/notification-pe
 import { SettingsStatePanel } from '../../ui/settings/settings-state-panel';
 
 export default function SettingsScreen() {
-  const { settings, settingsActions } = useAppServices();
+  const { clearAutonomousData, settings, settingsActions } = useAppServices();
   const authNavigation = useAuthGateNavigation();
   const [account, setAccount] = useState<AccountProfileState>({ kind: 'withoutAccount' });
   const [accountService, setAccountService] = useState<AccountProfileService | null>(null);
@@ -50,6 +50,7 @@ export default function SettingsScreen() {
     onAccountConfirmEmailChange={(input) => runAccountAction((service) => service.confirmEmailChange(input))}
     onAccountStartEmailChange={(input) => runAccountAction((service) => service.startEmailChange(input))}
     onAccountUpdateDisplayName={(displayName) => runAccountAction((service) => service.updateDisplayName(displayName))}
+    onClearAutonomousData={clearAutonomousData}
     onPlanningSettingsChange={settingsActions.updatePlanningSettings}
     onRequestPasswordChangeCode={() => passwordManagement.requestPasswordChangeCode()}
     onSignIn={() => authNavigation?.openAuth('login')}

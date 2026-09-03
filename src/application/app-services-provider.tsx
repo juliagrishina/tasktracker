@@ -13,6 +13,7 @@ import type { AppSettings, DailyEnergyEntry, Project, RecurrenceOccurrence, Recu
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
 import type { LocalDataScope } from '../data/local-data-scopes';
+import { clearAutonomousWorkspace } from './local-workspace-management';
 import { getDefaultSettings } from '../data/default-settings';
 import { ProjectRepository } from '../data/repositories/project-repository';
 import {
@@ -139,6 +140,7 @@ interface AppServicesContextValue {
   refreshCompletedItems(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
+  clearAutonomousData(): Promise<void>;
 }
 
 interface AppServicesProviderProps {
@@ -385,6 +387,10 @@ export function AppServicesProvider({
         refreshCompletedItems,
         runBacklogAction,
         runStorageDiagnostic,
+        clearAutonomousData: async () => {
+          await clearAutonomousWorkspace({ scope: scope ?? { kind: 'autonomous' }, source: appSource });
+          await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy()]);
+        },
       }}>
       {children}
     </AppServicesContext.Provider>

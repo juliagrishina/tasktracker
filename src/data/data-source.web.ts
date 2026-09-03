@@ -98,6 +98,13 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
     return this.dailyEnergyEntries.get(recordedOn) ?? null;
   }
 
+  async clearAll(): Promise<void> {
+    this.settings = getDefaultSettings();
+    this.dailyEnergyEntries.clear(); this.projects.clear(); this.taskItems.clear(); this.reminders.clear();
+    this.scheduleBlocks.clear(); this.recurrenceSeries.clear(); this.recurrenceOccurrences.clear();
+    this.recurrenceRevisions.clear(); this.transferHistories.clear();
+  }
+
   async listDailyEnergyEntries(): Promise<readonly DailyEnergyEntry[]> {
     await this.initialize();
     return [...this.dailyEnergyEntries.values()].sort((left, right) =>
@@ -580,7 +587,7 @@ function createPersistedDataSource(
 }
 
 function isMutation(property: PropertyKey): boolean {
-  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete'));
+  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll');
 }
 
 function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {

@@ -37,13 +37,14 @@ interface SettingsStatePanelProps {
   onPlanningSettingsChange?: (input: UpdatePlanningSettingsInput) => Promise<void>;
   onSignIn?: () => void;
   onSignOut?: () => void;
+  onClearAutonomousData?: () => Promise<void>;
   onSignUp?: () => void;
   onTimeZoneChange?: (timeZoneId: string) => Promise<void>;
   onUseDeviceTimeZone?: () => Promise<void>;
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -51,6 +52,7 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
   const [syncLabel, setSyncLabel] = useState<string>(settingsDemoState.initialSyncLabel);
   const [isTimeZonePickerVisible, setIsTimeZonePickerVisible] = useState(false);
   const [planningSettingsEditorPlacement, setPlanningSettingsEditorPlacement] = useState<'plan' | 'notifications' | null>(null);
+  const [isClearConfirmationVisible, setIsClearConfirmationVisible] = useState(false);
   const [isSavingPlanningSettings, setIsSavingPlanningSettings] = useState(false);
   const [planningSettings, setPlanningSettings] = useState<UpdatePlanningSettingsInput>(() => getPlanningSettings(settings));
   const notificationPermissionService = useMemo(
@@ -190,12 +192,17 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
-          <CardTitle title="Данные на этом устройстве" />
+          <CardTitle title="Данные аккаунта и устройства" />
           <Text style={styles.storageDescription}>Проекты, задачи, подзадачи, напоминания, блоки расписания и настройки хранятся только на этом устройстве.</Text>
           <View style={styles.warning}>
             <Text style={styles.warningText}>При удалении приложения или переходе на другое устройство эти данные не восстанавливаются.</Text>
           </View>
           <Text style={styles.storageDescription}>Анонимная учётная запись и история поведения не являются резервной копией и не восстанавливают ваши данные.</Text>
+          {account.kind === 'withoutAccount' && onClearAutonomousData !== undefined ? <ActionButton label="Очистить все данные" onPress={() => setIsClearConfirmationVisible(true)} tone="secondary" /> : null}
+          {isClearConfirmationVisible ? <View style={styles.warning}>
+            <Text style={styles.warningText}>Вы действительно хотите удалить все локальные данные на этом устройстве?</Text>
+            <View style={styles.buttonRow}><View style={styles.actionWrap}><ActionButton label="Отмена" onPress={() => setIsClearConfirmationVisible(false)} tone="secondary" /></View><View style={styles.actionWrap}><ActionButton label="Удалить все данные" onPress={() => { void onClearAutonomousData?.().then(() => setIsClearConfirmationVisible(false)); }} tone="danger" /></View></View>
+          </View> : null}
         </SurfaceCard>
 
         <Text style={styles.footer}>Версия {appVersion} · Часовой пояс плана: {settings.timeZoneId}</Text>
