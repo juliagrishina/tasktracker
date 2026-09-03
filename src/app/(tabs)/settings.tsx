@@ -1,9 +1,58 @@
+import { useCallback, useEffect, useState } from 'react';
+
+import { type AccountProfileResult, type AccountProfileService, type AccountProfileState } from '../../application/account-profile';
+import { createCurrentAccountProfileService } from '../../application/account-profile-provider';
 import { useAppServices } from '../../application/app-services-provider';
+import { useAuthGateNavigation } from '../../application/auth-gate';
 import { notificationPermissionGateway } from '../../application/notification-permission-gateway';
 import { SettingsStatePanel } from '../../ui/settings/settings-state-panel';
 
 export default function SettingsScreen() {
   const { settings, settingsActions } = useAppServices();
+  const authNavigation = useAuthGateNavigation();
+  const [account, setAccount] = useState<AccountProfileState>({ kind: 'withoutAccount' });
+  const [accountService, setAccountService] = useState<AccountProfileService | null>(null);
 
-  return <SettingsStatePanel notificationPermissions={notificationPermissionGateway} onPlanningSettingsChange={settingsActions.updatePlanningSettings} onTimeZoneChange={settingsActions.updateTimeZone} onUseDeviceTimeZone={settingsActions.useDeviceTimeZone} settings={settings} />;
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const service = await createCurrentAccountProfileService();
+        if (!mounted) return;
+        setAccountService(service);
+        setAccount(service === null ? { kind: 'withoutAccount' } : await service.load());
+      } catch {
+        if (mounted) setAccount({ kind: 'withoutAccount' });
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const runAccountAction = useCallback(async (action: (service: AccountProfileService) => Promise<AccountProfileResult>): Promise<AccountProfileResult> => {
+    if (accountService === null) {
+      return { kind: 'requestFailed', message: 'Войдите в аккаунт, чтобы изменить данные.' };
+    }
+    const result = await action(accountService);
+    if (result.kind !== 'requestFailed' && result.kind !== 'validationError') {
+      setAccount(await accountService.load());
+    }
+    return result;
+  }, [accountService]);
+
+  return <SettingsStatePanel
+    account={account}
+    notificationPermissions={notificationPermissionGateway}
+    onAccountCancelEmailChange={() => runAccountAction((service) => service.cancelEmailChange())}
+    onAccountConfirmEmailChange={(input) => runAccountAction((service) => service.confirmEmailChange(input))}
+    onAccountStartEmailChange={(input) => runAccountAction((service) => service.startEmailChange(input))}
+    onAccountUpdateDisplayName={(displayName) => runAccountAction((service) => service.updateDisplayName(displayName))}
+    onPlanningSettingsChange={settingsActions.updatePlanningSettings}
+    onSignIn={() => authNavigation?.openAuth('login')}
+    onSignUp={() => authNavigation?.openAuth('registration')}
+    onTimeZoneChange={settingsActions.updateTimeZone}
+    onUseDeviceTimeZone={settingsActions.useDeviceTimeZone}
+    settings={settings}
+  />;
 }

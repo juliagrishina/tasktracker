@@ -18,6 +18,7 @@ import { ActionButton } from '../primitives/action-button';
 type AuthMode = 'registration' | 'login';
 
 export interface AuthScreenProps {
+  initialMode?: AuthMode;
   onContinueWithoutAccount: () => void;
   onForgotPassword?: () => void;
   onSignIn?: (input: { email: string; password: string }) => void;
@@ -27,6 +28,7 @@ export interface AuthScreenProps {
 }
 
 export function AuthScreen({
+  initialMode = 'registration',
   onContinueWithoutAccount,
   onForgotPassword = () => {},
   onSignIn = () => {},
@@ -34,7 +36,7 @@ export function AuthScreen({
   registrationError = null,
   signInError = null,
 }: AuthScreenProps) {
-  const [mode, setMode] = useState<AuthMode>('registration');
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

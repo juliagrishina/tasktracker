@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import {
@@ -42,6 +42,17 @@ interface AuthGateProps {
 }
 
 type GateState = 'loading' | 'auth' | 'verification' | 'workspaceTransfer' | 'app';
+type AuthScreenMode = 'registration' | 'login';
+
+interface AuthGateNavigation {
+  openAuth(mode: AuthScreenMode): void;
+}
+
+const AuthGateNavigationContext = createContext<AuthGateNavigation | null>(null);
+
+export function useAuthGateNavigation(): AuthGateNavigation | null {
+  return useContext(AuthGateNavigationContext);
+}
 
 export function AuthGate({
   children,
@@ -52,6 +63,7 @@ export function AuthGate({
   workspaceTransfer = createWorkspaceTransferService({ sourceForScope: createDataSource }),
 }: AuthGateProps) {
   const [gateState, setGateState] = useState<GateState>('loading');
+  const [authScreenMode, setAuthScreenMode] = useState<AuthScreenMode>('registration');
   const [registrationError, setRegistrationError] = useState<string | null>(null);
   const [signInError, setSignInError] = useState<string | null>(null);
   const [verificationError, setVerificationError] = useState<string | null>(null);
@@ -106,6 +118,13 @@ export function AuthGate({
     await scopeRegistry.openAutonomousScope();
     await entryState.continueWithoutAccount();
     setGateState('app');
+  };
+
+  const openAuth = (mode: AuthScreenMode) => {
+    setAuthScreenMode(mode);
+    setRegistrationError(null);
+    setSignInError(null);
+    setGateState('auth');
   };
 
   const openAccount = async (accountId: string) => {
@@ -239,6 +258,7 @@ export function AuthGate({
   if (gateState === 'auth') {
     return (
       <AuthScreen
+        initialMode={authScreenMode}
         onContinueWithoutAccount={() => {
           void continueWithoutAccount();
         }}
@@ -294,7 +314,7 @@ export function AuthGate({
     );
   }
 
-  return <>{children}</>;
+  return <AuthGateNavigationContext.Provider value={{ openAuth }}>{children}</AuthGateNavigationContext.Provider>;
 }
 
 function messageForConfirmationResult(

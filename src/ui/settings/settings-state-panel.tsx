@@ -9,6 +9,7 @@ import {
   type NotificationPermissionStatus,
   type WebNotificationPermissionGateway,
 } from '../../application/notification-permissions';
+import type { AccountProfileResult, AccountProfileState } from '../../application/account-profile';
 import type { UpdatePlanningSettingsInput } from '../../application/settings-use-cases';
 import type { AppSettings } from '../../domain/entities';
 import { PlanningValuePicker } from '../backlog/planning-value-picker';
@@ -19,18 +20,26 @@ import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 
 import { settingsDemoState } from './settings-demo-state';
+import { AccountSettingsCard } from './account-settings-card';
 import { getAppVersion } from './app-version';
 import { TimeZonePicker } from './time-zone-picker';
 
 interface SettingsStatePanelProps {
+  account?: AccountProfileState;
   notificationPermissions?: NotificationPermissionGateway;
+  onAccountCancelEmailChange?: () => Promise<AccountProfileResult>;
+  onAccountConfirmEmailChange?: (input: { code: string }) => Promise<AccountProfileResult>;
+  onAccountStartEmailChange?: (input: { currentPassword: string; email: string }) => Promise<AccountProfileResult>;
+  onAccountUpdateDisplayName?: (displayName: string) => Promise<AccountProfileResult>;
   onPlanningSettingsChange?: (input: UpdatePlanningSettingsInput) => Promise<void>;
+  onSignIn?: () => void;
+  onSignUp?: () => void;
   onTimeZoneChange?: (timeZoneId: string) => Promise<void>;
   onUseDeviceTimeZone?: () => Promise<void>;
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ notificationPermissions, onPlanningSettingsChange, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onAccountConfirmEmailChange, onAccountStartEmailChange, onAccountUpdateDisplayName, onPlanningSettingsChange, onSignIn, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -118,6 +127,15 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, temporaryWebContentStyle()]}>
+        <AccountSettingsCard
+          account={account}
+          onCancelEmailChange={onAccountCancelEmailChange}
+          onConfirmEmailChange={onAccountConfirmEmailChange}
+          onSignIn={onSignIn}
+          onSignUp={onSignUp}
+          onStartEmailChange={onAccountStartEmailChange}
+          onUpdateDisplayName={onAccountUpdateDisplayName}
+        />
         <SurfaceCard style={styles.microsoftCard} tone="info">
           <View style={styles.microsoftHead}>
             <View style={styles.microsoftIcon}>
