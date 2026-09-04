@@ -37,6 +37,7 @@ interface SettingsStatePanelProps {
   onPlanningSettingsChange?: (input: UpdatePlanningSettingsInput) => Promise<void>;
   onSignIn?: () => void;
   onSignOut?: () => void;
+  onSyncAccountData?: () => Promise<void>;
   onClearAutonomousData?: () => Promise<void>;
   onAccountDataAction?: (input: { operation: 'clear_account_data' | 'delete_account'; password: string; code: string }) => Promise<boolean>;
   onRequestAccountDataCode?: () => Promise<PasswordManagementResult>;
@@ -46,7 +47,7 @@ interface SettingsStatePanelProps {
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onAccountDataAction, onRequestAccountDataCode, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onAccountDataAction, onRequestAccountDataCode, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onSyncAccountData, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -223,6 +224,7 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
             <Text style={styles.warningText}>При удалении приложения или переходе на другое устройство эти данные не восстанавливаются.</Text>
           </View>
           <Text style={styles.storageDescription}>Анонимная учётная запись и история поведения не являются резервной копией и не восстанавливают ваши данные.</Text>
+          {account.kind === 'authenticated' && onSyncAccountData !== undefined ? <ActionButton label="Синхронизировать сейчас" onPress={() => { void onSyncAccountData().then(() => setFeedback('Данные синхронизированы.')).catch(() => setFeedback('Не удалось синхронизировать данные. Повторите позже.')); }} tone="primary" /> : null}
           {account.kind === 'withoutAccount' && onClearAutonomousData !== undefined ? <ActionButton label="Очистить все данные" onPress={() => setIsClearConfirmationVisible(true)} tone="secondary" /> : null}
           {account.kind === 'authenticated' ? <><ActionButton label="Очистить все данные" onPress={() => openAccountOperation('clear_account_data')} tone="secondary" /><ActionButton label="Удалить аккаунт" onPress={() => openAccountOperation('delete_account')} tone="danger" />
           {accountOperation !== null ? <View style={styles.warning}>

@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, StyleSheet, Text, View } from 'react-native';
 
 import type { AppSettings, DailyEnergyEntry, Project, RecurrenceOccurrence, RecurrenceRevision, RecurrenceSeries, Reminder, TaskItem } from '../domain/entities';
 import type { AppDataSource } from '../data/contracts';
@@ -64,6 +64,9 @@ import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanSch
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveRecurrenceRevisionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 import { updatePlanningSettings, type UpdatePlanningSettingsInput } from './settings-use-cases';
 import { getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
+import { createSupabaseSyncGateway } from '../data/supabase-sync-gateway';
+import { supabase } from '../data/supabase-client';
+import { createSyncEngine, type SyncEngine, type SyncEngineStore } from './sync-engine';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -140,6 +143,7 @@ interface AppServicesContextValue {
   refreshCompletedItems(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
+  syncAccountData(): Promise<void>;
   clearAutonomousData(): Promise<void>;
   clearAccountData(): Promise<void>;
 }
@@ -161,6 +165,14 @@ const emptyBacklogView: BacklogView = {
   projects: [],
 };
 
+function isSyncEngineStore(source: AppDataSource): source is AppDataSource & SyncEngineStore {
+  const candidate = source as Partial<SyncEngineStore>;
+  return typeof candidate.listSyncOutbox === 'function'
+    && typeof candidate.acknowledgeSyncMutations === 'function'
+    && typeof candidate.getSyncCursor === 'function'
+    && typeof candidate.applyRemoteSyncChanges === 'function';
+}
+
 export function AppServicesProvider({
   children,
   source,
@@ -169,6 +181,10 @@ export function AppServicesProvider({
   notificationScheduler = localNotificationScheduler,
 }: AppServicesProviderProps) {
   const [appSource] = useState<AppDataSource>(() => source ?? createDataSource(scope));
+  const syncEngine = useMemo<SyncEngine | null>(() => {
+    if (scope?.kind !== 'account' || !isSyncEngineStore(appSource)) return null;
+    return createSyncEngine({ gateway: createSupabaseSyncGateway(supabase), store: appSource });
+  }, [appSource, scope]);
   const repositories = useMemo(() => createAppRepositories(appSource), [appSource]);
   const [isReady, setIsReady] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);
@@ -199,9 +215,10 @@ export function AppServicesProvider({
     async <T,>(action: () => Promise<T>): Promise<T> => {
       const result = await action();
       await Promise.all([refreshBacklog(), refreshCompletedItems()]);
+      syncEngine?.notifyLocalMutation();
       return result;
     },
-    [refreshBacklog, refreshCompletedItems],
+    [refreshBacklog, refreshCompletedItems, syncEngine],
   );
   const backlogActions = useMemo<BacklogActions>(
     () => ({
@@ -282,6 +299,7 @@ export function AppServicesProvider({
         await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
         await refreshDailyEnergy();
+        syncEngine?.notifyLocalMutation();
       },
       useDeviceTimeZone: async () => {
         const updatedSettings = {
@@ -292,18 +310,21 @@ export function AppServicesProvider({
         await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
         await refreshDailyEnergy();
+        syncEngine?.notifyLocalMutation();
       },
       updatePlanningSettings: async (input) => {
         const updatedSettings = await updatePlanningSettings(appSource, input, notificationScheduler);
         setSettings(updatedSettings);
+        syncEngine?.notifyLocalMutation();
       },
       deferCompletionPromptsUntil: async (isoDate) => {
         const updatedSettings = { ...settings, completionPromptDeferredOn: isoDate };
         await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
+        syncEngine?.notifyLocalMutation();
       },
     }),
-    [appSource, notificationScheduler, refreshDailyEnergy, settings],
+    [appSource, notificationScheduler, refreshDailyEnergy, settings, syncEngine],
   );
   const energyActions = useMemo<EnergyActions>(
     () => ({
@@ -312,10 +333,11 @@ export function AppServicesProvider({
         const entry = await saveDailyEnergyForCurrentDay(appSource, { energyPercent });
         setDailyEnergy(entry);
         setIsDailyEnergyLoaded(true);
+        syncEngine?.notifyLocalMutation();
         return entry;
       },
     }),
-    [appSource, refreshDailyEnergy],
+    [appSource, refreshDailyEnergy, syncEngine],
   );
 
   useEffect(() => {
@@ -336,6 +358,7 @@ export function AppServicesProvider({
         const loadedDailyEnergy = await getDailyEnergyForCurrentDay(appSource);
         void synchronizeRecurrenceNotifications(appSource, notificationScheduler, new Date()).catch(() => {});
         void synchronizeEveningReviewNotification({ now: new Date(), scheduler: notificationScheduler, source: appSource }).catch(() => {});
+        void syncEngine?.syncNow().catch(() => {});
 
         if (isMounted) {
           setSettings(loadedSettings);
@@ -356,7 +379,35 @@ export function AppServicesProvider({
     return () => {
       isMounted = false;
     };
-  }, [appSource, notificationScheduler, repositories, seedDevelopmentData]);
+  }, [appSource, notificationScheduler, repositories, seedDevelopmentData, syncEngine]);
+
+  useEffect(() => {
+    if (syncEngine === null) return;
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') syncEngine.onForeground();
+    });
+    const handleOnline = (): void => syncEngine.onNetworkReconnect();
+    if (Platform.OS === 'web') window.addEventListener('online', handleOnline);
+    return () => {
+      appStateSubscription.remove();
+      if (Platform.OS === 'web') window.removeEventListener('online', handleOnline);
+      syncEngine.dispose();
+    };
+  }, [syncEngine]);
+
+  useEffect(() => {
+    if (syncEngine === null || supabase === null || scope?.kind !== 'account') return;
+    const channel = supabase
+      .channel(`account-sync:${scope.accountId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'sync_changes',
+        filter: `user_id=eq.${scope.accountId}`,
+      }, () => syncEngine.onRealtimeSignal())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [scope, syncEngine]);
 
   if (initializationError !== null) {
     return (
@@ -388,6 +439,7 @@ export function AppServicesProvider({
         refreshCompletedItems,
         runBacklogAction,
         runStorageDiagnostic,
+        syncAccountData: async () => { if (syncEngine !== null) await syncEngine.syncNow(); },
         clearAutonomousData: async () => {
           await clearAutonomousWorkspace({ scope: scope ?? { kind: 'autonomous' }, source: appSource });
           await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy()]);

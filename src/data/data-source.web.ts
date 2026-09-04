@@ -21,7 +21,7 @@ import type { AppDataSource } from './contracts';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
 import { migrateLegacyEntityIds } from './legacy-id-migration';
-import { createLocalSyncId, createSyncTrackingDataSource, type SyncMetadataDataSource, type SyncOutboxMutation, type SyncTrackingDataSource } from './sync-outbox';
+import { createLocalSyncId, createSyncTrackingDataSource, type RemoteSyncChange, type SyncMetadataDataSource, type SyncMutationResult, type SyncOutboxMutation, type SyncTrackingDataSource } from './sync-outbox';
 
 export interface InMemoryDataSource extends SyncTrackingDataSource {
   debugSettingsRowCount(): number;
@@ -45,6 +45,7 @@ interface BrowserDataSnapshot {
   recurrenceRevisions: RecurrenceRevision[];
   transferHistories: TransferHistory[];
   syncState: { deviceId: string; dataGeneration: number } | null;
+  syncCursor: number | null;
   syncEntityVersions: readonly [string, number][];
   syncOutbox: SyncOutboxMutation[];
 }
@@ -75,6 +76,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
   private readonly recurrenceRevisions = new Map<EntityId, RecurrenceRevision>();
   private readonly transferHistories = new Map<EntityId, TransferHistory>();
   private syncState: { deviceId: string; dataGeneration: number } | null = null;
+  private syncCursor: number | null = null;
   private readonly syncEntityVersions = new Map<string, number>();
   private readonly syncOutbox = new Map<string, SyncOutboxMutation>();
 
@@ -120,6 +122,27 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
   async listSyncOutbox(): Promise<readonly SyncOutboxMutation[]> {
     await this.initialize();
     return [...this.syncOutbox.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.mutationId.localeCompare(right.mutationId));
+  }
+
+  async acknowledgeSyncMutations(results: readonly SyncMutationResult[]): Promise<void> {
+    await this.initialize();
+    for (const result of results) {
+      this.syncOutbox.delete(result.mutationId);
+      this.syncEntityVersions.set(`${result.entityType}:${result.entityId}`, result.version);
+    }
+  }
+
+  async getSyncCursor(): Promise<number> {
+    await this.initialize();
+    return this.syncCursor ?? 0;
+  }
+
+  async applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void> {
+    await this.transaction(async () => {
+      for (const change of changes) this.applyRemoteSyncChange(change);
+      if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1 };
+      this.syncCursor = cursor;
+    });
   }
 
   async clearAll(): Promise<void> {
@@ -422,6 +445,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
       recurrenceRevisions: new Map(this.recurrenceRevisions),
       transferHistories: new Map(this.transferHistories),
       syncState: this.syncState === null ? null : { ...this.syncState },
+      syncCursor: this.syncCursor,
       syncEntityVersions: new Map(this.syncEntityVersions),
       syncOutbox: new Map(this.syncOutbox),
     };
@@ -440,6 +464,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
       replaceMap(this.recurrenceRevisions, snapshot.recurrenceRevisions);
       replaceMap(this.transferHistories, snapshot.transferHistories);
       this.syncState = snapshot.syncState;
+      this.syncCursor = snapshot.syncCursor;
       replaceMap(this.syncEntityVersions, snapshot.syncEntityVersions);
       replaceMap(this.syncOutbox, snapshot.syncOutbox);
       throw error;
@@ -475,6 +500,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
       recurrenceRevisions: [...this.recurrenceRevisions.values()],
       transferHistories: [...this.transferHistories.values()],
       syncState: this.syncState,
+      syncCursor: this.syncCursor,
       syncEntityVersions: [...this.syncEntityVersions.entries()],
       syncOutbox: [...this.syncOutbox.values()],
     };
@@ -493,8 +519,28 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     replaceMap(this.recurrenceRevisions, new Map(migrated.recurrenceRevisions.map((revision) => [revision.id, revision])));
     replaceMap(this.transferHistories, new Map(migrated.transferHistories.map((history) => [history.id, history])));
     this.syncState = migrated.syncState;
+    this.syncCursor = migrated.syncCursor;
     replaceMap(this.syncEntityVersions, new Map(migrated.syncEntityVersions));
     replaceMap(this.syncOutbox, new Map(migrated.syncOutbox.map((mutation) => [mutation.mutationId, mutation])));
+  }
+
+  private applyRemoteSyncChange(change: RemoteSyncChange): void {
+    const payload = change.payload as Record<string, unknown>;
+    const deletedAt = change.operation === 'delete' ? new Date().toISOString() : null;
+    if (change.entityType === 'projects') this.projects.set(change.entityId, { ...(payload as unknown as Project), id: change.entityId, deletedAt });
+    else if (change.entityType === 'task_items') this.taskItems.set(change.entityId, { ...(payload as TaskItem), id: change.entityId, deletedAt });
+    else if (change.entityType === 'reminders') this.reminders.set(change.entityId, { ...(payload as unknown as Reminder), id: change.entityId, deletedAt });
+    else if (change.entityType === 'schedule_blocks') this.scheduleBlocks.set(change.entityId, { ...(payload as unknown as ScheduleBlock), id: change.entityId, deletedAt });
+    else if (change.entityType === 'recurrence_series') this.recurrenceSeries.set(change.entityId, { ...(payload as unknown as RecurrenceSeries), id: change.entityId, deletedAt });
+    else if (change.entityType === 'recurrence_occurrences') this.recurrenceOccurrences.set(change.entityId, { ...(payload as unknown as RecurrenceOccurrence), id: change.entityId, deletedAt });
+    else if (change.entityType === 'recurrence_revisions') this.recurrenceRevisions.set(change.entityId, { ...(payload as unknown as RecurrenceRevision), id: change.entityId, deletedAt });
+    else if (change.entityType === 'transfer_history') this.transferHistories.set(change.entityId, { ...(payload as unknown as TransferHistory), id: change.entityId });
+    else if (change.entityType === 'daily_energy_entries' && change.operation === 'upsert') this.dailyEnergyEntries.set(change.entityId, payload as unknown as DailyEnergyEntry);
+    else if (change.entityType === 'user_settings' && change.operation === 'upsert') {
+      const current = this.settings ?? getDefaultSettings();
+      this.settings = { ...current, ...pickSharedSettings(payload) };
+    }
+    this.syncEntityVersions.set(`${change.entityType}:${change.entityId}`, change.version);
   }
 
   private deleteTaskRelatedRows(taskItemId: EntityId, deletedAt: string): void {
@@ -654,6 +700,7 @@ function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
       recurrenceRevisions: snapshot.recurrenceRevisions ?? [],
       transferHistories: snapshot.transferHistories ?? [],
       syncState: snapshot.syncState ?? null,
+      syncCursor: snapshot.syncCursor ?? null,
       syncEntityVersions: Array.isArray(snapshot.syncEntityVersions) ? snapshot.syncEntityVersions : [],
       syncOutbox: Array.isArray(snapshot.syncOutbox) ? snapshot.syncOutbox : [],
     };
@@ -664,4 +711,14 @@ function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
 
 function getBrowserStorage(): BrowserScopeStorage | null {
   return (globalThis as { localStorage?: BrowserScopeStorage }).localStorage ?? null;
+}
+
+function pickSharedSettings(payload: Record<string, unknown>): Partial<AppSettings> {
+  const result: Partial<AppSettings> = {};
+  if (typeof payload.workdayStartsAt === 'string') result.workdayStartsAt = payload.workdayStartsAt;
+  if (typeof payload.workdayEndsAt === 'string') result.workdayEndsAt = payload.workdayEndsAt;
+  if (typeof payload.eveningReviewAt === 'string') result.eveningReviewAt = payload.eveningReviewAt;
+  if (typeof payload.notificationLeadMinutes === 'number') result.notificationLeadMinutes = payload.notificationLeadMinutes;
+  if (typeof payload.completionPromptDeferredOn === 'string' || payload.completionPromptDeferredOn === null) result.completionPromptDeferredOn = payload.completionPromptDeferredOn;
+  return result;
 }

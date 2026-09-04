@@ -24,6 +24,29 @@ export interface SyncMetadataDataSource {
   listSyncOutbox(): Promise<readonly SyncOutboxMutation[]>;
 }
 
+export interface SyncMutationResult {
+  mutationId: string;
+  entityType: SyncEntityType;
+  entityId: string;
+  operation: SyncOutboxMutation['operation'];
+  version: number;
+}
+
+export interface RemoteSyncChange {
+  changeCursor: number;
+  entityType: SyncEntityType;
+  entityId: string;
+  operation: SyncOutboxMutation['operation'];
+  version: number;
+  payload: unknown;
+}
+
+export interface SyncEngineDataSource extends SyncTrackingDataSource {
+  acknowledgeSyncMutations(results: readonly SyncMutationResult[]): Promise<void>;
+  getSyncCursor(): Promise<number>;
+  applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void>;
+}
+
 export function createLocalSyncId(): string {
   return createUuid();
 }

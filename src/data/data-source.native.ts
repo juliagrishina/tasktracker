@@ -28,7 +28,7 @@ import {
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
 import { migrateLegacyIdsInNativeDatabase } from './native-legacy-id-migration';
 import { migrateDatabase } from './migrations';
-import { createLocalSyncId, createSyncTrackingDataSource, type SyncMetadataDataSource, type SyncOutboxMutation } from './sync-outbox';
+import { createLocalSyncId, createSyncTrackingDataSource, type RemoteSyncChange, type SyncMetadataDataSource, type SyncMutationResult, type SyncOutboxMutation } from './sync-outbox';
 
 interface SettingsRow {
   time_zone_id: string | null;
@@ -239,6 +239,41 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
       payload: JSON.parse(row.payload_json),
       createdAt: row.created_at,
     }));
+  }
+
+  async acknowledgeSyncMutations(results: readonly SyncMutationResult[]): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.withTransactionAsync(async () => {
+      for (const result of results) {
+        await database.runAsync('DELETE FROM sync_outbox WHERE mutation_id = ?', [result.mutationId]);
+        await database.runAsync(
+          `INSERT INTO sync_entity_versions (entity_type, entity_id, version) VALUES (?, ?, ?)
+           ON CONFLICT(entity_type, entity_id) DO UPDATE SET version = excluded.version`,
+          [result.entityType, result.entityId, result.version],
+        );
+      }
+    });
+  }
+
+  async getSyncCursor(): Promise<number> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<{ pull_cursor: number | null }>('SELECT pull_cursor FROM sync_state WHERE id = 1');
+    return row?.pull_cursor ?? 0;
+  }
+
+  async applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void> {
+    await this.transaction(async () => {
+      for (const change of changes) await this.applyRemoteSyncChange(change);
+      const database = await this.getDatabase();
+      const current = await database.getFirstAsync<{ device_id: string; data_generation: number }>('SELECT device_id, data_generation FROM sync_state WHERE id = 1');
+      if (current === null) {
+        await database.runAsync('INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at) VALUES (1, ?, 1, ?, ?)', [createLocalSyncId(), cursor, new Date().toISOString()]);
+      } else {
+        await database.runAsync('UPDATE sync_state SET pull_cursor = ?, updated_at = ? WHERE id = 1', [cursor, new Date().toISOString()]);
+      }
+    });
   }
 
   async getSettings(): Promise<AppSettings> {
@@ -1192,6 +1227,37 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
     return result.value;
   }
 
+  private async applyRemoteSyncChange(change: RemoteSyncChange): Promise<void> {
+    const payload = change.payload as Record<string, unknown>;
+    if (change.operation === 'delete') {
+      if (change.entityType === 'projects') await this.deleteProject(change.entityId);
+      else if (change.entityType === 'task_items') await this.deleteTaskItem(change.entityId);
+      else if (change.entityType === 'reminders') await this.deleteReminder(change.entityId);
+      else if (change.entityType === 'schedule_blocks') await this.deleteScheduleBlock(change.entityId);
+      else if (change.entityType === 'recurrence_series') await this.deleteRecurrenceSeries(change.entityId);
+      else if (change.entityType === 'recurrence_occurrences') await this.deleteRecurrenceOccurrence(change.entityId);
+      else if (change.entityType === 'recurrence_revisions') await this.deleteRecurrenceRevision(change.entityId);
+    } else if (change.entityType === 'projects') await this.saveProject({ ...(payload as unknown as Project), id: change.entityId });
+    else if (change.entityType === 'task_items') await this.saveTaskItem({ ...(payload as TaskItem), id: change.entityId });
+    else if (change.entityType === 'reminders') await this.saveReminder({ ...(payload as unknown as Reminder), id: change.entityId });
+    else if (change.entityType === 'schedule_blocks') await this.saveScheduleBlock({ ...(payload as unknown as ScheduleBlock), id: change.entityId });
+    else if (change.entityType === 'recurrence_series') await this.saveRecurrenceSeries({ ...(payload as unknown as RecurrenceSeries), id: change.entityId });
+    else if (change.entityType === 'recurrence_occurrences') await this.saveRecurrenceOccurrence({ ...(payload as unknown as RecurrenceOccurrence), id: change.entityId });
+    else if (change.entityType === 'recurrence_revisions') await this.saveRecurrenceRevision({ ...(payload as unknown as RecurrenceRevision), id: change.entityId });
+    else if (change.entityType === 'transfer_history') await this.saveTransferHistory({ ...(payload as unknown as TransferHistory), id: change.entityId });
+    else if (change.entityType === 'daily_energy_entries') await this.saveDailyEnergyEntry(payload as unknown as DailyEnergyEntry);
+    else if (change.entityType === 'user_settings') {
+      const current = await this.getSettings();
+      await this.saveSettings({ ...current, ...pickSharedSettings(payload) });
+    }
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO sync_entity_versions (entity_type, entity_id, version) VALUES (?, ?, ?)
+       ON CONFLICT(entity_type, entity_id) DO UPDATE SET version = excluded.version`,
+      [change.entityType, change.entityId, change.version],
+    );
+  }
+
   private mapRecurrenceOccurrence(row: RecurrenceOccurrenceRow): RecurrenceOccurrence {
     return {
       id: row.id,
@@ -1256,6 +1322,16 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
 
     return this.databasePromise;
   }
+}
+
+function pickSharedSettings(payload: Record<string, unknown>): Partial<AppSettings> {
+  const result: Partial<AppSettings> = {};
+  if (typeof payload.workdayStartsAt === 'string') result.workdayStartsAt = payload.workdayStartsAt;
+  if (typeof payload.workdayEndsAt === 'string') result.workdayEndsAt = payload.workdayEndsAt;
+  if (typeof payload.eveningReviewAt === 'string') result.eveningReviewAt = payload.eveningReviewAt;
+  if (typeof payload.notificationLeadMinutes === 'number') result.notificationLeadMinutes = payload.notificationLeadMinutes;
+  if (typeof payload.completionPromptDeferredOn === 'string' || payload.completionPromptDeferredOn === null) result.completionPromptDeferredOn = payload.completionPromptDeferredOn;
+  return result;
 }
 
 export function createDataSource(scope: LocalDataScope = { kind: 'autonomous' }): AppDataSource {
