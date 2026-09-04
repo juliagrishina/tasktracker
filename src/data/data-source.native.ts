@@ -436,7 +436,7 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
   async clearAll(): Promise<void> {
     await this.initialize();
     const database = await this.getDatabase();
-    await database.execAsync('DELETE FROM recurrence_revisions; DELETE FROM recurrence_occurrences; DELETE FROM recurrence_series; DELETE FROM schedule_blocks; DELETE FROM transfer_history; DELETE FROM reminders; DELETE FROM task_items; DELETE FROM projects; DELETE FROM daily_energy_entries;');
+    await database.execAsync('DELETE FROM recurrence_revisions; DELETE FROM recurrence_occurrences; DELETE FROM recurrence_series; DELETE FROM schedule_blocks; DELETE FROM transfer_history; DELETE FROM reminders; DELETE FROM task_items; DELETE FROM projects; DELETE FROM daily_energy_entries; DELETE FROM sync_outbox; DELETE FROM sync_entity_versions; DELETE FROM sync_conflicts; DELETE FROM sync_state;');
     await this.saveSettings(getDefaultSettings());
   }
 

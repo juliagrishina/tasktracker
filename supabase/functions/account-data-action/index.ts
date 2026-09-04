@@ -49,7 +49,7 @@ Deno.serve(async (request) => {
   const deletion = await executeAccountDeletion({
     begin: async (userId) => (await admin.from('deletion_requests').upsert({ user_id: userId, status: 'processing', completed_at: null, last_error: null }, { onConflict: 'user_id' })).error === null,
     clearBusinessData: async (userId) => (await admin.rpc('clear_account_business_data', { p_user_id: userId })).error === null,
-    deleteAuthUser: async (userId) => (await admin.auth.admin.deleteUser(userId, true)).error === null,
+    deleteAuthUser: async (userId) => (await admin.auth.admin.deleteUser(userId, false)).error === null,
     markRetry: async (userId, reason) => { await admin.from('deletion_requests').update({ status: 'retry_required', last_error: reason }).eq('user_id', userId); },
     markCompleted: async (userId) => (await admin.from('deletion_requests').update({ status: 'completed', completed_at: new Date().toISOString(), last_error: null }).eq('user_id', userId)).error === null,
   }, user.id);

@@ -76,11 +76,18 @@ describe('Epic 11 Auth protection contract', () => {
     expect(migration).toContain('set data_generation = data_generation + 1');
     expect(functionSource).toContain("return value === 'clear_account_data' || value === 'delete_account'");
     expect(functionSource).toContain("admin.rpc('clear_account_business_data'");
-    expect(functionSource).toContain('admin.auth.admin.deleteUser(userId, true)');
+    expect(functionSource).toContain('admin.auth.admin.deleteUser(userId, false)');
     expect(functionSource).toContain("status: 'retry_required'");
     expect(functionSource).toContain("status: 'completed'");
     expect(deletionService).toContain("return { kind: 'pending', reason: 'auth_delete_failed' }");
     expect(config).toContain('[functions.account-data-action]');
+  });
+
+  test('hard-deletes Auth identities and informs the client about a durable pending deletion', () => {
+    const functionSource = readRepositoryFile('supabase', 'functions', 'account-data-action', 'index.ts');
+
+    expect(functionSource).toContain('admin.auth.admin.deleteUser(userId, false)');
+    expect(functionSource).toContain('return respond({ deletionPending: true }, 202)');
   });
 
   test('clears the cloud graph while retaining legal acceptance and returns the next generation to the current device', () => {

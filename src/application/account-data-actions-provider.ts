@@ -1,7 +1,7 @@
 import { supabase } from '../data/supabase-client';
 
 export type AccountDataOperation = 'clear_account_data' | 'delete_account';
-export type AccountDataActionResult = { kind: 'cleared'; dataGeneration: number } | { kind: 'deleted' } | { kind: 'failed' };
+export type AccountDataActionResult = { kind: 'cleared'; dataGeneration: number } | { kind: 'deleted' } | { kind: 'deletionPending' } | { kind: 'failed' };
 
 export async function performAccountDataAction(input: { operation: AccountDataOperation; password: string; code: string }): Promise<AccountDataActionResult> {
   if (supabase === null) return { kind: 'failed' };
@@ -13,5 +13,6 @@ export async function performAccountDataAction(input: { operation: AccountDataOp
       ? { kind: 'cleared', dataGeneration }
       : { kind: 'failed' };
   }
-  return (data as { deleted?: unknown }).deleted === true ? { kind: 'deleted' } : { kind: 'failed' };
+  if ((data as { deleted?: unknown }).deleted === true) return { kind: 'deleted' };
+  return (data as { deletionPending?: unknown }).deletionPending === true ? { kind: 'deletionPending' } : { kind: 'failed' };
 }

@@ -200,6 +200,9 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     this.dailyEnergyEntries.clear(); this.projects.clear(); this.taskItems.clear(); this.reminders.clear();
     this.scheduleBlocks.clear(); this.recurrenceSeries.clear(); this.recurrenceOccurrences.clear();
     this.recurrenceRevisions.clear(); this.transferHistories.clear();
+    this.syncOutbox.clear(); this.syncEntityVersions.clear(); this.syncConflicts.clear();
+    this.syncCursor = null;
+    this.syncState = null;
   }
 
   async listDailyEnergyEntries(): Promise<readonly DailyEnergyEntry[]> {

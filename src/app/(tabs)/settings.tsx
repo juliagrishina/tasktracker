@@ -55,7 +55,10 @@ export default function SettingsScreen() {
     onAccountDataAction={async (input) => {
       const result = await performAccountDataAction(input);
       if (result.kind === 'cleared') await clearAccountData(result.dataGeneration);
-      if (result.kind === 'deleted') await authNavigation?.signOut();
+      if (result.kind === 'deleted' || result.kind === 'deletionPending') {
+        await clearAccountData();
+        await authNavigation?.signOut();
+      }
       return result.kind !== 'failed';
     }}
     onRequestAccountDataCode={() => passwordManagement.requestPasswordChangeCode()}

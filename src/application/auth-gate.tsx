@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import {
@@ -34,6 +34,7 @@ interface AutonomousAuthGateway extends AuthGateway {
   startAutonomousSession(): Promise<AuthSessionState>;
   signInWithPassword?(input: { email: string; password: string }): Promise<AuthSessionState>;
   signOut?(): Promise<void>;
+  subscribe?(listener: (state: AuthSessionState) => void): () => void;
 }
 
 interface AuthGateProps {
@@ -44,6 +45,7 @@ interface AuthGateProps {
   registration?: AccountRegistration;
   passwordManagement?: PasswordManagement;
   workspaceTransfer?: WorkspaceTransferService;
+  clearAccountWorkspace?: (scope: LocalDataScope) => Promise<void>;
 }
 
 type GateState = 'loading' | 'auth' | 'verification' | 'passwordRecovery' | 'workspaceTransfer' | 'app';
@@ -56,6 +58,10 @@ interface AuthGateNavigation {
 
 const AuthGateNavigationContext = createContext<AuthGateNavigation | null>(null);
 const AuthGateWorkspaceContext = createContext<LocalDataScope | null>(null);
+
+async function clearAccountWorkspaceForScope(scope: LocalDataScope): Promise<void> {
+  await createDataSource(scope).clearAll();
+}
 
 export function useAuthGateNavigation(): AuthGateNavigation | null {
   return useContext(AuthGateNavigationContext);
@@ -75,6 +81,7 @@ export function AuthGate({
   registration = defaultAccountRegistration,
   passwordManagement = defaultPasswordManagement,
   workspaceTransfer = createWorkspaceTransferService({ sourceForScope: createDataSource }),
+  clearAccountWorkspace = clearAccountWorkspaceForScope,
 }: AuthGateProps) {
   const [gateState, setGateState] = useState<GateState>('loading');
   const [authScreenMode, setAuthScreenMode] = useState<AuthScreenMode>('registration');
@@ -91,6 +98,8 @@ export function AuthGate({
   const [passwordRecoveryError, setPasswordRecoveryError] = useState<string | null>(null);
   const [passwordRecoveryInfo, setPasswordRecoveryInfo] = useState<string | null>(null);
   const [activeScope, setActiveScope] = useState<LocalDataScope>({ kind: 'autonomous' });
+  const isManualSignOut = useRef(false);
+  const isRemoteCleanupInProgress = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -134,6 +143,27 @@ export function AuthGate({
     };
   }, [entryState, gateway, registration]);
 
+  useEffect(() => {
+    if (activeScope.kind !== 'account' || gateway.subscribe === undefined) return;
+    const accountScope = activeScope;
+
+    return gateway.subscribe((session) => {
+      if (session.kind !== 'signedOut' || isManualSignOut.current || isRemoteCleanupInProgress.current) return;
+      isRemoteCleanupInProgress.current = true;
+      void (async () => {
+        try {
+          await clearAccountWorkspace(accountScope);
+        } finally {
+          await scopeRegistry.hideAccountScope(accountScope.accountId);
+          await scopeRegistry.openAutonomousScope();
+          setActiveScope({ kind: 'autonomous' });
+          setGateState('auth');
+          isRemoteCleanupInProgress.current = false;
+        }
+      })();
+    });
+  }, [activeScope, clearAccountWorkspace, gateway, scopeRegistry]);
+
   const continueWithoutAccount = async () => {
     try {
       await gateway.startAutonomousSession();
@@ -163,13 +193,16 @@ export function AuthGate({
 
   const signOut = async () => {
     const session = await gateway.restoreSession();
-    if (session.kind === 'authenticated') {
+    if (activeScope.kind === 'account') {
       try {
-        await gateway.signOut?.();
+        isManualSignOut.current = true;
+        if (session.kind === 'authenticated') await gateway.signOut?.();
       } catch {
         // Offline logout still hides this device's local account replica.
+      } finally {
+        isManualSignOut.current = false;
       }
-      await scopeRegistry.hideAccountScope(session.userId);
+      await scopeRegistry.hideAccountScope(activeScope.accountId);
     }
     await scopeRegistry.openAutonomousScope();
     setActiveScope({ kind: 'autonomous' });

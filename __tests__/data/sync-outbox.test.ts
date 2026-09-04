@@ -84,6 +84,19 @@ describe('local sync outbox', () => {
     await expect(source.getLocalDataGeneration()).resolves.toBe(2);
   });
 
+  test('removes the account replica and pending sync mutations when it is deleted', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' });
+    await source.saveProject({
+      id: 'project-a', title: 'Удаляемый проект', description: null, completedAt: null,
+      createdAt: '2026-09-04T10:00:00.000Z', updatedAt: '2026-09-04T10:00:00.000Z', deletedAt: null,
+    });
+
+    await source.clearAll();
+
+    await expect(source.getProject('project-a')).resolves.toBeNull();
+    await expect(source.listSyncOutbox()).resolves.toEqual([]);
+  });
+
   test('keeps a no-time calendar date unchanged when a remote entity is applied on another timezone', async () => {
     const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' }) as unknown as {
       applyRemoteSyncChanges(changes: readonly unknown[], cursor: number): Promise<void>;

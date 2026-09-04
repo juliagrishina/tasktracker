@@ -378,6 +378,32 @@ describe('AuthGate', () => {
     await waitFor(() => expect(view.getByLabelText('Выйти из аккаунта')).toBeOnTheScreen());
     await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'account', accountId: 'account-17' });
   });
+
+  test('clears the local account replica after a remote account deletion invalidates its session', async () => {
+    const storage = createMemoryStorage();
+    const scopes = createDataScopeRegistry(storage);
+    const clearAccountWorkspace = jest.fn().mockResolvedValue(undefined);
+    let listener: ((state: { kind: 'signedOut' }) => void) | undefined;
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => ({ kind: 'authenticated', userId: 'account-17', email: 'anna@example.com' }),
+          startAutonomousSession: async () => ({ kind: 'autonomous', userId: null }),
+          subscribe: (next) => { listener = next as (state: { kind: 'signedOut' }) => void; return () => {}; },
+        }}
+        clearAccountWorkspace={clearAccountWorkspace}
+        entryState={createAuthEntryState(storage)}
+        scopeRegistry={scopes}>
+        <Text>Основной экран</Text>
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByText('Основной экран')).toBeOnTheScreen());
+    listener?.({ kind: 'signedOut' });
+
+    await waitFor(() => expect(clearAccountWorkspace).toHaveBeenCalledWith({ kind: 'account', accountId: 'account-17' }));
+    await waitFor(() => expect(view.getByText('Создать аккаунт')).toBeOnTheScreen());
+  });
 });
 
 function SignOutProbe() {
