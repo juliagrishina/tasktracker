@@ -45,4 +45,17 @@ describe('cloud sync protocol contract', () => {
     expect(config).toContain('[functions.sync-protocol]');
     expect(config).toContain('verify_jwt = true');
   });
+
+  test('returns an owner-scoped server snapshot and continues after an optimistic-lock conflict', () => {
+    const migration = readRepositoryFile('supabase', 'migrations', '20260904020000_sync_conflict_snapshot.sql');
+    const source = readRepositoryFile('supabase', 'functions', 'sync-protocol', 'index.ts');
+
+    expect(migration).toContain('get_sync_conflict_snapshot');
+    expect(migration).toContain('sync_require_account_owner()');
+    expect(migration).toContain("'projects', 'task_items', 'reminders', 'schedule_blocks'");
+    expect(source).toContain("p_mutations: [mutation]");
+    expect(source).toContain("applyError.message.includes('Sync version conflict.')");
+    expect(source).toContain("get_sync_conflict_snapshot");
+    expect(source).toContain('return respond({ mutations, conflicts });');
+  });
 });

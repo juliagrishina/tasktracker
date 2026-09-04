@@ -32,6 +32,28 @@ export interface SyncMutationResult {
   version: number;
 }
 
+export interface SyncConflictServerVersion {
+  operation: SyncOutboxMutation['operation'];
+  version: number;
+  payload: unknown;
+  changedAt: string;
+  deviceId: string | null;
+}
+
+export interface SyncConflict {
+  id: string;
+  local: SyncOutboxMutation;
+  server: SyncConflictServerVersion;
+  createdAt: string;
+}
+
+export type IncomingSyncConflict = Omit<SyncConflict, 'id' | 'createdAt'>;
+
+export interface SyncPushResponse {
+  mutations: readonly SyncMutationResult[];
+  conflicts: readonly IncomingSyncConflict[];
+}
+
 export interface RemoteSyncChange {
   changeCursor: number;
   entityType: SyncEntityType;
@@ -46,6 +68,9 @@ export interface SyncEngineDataSource extends SyncTrackingDataSource {
   getSyncCursor(): Promise<number>;
   applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void>;
   resetForFullResync(dataGeneration: number): Promise<void>;
+  recordSyncConflicts(conflicts: readonly IncomingSyncConflict[]): Promise<readonly SyncConflict[]>;
+  listSyncConflicts(): Promise<readonly SyncConflict[]>;
+  removeSyncConflict(id: string): Promise<void>;
 }
 
 export function createLocalSyncId(): string {

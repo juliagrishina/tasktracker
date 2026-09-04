@@ -21,7 +21,8 @@ import type { AppDataSource } from './contracts';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
 import { migrateLegacyEntityIds } from './legacy-id-migration';
-import { createLocalSyncId, createSyncTrackingDataSource, type RemoteSyncChange, type SyncMetadataDataSource, type SyncMutationResult, type SyncOutboxMutation, type SyncTrackingDataSource } from './sync-outbox';
+import { createLocalSyncId, createSyncTrackingDataSource, type IncomingSyncConflict, type RemoteSyncChange, type SyncConflict, type SyncMetadataDataSource, type SyncMutationResult, type SyncOutboxMutation, type SyncTrackingDataSource } from './sync-outbox';
+import { createStoredSyncConflict } from '../application/sync-conflicts';
 
 export interface InMemoryDataSource extends SyncTrackingDataSource {
   debugSettingsRowCount(): number;
@@ -48,6 +49,7 @@ interface BrowserDataSnapshot {
   syncCursor: number | null;
   syncEntityVersions: readonly [string, number][];
   syncOutbox: SyncOutboxMutation[];
+  syncConflicts: SyncConflict[];
 }
 
 function compareByCreatedAt<T extends { id: EntityId; createdAt: string }>(
@@ -79,6 +81,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
   private syncCursor: number | null = null;
   private readonly syncEntityVersions = new Map<string, number>();
   private readonly syncOutbox = new Map<string, SyncOutboxMutation>();
+  private readonly syncConflicts = new Map<string, SyncConflict>();
 
   constructor(snapshot?: BrowserDataSnapshot) {
     if (snapshot !== undefined) {
@@ -132,6 +135,24 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     }
   }
 
+  async recordSyncConflicts(conflicts: readonly IncomingSyncConflict[]): Promise<readonly SyncConflict[]> {
+    await this.initialize();
+    const now = new Date().toISOString();
+    const stored = conflicts.map((conflict) => createStoredSyncConflict(conflict, createLocalSyncId(), now));
+    for (const conflict of stored) this.syncConflicts.set(conflict.id, conflict);
+    return stored;
+  }
+
+  async listSyncConflicts(): Promise<readonly SyncConflict[]> {
+    await this.initialize();
+    return [...this.syncConflicts.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
+  async removeSyncConflict(id: string): Promise<void> {
+    await this.initialize();
+    this.syncConflicts.delete(id);
+  }
+
   async getSyncCursor(): Promise<number> {
     await this.initialize();
     return this.syncCursor ?? 0;
@@ -152,7 +173,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
       this.dailyEnergyEntries.clear(); this.projects.clear(); this.taskItems.clear(); this.reminders.clear();
       this.scheduleBlocks.clear(); this.recurrenceSeries.clear(); this.recurrenceOccurrences.clear();
       this.recurrenceRevisions.clear(); this.transferHistories.clear();
-      this.syncOutbox.clear(); this.syncEntityVersions.clear();
+      this.syncOutbox.clear(); this.syncEntityVersions.clear(); this.syncConflicts.clear();
       this.syncCursor = 0;
       this.syncState = { deviceId, dataGeneration };
     });
@@ -461,6 +482,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
       syncCursor: this.syncCursor,
       syncEntityVersions: new Map(this.syncEntityVersions),
       syncOutbox: new Map(this.syncOutbox),
+      syncConflicts: new Map(this.syncConflicts),
     };
 
     try {
@@ -480,6 +502,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
       this.syncCursor = snapshot.syncCursor;
       replaceMap(this.syncEntityVersions, snapshot.syncEntityVersions);
       replaceMap(this.syncOutbox, snapshot.syncOutbox);
+      replaceMap(this.syncConflicts, snapshot.syncConflicts);
       throw error;
     }
   }
@@ -516,6 +539,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
       syncCursor: this.syncCursor,
       syncEntityVersions: [...this.syncEntityVersions.entries()],
       syncOutbox: [...this.syncOutbox.values()],
+      syncConflicts: [...this.syncConflicts.values()],
     };
   }
 
@@ -535,6 +559,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     this.syncCursor = migrated.syncCursor;
     replaceMap(this.syncEntityVersions, new Map(migrated.syncEntityVersions));
     replaceMap(this.syncOutbox, new Map(migrated.syncOutbox.map((mutation) => [mutation.mutationId, mutation])));
+    replaceMap(this.syncConflicts, new Map((migrated.syncConflicts ?? []).map((conflict) => [conflict.id, conflict])));
   }
 
   private applyRemoteSyncChange(change: RemoteSyncChange): void {
@@ -687,7 +712,7 @@ function createPersistedDataSource(
 }
 
 function isMutation(property: PropertyKey): boolean {
-  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll' || property === 'enqueueSyncMutation');
+  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll' || property === 'enqueueSyncMutation' || property === 'recordSyncConflicts' || property === 'removeSyncConflict');
 }
 
 function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
@@ -716,6 +741,7 @@ function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
       syncCursor: snapshot.syncCursor ?? null,
       syncEntityVersions: Array.isArray(snapshot.syncEntityVersions) ? snapshot.syncEntityVersions : [],
       syncOutbox: Array.isArray(snapshot.syncOutbox) ? snapshot.syncOutbox : [],
+      syncConflicts: Array.isArray(snapshot.syncConflicts) ? snapshot.syncConflicts : [],
     };
   } catch {
     return undefined;

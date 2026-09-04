@@ -67,6 +67,8 @@ import { getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './ene
 import { createSupabaseSyncGateway } from '../data/supabase-sync-gateway';
 import { supabase } from '../data/supabase-client';
 import { createSyncEngine, type SyncEngine, type SyncEngineStore } from './sync-engine';
+import { resolveSyncConflict, type SyncConflictDecision } from './sync-conflicts';
+import type { SyncConflict } from '../data/sync-outbox';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -144,6 +146,8 @@ interface AppServicesContextValue {
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
   syncAccountData(): Promise<void>;
+  syncConflicts: readonly SyncConflict[];
+  resolveAccountSyncConflict(conflict: SyncConflict, decision: SyncConflictDecision): Promise<void>;
   clearAutonomousData(): Promise<void>;
   clearAccountData(): Promise<void>;
 }
@@ -173,6 +177,18 @@ function isSyncEngineStore(source: AppDataSource): source is AppDataSource & Syn
     && typeof candidate.applyRemoteSyncChanges === 'function';
 }
 
+function isSyncConflictStore(source: AppDataSource): source is AppDataSource & SyncEngineStore & {
+  listSyncConflicts(): Promise<readonly SyncConflict[]>;
+  removeSyncConflict(id: string): Promise<void>;
+  enqueueSyncMutation: Parameters<typeof resolveSyncConflict>[0]['enqueueSyncMutation'];
+} {
+  const candidate = source as Partial<SyncEngineStore> & { listSyncConflicts?: unknown; removeSyncConflict?: unknown; enqueueSyncMutation?: unknown };
+  return isSyncEngineStore(source)
+    && typeof candidate.listSyncConflicts === 'function'
+    && typeof candidate.removeSyncConflict === 'function'
+    && typeof candidate.enqueueSyncMutation === 'function';
+}
+
 export function AppServicesProvider({
   children,
   source,
@@ -193,6 +209,7 @@ export function AppServicesProvider({
   const [demoTasks, setDemoTasks] = useState<DemoTaskGroups>(emptyDemoTaskGroups);
   const [backlog, setBacklog] = useState<BacklogView>(emptyBacklogView);
   const [completedItems, setCompletedItems] = useState<readonly CompletedItem[]>([]);
+  const [syncConflicts, setSyncConflicts] = useState<readonly SyncConflict[]>([]);
   const [initializationError, setInitializationError] = useState<string | null>(null);
   const runStorageDiagnostic = useCallback(
     () => runPersistenceDiagnostic(appSource),
@@ -210,6 +227,9 @@ export function AppServicesProvider({
   }, [appSource]);
   const refreshCompletedItems = useCallback(async () => {
     setCompletedItems(await getCompletedItems(appSource));
+  }, [appSource]);
+  const refreshSyncConflicts = useCallback(async () => {
+    if (isSyncConflictStore(appSource)) setSyncConflicts(await appSource.listSyncConflicts());
   }, [appSource]);
   const runBacklogAction = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T> => {
@@ -350,6 +370,7 @@ export function AppServicesProvider({
           await seedDemoData(appSource);
         }
         await syncEngine?.syncNow().catch(() => {});
+        await refreshSyncConflicts();
         const loadedSettings = await repositories.settings.get();
         const loadedDemoTasks = seedDevelopmentData
           ? await loadDemoTaskGroups(appSource)
@@ -379,7 +400,7 @@ export function AppServicesProvider({
     return () => {
       isMounted = false;
     };
-  }, [appSource, notificationScheduler, repositories, seedDevelopmentData, syncEngine]);
+  }, [appSource, notificationScheduler, refreshSyncConflicts, repositories, seedDevelopmentData, syncEngine]);
 
   useEffect(() => {
     if (syncEngine === null) return;
@@ -396,8 +417,9 @@ export function AppServicesProvider({
   }, [syncEngine]);
 
   useEffect(() => {
-    if (syncEngine === null || supabase === null || scope?.kind !== 'account') return;
-    const channel = supabase
+    const realtimeClient = supabase;
+    if (syncEngine === null || realtimeClient === null || scope?.kind !== 'account') return;
+    const channel = realtimeClient
       .channel(`account-sync:${scope.accountId}`)
       .on('postgres_changes', {
         event: 'INSERT',
@@ -406,7 +428,7 @@ export function AppServicesProvider({
         filter: `user_id=eq.${scope.accountId}`,
       }, () => syncEngine.onRealtimeSignal())
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => { void realtimeClient.removeChannel(channel); };
   }, [scope, syncEngine]);
 
   if (initializationError !== null) {
@@ -439,7 +461,14 @@ export function AppServicesProvider({
         refreshCompletedItems,
         runBacklogAction,
         runStorageDiagnostic,
-        syncAccountData: async () => { if (syncEngine !== null) await syncEngine.syncNow(); },
+        syncAccountData: async () => { if (syncEngine !== null) await syncEngine.syncNow(); await refreshSyncConflicts(); },
+        syncConflicts,
+        resolveAccountSyncConflict: async (conflict, decision) => {
+          if (!isSyncConflictStore(appSource)) throw new Error('Хранилище конфликтов синхронизации недоступно.');
+          await resolveSyncConflict(appSource, conflict, decision);
+          await refreshSyncConflicts();
+          syncEngine?.notifyLocalMutation();
+        },
         clearAutonomousData: async () => {
           await clearAutonomousWorkspace({ scope: scope ?? { kind: 'autonomous' }, source: appSource });
           await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy()]);

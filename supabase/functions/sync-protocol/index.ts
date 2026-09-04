@@ -22,12 +22,25 @@ Deno.serve(async (request) => {
 
   if (body.mutations !== undefined) {
     if (!Array.isArray(body.mutations)) return respond({ error: 'Invalid mutations.' }, 400);
-    const { data, error: applyError } = await userClient.rpc('apply_sync_mutations', { p_mutations: body.mutations });
-    if (applyError !== null) {
-      const code = applyError.message.includes('Invalid or stale sync mutation.') ? 'stale_generation' : 'sync_rejected';
-      return respond({ error: 'Sync mutation was rejected.', code }, 409);
+    const mutations: unknown[] = [];
+    const conflicts: unknown[] = [];
+    for (const mutation of body.mutations) {
+      const { data, error: applyError } = await userClient.rpc('apply_sync_mutations', { p_mutations: [mutation] });
+      if (applyError === null) {
+        if (Array.isArray(data)) mutations.push(...data);
+        continue;
+      }
+      if (applyError.message.includes('Invalid or stale sync mutation.')) return respond({ error: 'Sync mutation was rejected.', code: 'stale_generation' }, 409);
+      if (!applyError.message.includes('Sync version conflict.') || mutation === null || typeof mutation !== 'object' || Array.isArray(mutation)) {
+        return respond({ error: 'Sync mutation was rejected.', code: 'sync_rejected' }, 409);
+      }
+      const candidate = mutation as { entityType?: unknown; entityId?: unknown };
+      if (typeof candidate.entityType !== 'string' || typeof candidate.entityId !== 'string') return respond({ error: 'Invalid mutations.' }, 400);
+      const { data: server, error: snapshotError } = await userClient.rpc('get_sync_conflict_snapshot', { p_entity_type: candidate.entityType, p_entity_id: candidate.entityId });
+      if (snapshotError !== null || server === null) return respond({ error: 'Sync conflict could not be read.', code: 'sync_rejected' }, 409);
+      conflicts.push({ local: mutation, server });
     }
-    return respond({ mutations: data });
+    return respond({ mutations, conflicts });
   }
 
   if (body.bootstrap === true) {

@@ -13,6 +13,8 @@ import type { AccountProfileResult, AccountProfileState } from '../../applicatio
 import type { PasswordManagementResult } from '../../application/password-management';
 import type { UpdatePlanningSettingsInput } from '../../application/settings-use-cases';
 import type { AppSettings } from '../../domain/entities';
+import type { SyncConflict } from '../../data/sync-outbox';
+import type { SyncConflictDecision } from '../../application/sync-conflicts';
 import { PlanningValuePicker } from '../backlog/planning-value-picker';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
@@ -38,6 +40,8 @@ interface SettingsStatePanelProps {
   onSignIn?: () => void;
   onSignOut?: () => void;
   onSyncAccountData?: () => Promise<void>;
+  syncConflicts?: readonly SyncConflict[];
+  onResolveSyncConflict?: (conflict: SyncConflict, decision: SyncConflictDecision) => Promise<void>;
   onClearAutonomousData?: () => Promise<void>;
   onAccountDataAction?: (input: { operation: 'clear_account_data' | 'delete_account'; password: string; code: string }) => Promise<boolean>;
   onRequestAccountDataCode?: () => Promise<PasswordManagementResult>;
@@ -47,7 +51,7 @@ interface SettingsStatePanelProps {
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onAccountDataAction, onRequestAccountDataCode, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onSyncAccountData, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onAccountDataAction, onRequestAccountDataCode, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onSyncAccountData, syncConflicts = [], onResolveSyncConflict, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -225,6 +229,7 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
           </View>
           <Text style={styles.storageDescription}>Анонимная учётная запись и история поведения не являются резервной копией и не восстанавливают ваши данные.</Text>
           {account.kind === 'authenticated' && onSyncAccountData !== undefined ? <ActionButton label="Синхронизировать сейчас" onPress={() => { void onSyncAccountData().then(() => setFeedback('Данные синхронизированы.')).catch(() => setFeedback('Не удалось синхронизировать данные. Повторите позже.')); }} tone="primary" /> : null}
+          {syncConflicts.map((conflict) => <SyncConflictCard conflict={conflict} key={conflict.id} onResolve={onResolveSyncConflict} />)}
           {account.kind === 'withoutAccount' && onClearAutonomousData !== undefined ? <ActionButton label="Очистить все данные" onPress={() => setIsClearConfirmationVisible(true)} tone="secondary" /> : null}
           {account.kind === 'authenticated' ? <><ActionButton label="Очистить все данные" onPress={() => openAccountOperation('clear_account_data')} tone="secondary" /><ActionButton label="Удалить аккаунт" onPress={() => openAccountOperation('delete_account')} tone="danger" />
           {accountOperation !== null ? <View style={styles.warning}>
@@ -246,6 +251,47 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
       <TimeZonePicker onRequestClose={() => setIsTimeZonePickerVisible(false)} onSelect={(timeZoneId) => void selectTimeZone(timeZoneId)} selectedTimeZoneId={settings.timeZoneId} visible={isTimeZonePickerVisible} />
     </SafeAreaView>
   );
+}
+
+function SyncConflictCard({ conflict, onResolve }: { conflict: SyncConflict; onResolve?: (conflict: SyncConflict, decision: SyncConflictDecision) => Promise<void> }) {
+  const localTitle = conflictTitle(conflict.local.payload);
+  const serverTitle = conflictTitle(conflict.server.payload);
+  const remoteDelete = conflict.server.operation === 'delete';
+  return <View style={styles.warning}>
+    <Text style={styles.warningText}>Требуется разрешить конфликт синхронизации: {localTitle ?? serverTitle ?? conflict.local.entityType}</Text>
+    <Text style={styles.settingDescription}>Это устройство · {formatConflictTime(conflict.local.createdAt)}</Text>
+    <Text style={styles.settingDescription}>{localTitle ?? 'Изменённая версия'}</Text>
+    <Text style={styles.settingDescription}>Другое устройство · {formatConflictTime(conflict.server.changedAt)}</Text>
+    <Text style={styles.settingDescription}>{remoteDelete ? 'Запись удалена' : (serverTitle ?? 'Версия с другого устройства')}</Text>
+    <Text style={styles.settingDescription}>Различия: {formatConflictDifferences(conflict)}</Text>
+    {onResolve === undefined ? null : <View style={styles.buttonRow}>
+      <View style={styles.actionWrap}><ActionButton label={remoteDelete ? 'Восстановить изменённую запись' : 'Оставить эту версию'} onPress={() => { void onResolve(conflict, 'keep_local'); }} tone="primary" /></View>
+      <View style={styles.actionWrap}><ActionButton label={remoteDelete ? 'Подтвердить удаление' : 'Оставить версию с другого устройства'} onPress={() => { void onResolve(conflict, 'keep_remote'); }} tone="secondary" /></View>
+    </View>}
+  </View>;
+}
+
+function conflictTitle(payload: unknown): string | null {
+  return payload !== null && typeof payload === 'object' && !Array.isArray(payload) && typeof (payload as { title?: unknown }).title === 'string'
+    ? (payload as { title: string }).title
+    : null;
+}
+
+function formatConflictTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('ru-RU');
+}
+
+function formatConflictDifferences(conflict: SyncConflict): string {
+  const local = asRecord(conflict.local.payload);
+  const server = asRecord(conflict.server.payload);
+  if (local === null || server === null) return 'версии отличаются';
+  const keys = [...new Set([...Object.keys(local), ...Object.keys(server)])].filter((key) => JSON.stringify(local[key]) !== JSON.stringify(server[key]) && !['updatedAt', 'updated_at', 'version', 'userId', 'user_id'].includes(key));
+  return keys.length === 0 ? 'состояние записи' : keys.join(', ');
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function getPlanningSettings(settings: AppSettings): UpdatePlanningSettingsInput {

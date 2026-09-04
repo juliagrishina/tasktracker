@@ -1,13 +1,13 @@
-import type { RemoteSyncChange, SyncMutationResult, SyncOutboxMutation } from './sync-outbox';
+import type { IncomingSyncConflict, RemoteSyncChange, SyncMutationResult, SyncOutboxMutation, SyncPushResponse } from './sync-outbox';
 
 export interface SupabaseSyncClient {
   functions: {
-    invoke(name: string, options: { body: unknown }): Promise<{ data: unknown; error: { message: string; context?: { clone(): { json(): Promise<unknown> } } } | null }>;
+    invoke(name: string, options: { body: Record<string, unknown> }): Promise<{ data: unknown; error: { message: string; context?: { clone(): { json(): Promise<unknown> } } } | null }>;
   };
 }
 
 export function createSupabaseSyncGateway(client: SupabaseSyncClient | null) {
-  const invoke = async (body: unknown): Promise<Record<string, unknown>> => {
+  const invoke = async (body: Record<string, unknown>): Promise<Record<string, unknown>> => {
     if (client === null) throw new Error('Cloud sync is unavailable.');
     const { data, error } = await client.functions.invoke('sync-protocol', { body });
     if (error !== null) {
@@ -21,10 +21,10 @@ export function createSupabaseSyncGateway(client: SupabaseSyncClient | null) {
     return data as Record<string, unknown>;
   };
   return {
-    push: async (mutations: readonly SyncOutboxMutation[]): Promise<readonly SyncMutationResult[]> => {
+    push: async (mutations: readonly SyncOutboxMutation[]): Promise<SyncPushResponse> => {
       const response = await invoke({ mutations });
-      if (!Array.isArray(response.mutations)) throw new Error('Cloud sync response is invalid.');
-      return response.mutations as SyncMutationResult[];
+      if (!Array.isArray(response.mutations) || !Array.isArray(response.conflicts)) throw new Error('Cloud sync response is invalid.');
+      return { mutations: response.mutations as SyncMutationResult[], conflicts: response.conflicts.map(decodeConflict) };
     },
     pull: async (cursor: number, limit: number): Promise<readonly RemoteSyncChange[]> => {
       const response = await invoke({ cursor, limit });
@@ -35,6 +35,26 @@ export function createSupabaseSyncGateway(client: SupabaseSyncClient | null) {
       const response = await invoke({ bootstrap: true });
       if (typeof response.dataGeneration !== 'number') throw new Error('Cloud sync response is invalid.');
       return response.dataGeneration;
+    },
+  };
+}
+
+function decodeConflict(value: unknown): IncomingSyncConflict {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('Cloud sync conflict is invalid.');
+  const conflict = value as Record<string, unknown>;
+  const local = conflict.local;
+  const server = conflict.server;
+  if (local === null || typeof local !== 'object' || Array.isArray(local) || server === null || typeof server !== 'object' || Array.isArray(server)) throw new Error('Cloud sync conflict is invalid.');
+  const snapshot = server as Record<string, unknown>;
+  if (typeof snapshot.operation !== 'string' || typeof snapshot.version !== 'number' || typeof snapshot.changed_at !== 'string') throw new Error('Cloud sync conflict is invalid.');
+  return {
+    local: local as SyncOutboxMutation,
+    server: {
+      operation: snapshot.operation as SyncOutboxMutation['operation'],
+      version: snapshot.version,
+      payload: decodePayload((local as SyncOutboxMutation).entityType, snapshot.payload),
+      changedAt: snapshot.changed_at,
+      deviceId: typeof snapshot.device_id === 'string' ? snapshot.device_id : null,
     },
   };
 }

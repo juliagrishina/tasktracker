@@ -408,6 +408,19 @@ const schemaVersionTwenty = `
   CREATE INDEX sync_outbox_created_at ON sync_outbox (created_at, mutation_id);
 `;
 
+const schemaVersionTwentyOne = `
+  CREATE TABLE sync_conflicts (
+    id TEXT PRIMARY KEY,
+    local_mutation_json TEXT NOT NULL,
+    server_operation TEXT NOT NULL CHECK (server_operation IN ('upsert', 'delete')),
+    server_version INTEGER NOT NULL CHECK (server_version >= 0),
+    server_payload_json TEXT NOT NULL,
+    server_changed_at TEXT NOT NULL,
+    server_device_id TEXT,
+    created_at TEXT NOT NULL
+  );
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -551,6 +564,12 @@ const migrations: readonly Migration[] = [
     version: 20,
     async apply(database) {
       await database.execAsync(schemaVersionTwenty);
+    },
+  },
+  {
+    version: 21,
+    async apply(database) {
+      await database.execAsync(schemaVersionTwentyOne);
     },
   },
 ];

@@ -1,6 +1,6 @@
-import type { RemoteSyncChange, SyncMutationResult, SyncOutboxMutation } from '../data/sync-outbox';
+import type { IncomingSyncConflict, RemoteSyncChange, SyncMutationResult, SyncOutboxMutation, SyncPushResponse } from '../data/sync-outbox';
 
-export type { RemoteSyncChange, SyncMutationResult } from '../data/sync-outbox';
+export type { IncomingSyncConflict, RemoteSyncChange, SyncMutationResult, SyncPushResponse } from '../data/sync-outbox';
 
 export interface SyncEngineStore {
   listSyncOutbox(): Promise<readonly SyncOutboxMutation[]>;
@@ -8,10 +8,11 @@ export interface SyncEngineStore {
   getSyncCursor(): Promise<number>;
   applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void>;
   resetForFullResync?(dataGeneration: number): Promise<void>;
+  recordSyncConflicts?(conflicts: readonly IncomingSyncConflict[]): Promise<unknown>;
 }
 
 export interface SyncEngineGateway {
-  push(mutations: readonly SyncOutboxMutation[]): Promise<readonly SyncMutationResult[]>;
+  push(mutations: readonly SyncOutboxMutation[]): Promise<readonly SyncMutationResult[] | SyncPushResponse>;
   pull(cursor: number, limit: number): Promise<readonly RemoteSyncChange[]>;
   getDataGeneration?(): Promise<number>;
 }
@@ -91,10 +92,21 @@ export function createSyncEngine({
     const outbox = await store.listSyncOutbox();
     for (let offset = 0; offset < outbox.length; offset += batchSize) {
       const batch = outbox.slice(offset, offset + batchSize);
-      const results = await gateway.push(batch);
-      if (results.length !== batch.length) throw new Error('Sync server did not acknowledge the complete mutation batch.');
-      await store.acknowledgeSyncMutations(results);
-      pushed += results.length;
+      const response = normalizePushResponse(await gateway.push(batch));
+      const acknowledged = [...response.mutations, ...response.conflicts.map((conflict) => ({
+        mutationId: conflict.local.mutationId,
+        entityType: conflict.local.entityType,
+        entityId: conflict.local.entityId,
+        operation: conflict.local.operation,
+        version: conflict.server.version,
+      }))];
+      if (acknowledged.length !== batch.length) throw new Error('Sync server did not acknowledge the complete mutation batch.');
+      if (response.conflicts.length > 0) {
+        if (store.recordSyncConflicts === undefined) throw new Error('Sync conflict storage is unavailable.');
+        await store.recordSyncConflicts(response.conflicts);
+      }
+      await store.acknowledgeSyncMutations(acknowledged);
+      pushed += response.mutations.length;
     }
 
     let pulled = 0;
@@ -136,6 +148,10 @@ export function createSyncEngine({
       delayed = null;
     },
   };
+}
+
+function normalizePushResponse(response: readonly SyncMutationResult[] | SyncPushResponse): SyncPushResponse {
+  return 'mutations' in response ? response : { mutations: response, conflicts: [] };
 }
 
 function isStaleGenerationError(error: unknown): boolean {

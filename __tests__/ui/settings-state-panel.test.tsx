@@ -126,6 +126,24 @@ describe('SettingsStatePanel', () => {
     });
   });
 
+  test('offers explicit choices for an edit-versus-delete sync conflict', async () => {
+    const onResolveSyncConflict = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel
+      onResolveSyncConflict={onResolveSyncConflict}
+      settings={getDefaultSettings()}
+      syncConflicts={[{
+        id: 'conflict-1',
+        local: { mutationId: 'm-1', deviceId: 'device-1', entityType: 'task_items', entityId: 'task-1', operation: 'upsert', expectedVersion: 1, dataGeneration: 1, payload: { id: 'task-1', title: 'Черновик' }, createdAt: '2026-09-04T08:00:00.000Z' },
+        server: { operation: 'delete', version: 2, payload: { id: 'task-1' }, changedAt: '2026-09-04T08:01:00.000Z', deviceId: null },
+        createdAt: '2026-09-04T08:02:00.000Z',
+      }]}
+    />);
+
+    expect(view.getByText(/Требуется разрешить конфликт синхронизации/)).toBeOnTheScreen();
+    await fireEvent.press(view.getByRole('button', { name: 'Восстановить изменённую запись' }));
+    await waitFor(() => expect(onResolveSyncConflict).toHaveBeenCalledWith(expect.objectContaining({ id: 'conflict-1' }), 'keep_local'));
+  });
+
   test('keeps the planner usable when local notification permission is declined', async () => {
     const notificationPermissions: NotificationPermissionGateway = {
       getStatus: jest.fn().mockResolvedValue('undetermined'),

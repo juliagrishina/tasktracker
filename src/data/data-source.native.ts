@@ -28,7 +28,8 @@ import {
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
 import { migrateLegacyIdsInNativeDatabase } from './native-legacy-id-migration';
 import { migrateDatabase } from './migrations';
-import { createLocalSyncId, createSyncTrackingDataSource, type RemoteSyncChange, type SyncMetadataDataSource, type SyncMutationResult, type SyncOutboxMutation } from './sync-outbox';
+import { createLocalSyncId, createSyncTrackingDataSource, type IncomingSyncConflict, type RemoteSyncChange, type SyncConflict, type SyncMetadataDataSource, type SyncMutationResult, type SyncOutboxMutation } from './sync-outbox';
+import { createStoredSyncConflict } from '../application/sync-conflicts';
 
 interface SettingsRow {
   time_zone_id: string | null;
@@ -256,6 +257,38 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
     });
   }
 
+  async recordSyncConflicts(conflicts: readonly IncomingSyncConflict[]): Promise<readonly SyncConflict[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const now = new Date().toISOString();
+    const stored = conflicts.map((conflict) => createStoredSyncConflict(conflict, createLocalSyncId(), now));
+    await database.withTransactionAsync(async () => {
+      for (const conflict of stored) {
+        await database.runAsync(
+          `INSERT INTO sync_conflicts (id, local_mutation_json, server_operation, server_version, server_payload_json, server_changed_at, server_device_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [conflict.id, JSON.stringify(conflict.local), conflict.server.operation, conflict.server.version, JSON.stringify(conflict.server.payload), conflict.server.changedAt, conflict.server.deviceId, conflict.createdAt],
+        );
+      }
+    });
+    return stored;
+  }
+
+  async listSyncConflicts(): Promise<readonly SyncConflict[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<{ id: string; local_mutation_json: string; server_operation: 'upsert' | 'delete'; server_version: number; server_payload_json: string; server_changed_at: string; server_device_id: string | null; created_at: string }>(
+      'SELECT id, local_mutation_json, server_operation, server_version, server_payload_json, server_changed_at, server_device_id, created_at FROM sync_conflicts ORDER BY created_at ASC',
+    );
+    return rows.map((row) => ({ id: row.id, local: JSON.parse(row.local_mutation_json) as SyncOutboxMutation, server: { operation: row.server_operation, version: row.server_version, payload: JSON.parse(row.server_payload_json), changedAt: row.server_changed_at, deviceId: row.server_device_id }, createdAt: row.created_at }));
+  }
+
+  async removeSyncConflict(id: string): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync('DELETE FROM sync_conflicts WHERE id = ?', [id]);
+  }
+
   async getSyncCursor(): Promise<number> {
     await this.initialize();
     const database = await this.getDatabase();
@@ -281,7 +314,7 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
       const database = await this.getDatabase();
       const tables = ['recurrence_revisions', 'recurrence_occurrences', 'recurrence_series', 'schedule_blocks', 'transfer_history', 'reminders', 'task_items', 'projects', 'daily_energy_entries'];
       for (const table of tables) await database.execAsync(`DELETE FROM ${table}`);
-      await database.execAsync('DELETE FROM sync_outbox; DELETE FROM sync_entity_versions;');
+      await database.execAsync('DELETE FROM sync_outbox; DELETE FROM sync_entity_versions; DELETE FROM sync_conflicts;');
       const state = await database.getFirstAsync<{ device_id: string }>('SELECT device_id FROM sync_state WHERE id = 1');
       const deviceId = state?.device_id ?? createLocalSyncId();
       await database.runAsync(
