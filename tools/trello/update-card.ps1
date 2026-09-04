@@ -8,8 +8,6 @@ param(
 
   [string]$BoardName = 'Task Tracker — Development',
 
-  [hashtable]$CustomFieldValues = @{},
-
   [AllowEmptyString()]
   [string]$Description
 )
@@ -45,21 +43,6 @@ function Get-SingleItem {
   }
 
   return @($Items)[0]
-}
-
-function ConvertTo-CardFieldValue {
-  param([object]$Field, [object]$Item)
-
-  if ($Field.type -eq 'text') {
-    return $Item.value.text
-  }
-
-  if ($Field.type -eq 'list') {
-    $option = Get-SingleItem @($Field.options | Where-Object { $_.id -eq $Item.idValue }) "Custom field option for '$($Field.name)'"
-    return $option.value.text
-  }
-
-  throw "Custom field '$($Field.name)' has an unsupported type."
 }
 
 try {
@@ -101,35 +84,6 @@ try {
   $targetList = Get-SingleItem @($lists | Where-Object { $_.name -eq $TargetListName }) 'Target list'
   $cards = Invoke-TrelloJson -Method Get -Path ('boards/' + $board.id + '/cards?fields=id,name,idList,desc&filter=open&')
   $card = Get-SingleItem @($cards | Where-Object { $_.name -eq $CardName }) 'Target card'
-  $fields = Invoke-TrelloJson -Method Get -Path ('boards/' + $board.id + '/customFields?')
-
-  foreach ($fieldName in $CustomFieldValues.Keys) {
-    $field = Get-SingleItem @($fields | Where-Object { $_.name -eq $fieldName }) "Custom field '$fieldName'"
-    $value = [string]$CustomFieldValues[$fieldName]
-
-    if ($field.type -eq 'text') {
-      $payload = @{ value = @{ text = $value } }
-    } elseif ($field.type -eq 'list') {
-      $option = Get-SingleItem @($field.options | Where-Object { $_.value.text -eq $value }) "Custom field option '$value'"
-      $payload = @{ idValue = $option.id }
-    } else {
-      throw "Custom field '$fieldName' has an unsupported type."
-    }
-
-    $null = Invoke-TrelloJson -Method Put -Path ('card/' + $card.id + '/customField/' + $field.id + '/item') -Body $payload
-  }
-
-  if ($CustomFieldValues.Count -gt 0) {
-    $items = Invoke-TrelloJson -Method Get -Path ('cards/' + $card.id + '/customFieldItems?')
-    foreach ($fieldName in $CustomFieldValues.Keys) {
-      $field = Get-SingleItem @($fields | Where-Object { $_.name -eq $fieldName }) "Custom field '$fieldName'"
-      $item = Get-SingleItem @($items | Where-Object { $_.idCustomField -eq $field.id }) "Stored custom field '$fieldName'"
-      if ((ConvertTo-CardFieldValue $field $item) -ne [string]$CustomFieldValues[$fieldName]) {
-        throw "Read-back value mismatch for custom field '$fieldName'."
-      }
-    }
-  }
-
   # Trello silently ignores form-encoded body values for some card updates. Always send JSON.
   $null = Invoke-TrelloJson -Method Put -Path ('cards/' + $card.id) -Body @{ idList = $targetList.id }
   $storedCard = Invoke-TrelloJson -Method Get -Path ('cards/' + $card.id + '?fields=idList,desc,name&')
@@ -148,9 +102,6 @@ try {
   Write-Output 'Trello update and read-back: HTTP 200'
   Write-Output ('Card: ' + $storedCard.name)
   Write-Output ('List: ' + $TargetListName)
-  foreach ($fieldName in $CustomFieldValues.Keys) {
-    Write-Output ($fieldName + ': ' + [string]$CustomFieldValues[$fieldName])
-  }
   if ($PSBoundParameters.ContainsKey('Description')) {
     Write-Output 'Description: saved'
   }
