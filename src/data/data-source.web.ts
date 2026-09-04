@@ -45,7 +45,7 @@ interface BrowserDataSnapshot {
   recurrenceOccurrences: RecurrenceOccurrence[];
   recurrenceRevisions: RecurrenceRevision[];
   transferHistories: TransferHistory[];
-  syncState: { deviceId: string; dataGeneration: number } | null;
+  syncState: { deviceId: string; dataGeneration: number; lastSuccessAt: string | null } | null;
   syncCursor: number | null;
   syncEntityVersions: readonly [string, number][];
   syncOutbox: SyncOutboxMutation[];
@@ -77,7 +77,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
   private readonly recurrenceOccurrences = new Map<EntityId, RecurrenceOccurrence>();
   private readonly recurrenceRevisions = new Map<EntityId, RecurrenceRevision>();
   private readonly transferHistories = new Map<EntityId, TransferHistory>();
-  private syncState: { deviceId: string; dataGeneration: number } | null = null;
+  private syncState: { deviceId: string; dataGeneration: number; lastSuccessAt: string | null } | null = null;
   private syncCursor: number | null = null;
   private readonly syncEntityVersions = new Map<string, number>();
   private readonly syncOutbox = new Map<string, SyncOutboxMutation>();
@@ -113,7 +113,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
 
   async enqueueSyncMutation(input: Omit<SyncOutboxMutation, 'mutationId' | 'deviceId' | 'expectedVersion' | 'dataGeneration' | 'createdAt'>): Promise<SyncOutboxMutation> {
     await this.initialize();
-    if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1 };
+    if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1, lastSuccessAt: null };
     const versionKey = `${input.entityType}:${input.entityId}`;
     const expectedVersion = this.syncEntityVersions.get(versionKey) ?? 0;
     this.syncEntityVersions.set(versionKey, expectedVersion + 1);
@@ -153,6 +153,17 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     this.syncConflicts.delete(id);
   }
 
+  async getLastSyncSuccessAt(): Promise<string | null> {
+    await this.initialize();
+    return this.syncState?.lastSuccessAt ?? null;
+  }
+
+  async recordSyncSuccess(at: string): Promise<void> {
+    await this.initialize();
+    if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1, lastSuccessAt: at };
+    else this.syncState = { ...this.syncState, lastSuccessAt: at };
+  }
+
   async getSyncCursor(): Promise<number> {
     await this.initialize();
     return this.syncCursor ?? 0;
@@ -161,7 +172,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
   async applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void> {
     await this.transaction(async () => {
       for (const change of changes) this.applyRemoteSyncChange(change);
-      if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1 };
+      if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1, lastSuccessAt: null };
       this.syncCursor = cursor;
     });
   }
@@ -175,7 +186,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
       this.recurrenceRevisions.clear(); this.transferHistories.clear();
       this.syncOutbox.clear(); this.syncEntityVersions.clear(); this.syncConflicts.clear();
       this.syncCursor = 0;
-      this.syncState = { deviceId, dataGeneration };
+      this.syncState = { deviceId, dataGeneration, lastSuccessAt: null };
     });
   }
 
@@ -555,7 +566,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     replaceMap(this.recurrenceOccurrences, new Map(migrated.recurrenceOccurrences.map((occurrence) => [occurrence.id, occurrence])));
     replaceMap(this.recurrenceRevisions, new Map(migrated.recurrenceRevisions.map((revision) => [revision.id, revision])));
     replaceMap(this.transferHistories, new Map(migrated.transferHistories.map((history) => [history.id, history])));
-    this.syncState = migrated.syncState;
+    this.syncState = migrated.syncState === null ? null : { ...migrated.syncState, lastSuccessAt: migrated.syncState.lastSuccessAt ?? null };
     this.syncCursor = migrated.syncCursor;
     replaceMap(this.syncEntityVersions, new Map(migrated.syncEntityVersions));
     replaceMap(this.syncOutbox, new Map(migrated.syncOutbox.map((mutation) => [mutation.mutationId, mutation])));
@@ -712,7 +723,7 @@ function createPersistedDataSource(
 }
 
 function isMutation(property: PropertyKey): boolean {
-  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll' || property === 'enqueueSyncMutation' || property === 'recordSyncConflicts' || property === 'removeSyncConflict');
+  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll' || property === 'enqueueSyncMutation' || property === 'recordSyncConflicts' || property === 'removeSyncConflict' || property === 'recordSyncSuccess');
 }
 
 function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {

@@ -9,7 +9,10 @@ export interface SyncEngineStore {
   applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void>;
   resetForFullResync?(dataGeneration: number): Promise<void>;
   recordSyncConflicts?(conflicts: readonly IncomingSyncConflict[]): Promise<unknown>;
+  recordSyncSuccess?(at: string): Promise<void>;
 }
+
+export type SyncActivityState = { kind: 'syncing' | 'synchronized' | 'offline' | 'failed' };
 
 export interface SyncEngineGateway {
   push(mutations: readonly SyncOutboxMutation[]): Promise<readonly SyncMutationResult[] | SyncPushResponse>;
@@ -39,6 +42,9 @@ export function createSyncEngine({
   retryDelayMs = defaultRetryDelayMs,
   setTimeoutFn = setTimeout,
   clearTimeoutFn = clearTimeout,
+  now = () => new Date(),
+  isOnline = () => (typeof navigator === 'undefined' ? true : navigator.onLine),
+  onStateChange,
 }: {
   gateway: SyncEngineGateway;
   store: SyncEngineStore;
@@ -47,6 +53,9 @@ export function createSyncEngine({
   retryDelayMs?: number;
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
+  now?: () => Date;
+  isOnline?: () => boolean;
+  onStateChange?: (state: SyncActivityState) => void;
 }): SyncEngine {
   let running: Promise<{ pushed: number; pulled: number }> | null = null;
   let delayed: ReturnType<typeof setTimeout> | null = null;
@@ -55,13 +64,18 @@ export function createSyncEngine({
 
   const syncNow = (): Promise<{ pushed: number; pulled: number }> => {
     if (running !== null) return running;
+    onStateChange?.({ kind: 'syncing' });
     running = synchronizeWithRecovery()
-      .then((result) => {
+      .then(async (result) => {
         retryAttempt = 0;
+        const completedAt = now().toISOString();
+        await store.recordSyncSuccess?.(completedAt);
+        onStateChange?.({ kind: 'synchronized' });
         return result;
       })
       .catch((error: unknown) => {
         scheduleRetry();
+        onStateChange?.({ kind: isOnline() ? 'failed' : 'offline' });
         throw error;
       })
       .finally(() => { running = null; });

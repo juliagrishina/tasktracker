@@ -144,6 +144,36 @@ describe('SettingsStatePanel', () => {
     await waitFor(() => expect(onResolveSyncConflict).toHaveBeenCalledWith(expect.objectContaining({ id: 'conflict-1' }), 'keep_local'));
   });
 
+  test('shows a safe failed sync status, pending changes and a retry action', async () => {
+    const onSyncAccountData = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel
+      account={{ kind: 'authenticated', displayName: 'Юлия', email: 'julia@example.com', emailConfirmed: true, pendingEmail: null }}
+      onSyncAccountData={onSyncAccountData}
+      settings={getDefaultSettings()}
+      syncStatus={{ kind: 'failed', pendingCount: 3, lastSuccessAt: '2026-09-04T10:00:00.000Z' }}
+    />);
+
+    expect(view.getByText('Не удалось синхронизировать')).toBeOnTheScreen();
+    expect(view.getByText('Ожидают отправки: 3')).toBeOnTheScreen();
+    expect(view.queryByText(/SQL|JWT|stack trace/u)).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(onSyncAccountData).toHaveBeenCalledTimes(1));
+  });
+
+  test.each([
+    ['syncing', 'Синхронизация…'],
+    ['synchronized', 'Синхронизировано'],
+    ['offline', 'Нет сети — изменения сохранены на устройстве'],
+  ] as const)('shows the %s account synchronization state', async (kind, label) => {
+    const view = await render(<SettingsStatePanel
+      account={{ kind: 'authenticated', displayName: 'Юлия', email: 'julia@example.com', emailConfirmed: true, pendingEmail: null }}
+      settings={getDefaultSettings()}
+      syncStatus={{ kind, pendingCount: 0, lastSuccessAt: null }}
+    />);
+
+    expect(view.getByText(label)).toBeOnTheScreen();
+  });
+
   test('keeps the planner usable when local notification permission is declined', async () => {
     const notificationPermissions: NotificationPermissionGateway = {
       getStatus: jest.fn().mockResolvedValue('undetermined'),

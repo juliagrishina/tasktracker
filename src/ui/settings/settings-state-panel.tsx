@@ -15,6 +15,7 @@ import type { UpdatePlanningSettingsInput } from '../../application/settings-use
 import type { AppSettings } from '../../domain/entities';
 import type { SyncConflict } from '../../data/sync-outbox';
 import type { SyncConflictDecision } from '../../application/sync-conflicts';
+import type { AccountSyncStatus } from '../../application/app-services-provider';
 import { PlanningValuePicker } from '../backlog/planning-value-picker';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
@@ -40,6 +41,7 @@ interface SettingsStatePanelProps {
   onSignIn?: () => void;
   onSignOut?: () => void;
   onSyncAccountData?: () => Promise<void>;
+  syncStatus?: AccountSyncStatus;
   syncConflicts?: readonly SyncConflict[];
   onResolveSyncConflict?: (conflict: SyncConflict, decision: SyncConflictDecision) => Promise<void>;
   onClearAutonomousData?: () => Promise<void>;
@@ -51,7 +53,7 @@ interface SettingsStatePanelProps {
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onAccountDataAction, onRequestAccountDataCode, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onSyncAccountData, syncConflicts = [], onResolveSyncConflict, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onAccountDataAction, onRequestAccountDataCode, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onSyncAccountData, syncStatus = { kind: 'synchronized', pendingCount: 0, lastSuccessAt: null }, syncConflicts = [], onResolveSyncConflict, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -228,7 +230,7 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
             <Text style={styles.warningText}>При удалении приложения или переходе на другое устройство эти данные не восстанавливаются.</Text>
           </View>
           <Text style={styles.storageDescription}>Анонимная учётная запись и история поведения не являются резервной копией и не восстанавливают ваши данные.</Text>
-          {account.kind === 'authenticated' && onSyncAccountData !== undefined ? <ActionButton label="Синхронизировать сейчас" onPress={() => { void onSyncAccountData().then(() => setFeedback('Данные синхронизированы.')).catch(() => setFeedback('Не удалось синхронизировать данные. Повторите позже.')); }} tone="primary" /> : null}
+          {account.kind === 'authenticated' ? <AccountSyncStatusPanel conflictCount={syncConflicts.length} onSyncAccountData={onSyncAccountData} status={syncStatus} /> : null}
           {syncConflicts.map((conflict) => <SyncConflictCard conflict={conflict} key={conflict.id} onResolve={onResolveSyncConflict} />)}
           {account.kind === 'withoutAccount' && onClearAutonomousData !== undefined ? <ActionButton label="Очистить все данные" onPress={() => setIsClearConfirmationVisible(true)} tone="secondary" /> : null}
           {account.kind === 'authenticated' ? <><ActionButton label="Очистить все данные" onPress={() => openAccountOperation('clear_account_data')} tone="secondary" /><ActionButton label="Удалить аккаунт" onPress={() => openAccountOperation('delete_account')} tone="danger" />
@@ -251,6 +253,30 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
       <TimeZonePicker onRequestClose={() => setIsTimeZonePickerVisible(false)} onSelect={(timeZoneId) => void selectTimeZone(timeZoneId)} selectedTimeZoneId={settings.timeZoneId} visible={isTimeZonePickerVisible} />
     </SafeAreaView>
   );
+}
+
+function AccountSyncStatusPanel({ conflictCount, onSyncAccountData, status }: { conflictCount: number; onSyncAccountData?: () => Promise<void>; status: AccountSyncStatus }) {
+  const actionLabel = status.kind === 'offline' || status.kind === 'failed' ? 'Повторить' : 'Синхронизировать сейчас';
+
+  return <View style={styles.syncStatus}>
+    <Text accessibilityLiveRegion="polite" style={styles.syncStatusTitle}>{syncStatusTitle(status.kind)}</Text>
+    {status.lastSuccessAt === null ? null : <Text style={styles.settingDescription}>Последняя успешная синхронизация: {formatSyncDateTime(status.lastSuccessAt)}</Text>}
+    {status.pendingCount === 0 ? null : <Text style={styles.settingDescription}>Ожидают отправки: {status.pendingCount}</Text>}
+    {conflictCount === 0 ? null : <Text style={styles.warningText}>Требуется разрешить конфликт</Text>}
+    {onSyncAccountData === undefined ? null : <ActionButton label={actionLabel} onPress={() => { void onSyncAccountData(); }} tone={status.kind === 'failed' ? 'secondary' : 'primary'} />}
+  </View>;
+}
+
+function syncStatusTitle(kind: AccountSyncStatus['kind']): string {
+  if (kind === 'syncing') return 'Синхронизация…';
+  if (kind === 'offline') return 'Нет сети — изменения сохранены на устройстве';
+  if (kind === 'failed') return 'Не удалось синхронизировать';
+  return 'Синхронизировано';
+}
+
+function formatSyncDateTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'недавно' : date.toLocaleString('ru-RU');
 }
 
 function SyncConflictCard({ conflict, onResolve }: { conflict: SyncConflict; onResolve?: (conflict: SyncConflict, decision: SyncConflictDecision) => Promise<void> }) {
@@ -562,6 +588,8 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.meta,
     lineHeight: designTokens.typography.lineHeight.meta,
   },
+  syncStatus: { gap: designTokens.space[4], marginTop: designTokens.space[10] },
+  syncStatusTitle: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.meta, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.meta },
   storageDescription: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.meta, lineHeight: designTokens.typography.lineHeight.meta, marginTop: designTokens.space[8] },
   deviceTimeZoneAction: { marginTop: designTokens.space[8] },
   planEditor: { borderTopColor: designTokens.color.border.subtle, borderTopWidth: 1, gap: designTokens.space[8], marginTop: designTokens.space[12], paddingTop: designTokens.space[12] },

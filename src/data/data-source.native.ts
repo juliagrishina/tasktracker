@@ -289,6 +289,24 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
     await database.runAsync('DELETE FROM sync_conflicts WHERE id = ?', [id]);
   }
 
+  async getLastSyncSuccessAt(): Promise<string | null> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<{ last_success_at: string | null }>('SELECT last_success_at FROM sync_state WHERE id = 1');
+    return row?.last_success_at ?? null;
+  }
+
+  async recordSyncSuccess(at: string): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const state = await database.getFirstAsync<{ device_id: string; data_generation: number }>('SELECT device_id, data_generation FROM sync_state WHERE id = 1');
+    if (state === null) {
+      await database.runAsync('INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at, last_success_at) VALUES (1, ?, 1, NULL, ?, ?)', [createLocalSyncId(), at, at]);
+      return;
+    }
+    await database.runAsync('UPDATE sync_state SET last_success_at = ?, updated_at = ? WHERE id = 1', [at, at]);
+  }
+
   async getSyncCursor(): Promise<number> {
     await this.initialize();
     const database = await this.getDatabase();

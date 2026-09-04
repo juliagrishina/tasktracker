@@ -421,6 +421,10 @@ const schemaVersionTwentyOne = `
   );
 `;
 
+const schemaVersionTwentyTwo = `
+  ALTER TABLE sync_state ADD COLUMN last_success_at TEXT;
+`;
+
 const migrations: readonly Migration[] = [
   {
     version: 1,
@@ -570,6 +574,12 @@ const migrations: readonly Migration[] = [
     version: 21,
     async apply(database) {
       await database.execAsync(schemaVersionTwentyOne);
+    },
+  },
+  {
+    version: 22,
+    async apply(database) {
+      await database.execAsync(schemaVersionTwentyTwo);
     },
   },
 ];

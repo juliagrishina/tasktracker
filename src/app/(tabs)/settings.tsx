@@ -10,7 +10,7 @@ import { notificationPermissionGateway } from '../../application/notification-pe
 import { SettingsStatePanel } from '../../ui/settings/settings-state-panel';
 
 export default function SettingsScreen() {
-  const { clearAccountData, clearAutonomousData, settings, settingsActions, syncAccountData, syncConflicts, resolveAccountSyncConflict } = useAppServices();
+  const { clearAccountData, clearAutonomousData, settings, settingsActions, syncAccountData, syncStatus, syncConflicts, resolveAccountSyncConflict } = useAppServices();
   const authNavigation = useAuthGateNavigation();
   const [account, setAccount] = useState<AccountProfileState>({ kind: 'withoutAccount' });
   const [accountService, setAccountService] = useState<AccountProfileService | null>(null);
@@ -60,6 +60,7 @@ export default function SettingsScreen() {
     onSignOut={() => { void authNavigation?.signOut(); }}
     onSignUp={() => authNavigation?.openAuth('registration')}
     onSyncAccountData={syncAccountData}
+    syncStatus={syncStatus}
     syncConflicts={syncConflicts}
     onResolveSyncConflict={resolveAccountSyncConflict}
     onTimeZoneChange={settingsActions.updateTimeZone}

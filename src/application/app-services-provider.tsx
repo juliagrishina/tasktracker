@@ -66,7 +66,7 @@ import { updatePlanningSettings, type UpdatePlanningSettingsInput } from './sett
 import { getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
 import { createSupabaseSyncGateway } from '../data/supabase-sync-gateway';
 import { supabase } from '../data/supabase-client';
-import { createSyncEngine, type SyncEngine, type SyncEngineStore } from './sync-engine';
+import { createSyncEngine, type SyncActivityState, type SyncEngine, type SyncEngineStore } from './sync-engine';
 import { resolveSyncConflict, type SyncConflictDecision } from './sync-conflicts';
 import type { SyncConflict } from '../data/sync-outbox';
 
@@ -146,6 +146,7 @@ interface AppServicesContextValue {
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
   syncAccountData(): Promise<void>;
+  syncStatus: AccountSyncStatus;
   syncConflicts: readonly SyncConflict[];
   resolveAccountSyncConflict(conflict: SyncConflict, decision: SyncConflictDecision): Promise<void>;
   clearAutonomousData(): Promise<void>;
@@ -177,6 +178,12 @@ function isSyncEngineStore(source: AppDataSource): source is AppDataSource & Syn
     && typeof candidate.applyRemoteSyncChanges === 'function';
 }
 
+export interface AccountSyncStatus {
+  kind: SyncActivityState['kind'];
+  pendingCount: number;
+  lastSuccessAt: string | null;
+}
+
 function isSyncConflictStore(source: AppDataSource): source is AppDataSource & SyncEngineStore & {
   listSyncConflicts(): Promise<readonly SyncConflict[]>;
   removeSyncConflict(id: string): Promise<void>;
@@ -189,6 +196,13 @@ function isSyncConflictStore(source: AppDataSource): source is AppDataSource & S
     && typeof candidate.enqueueSyncMutation === 'function';
 }
 
+function isSyncStatusStore(source: AppDataSource): source is AppDataSource & SyncEngineStore & {
+  getLastSyncSuccessAt(): Promise<string | null>;
+} {
+  const candidate = source as Partial<SyncEngineStore> & { getLastSyncSuccessAt?: unknown };
+  return isSyncEngineStore(source) && typeof candidate.getLastSyncSuccessAt === 'function';
+}
+
 export function AppServicesProvider({
   children,
   source,
@@ -197,9 +211,10 @@ export function AppServicesProvider({
   notificationScheduler = localNotificationScheduler,
 }: AppServicesProviderProps) {
   const [appSource] = useState<AppDataSource>(() => source ?? createDataSource(scope));
+  const [syncStatus, setSyncStatus] = useState<AccountSyncStatus>({ kind: 'synchronized', pendingCount: 0, lastSuccessAt: null });
   const syncEngine = useMemo<SyncEngine | null>(() => {
     if (scope?.kind !== 'account' || !isSyncEngineStore(appSource)) return null;
-    return createSyncEngine({ gateway: createSupabaseSyncGateway(supabase), store: appSource });
+    return createSyncEngine({ gateway: createSupabaseSyncGateway(supabase), store: appSource, onStateChange: ({ kind }) => setSyncStatus((current) => ({ ...current, kind })) });
   }, [appSource, scope]);
   const repositories = useMemo(() => createAppRepositories(appSource), [appSource]);
   const [isReady, setIsReady] = useState(false);
@@ -231,14 +246,20 @@ export function AppServicesProvider({
   const refreshSyncConflicts = useCallback(async () => {
     if (isSyncConflictStore(appSource)) setSyncConflicts(await appSource.listSyncConflicts());
   }, [appSource]);
+  const refreshSyncStatus = useCallback(async () => {
+    if (!isSyncStatusStore(appSource)) return;
+    const [outbox, lastSuccessAt] = await Promise.all([appSource.listSyncOutbox(), appSource.getLastSyncSuccessAt()]);
+    setSyncStatus((current) => ({ ...current, pendingCount: outbox.length, lastSuccessAt }));
+  }, [appSource]);
   const runBacklogAction = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T> => {
       const result = await action();
       await Promise.all([refreshBacklog(), refreshCompletedItems()]);
       syncEngine?.notifyLocalMutation();
+      await refreshSyncStatus();
       return result;
     },
-    [refreshBacklog, refreshCompletedItems, syncEngine],
+    [refreshBacklog, refreshCompletedItems, refreshSyncStatus, syncEngine],
   );
   const backlogActions = useMemo<BacklogActions>(
     () => ({
@@ -383,6 +404,7 @@ export function AppServicesProvider({
         }
         await syncEngine?.syncNow().catch(() => {});
         await refreshSyncConflicts();
+        await refreshSyncStatus();
         const loadedSettings = await repositories.settings.get();
         const loadedDemoTasks = seedDevelopmentData
           ? await loadDemoTaskGroups(appSource)
@@ -412,7 +434,7 @@ export function AppServicesProvider({
     return () => {
       isMounted = false;
     };
-  }, [appSource, notificationScheduler, refreshSyncConflicts, repositories, seedDevelopmentData, syncEngine]);
+  }, [appSource, notificationScheduler, refreshSyncConflicts, refreshSyncStatus, repositories, seedDevelopmentData, syncEngine]);
 
   useEffect(() => {
     if (syncEngine === null) return;
@@ -473,7 +495,8 @@ export function AppServicesProvider({
         refreshCompletedItems,
         runBacklogAction,
         runStorageDiagnostic,
-        syncAccountData: async () => { if (syncEngine !== null) await syncEngine.syncNow(); await refreshSyncConflicts(); },
+        syncAccountData: async () => { if (syncEngine !== null) await syncEngine.syncNow(); await Promise.all([refreshSyncConflicts(), refreshSyncStatus()]); },
+        syncStatus,
         syncConflicts,
         resolveAccountSyncConflict: async (conflict, decision) => {
           if (!isSyncConflictStore(appSource)) throw new Error('Хранилище конфликтов синхронизации недоступно.');

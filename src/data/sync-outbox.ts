@@ -71,6 +71,8 @@ export interface SyncEngineDataSource extends SyncTrackingDataSource {
   recordSyncConflicts(conflicts: readonly IncomingSyncConflict[]): Promise<readonly SyncConflict[]>;
   listSyncConflicts(): Promise<readonly SyncConflict[]>;
   removeSyncConflict(id: string): Promise<void>;
+  getLastSyncSuccessAt(): Promise<string | null>;
+  recordSyncSuccess(at: string): Promise<void>;
 }
 
 export function createLocalSyncId(): string {

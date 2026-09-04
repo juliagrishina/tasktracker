@@ -5,6 +5,11 @@ import {
 import type { Project } from '../../src/domain/entities';
 import { isUuid } from '../../src/domain/uuid';
 
+interface SyncStatusSource {
+  getLastSyncSuccessAt(): Promise<string | null>;
+  recordSyncSuccess(at: string): Promise<void>;
+}
+
 const project: Project = {
   id: 'autonomous-project',
   title: 'Автономный проект',
@@ -55,5 +60,17 @@ describe('web scoped data sources', () => {
     expect(reopenedProjects[0]).toMatchObject({ title: project.title });
     expect(isUuid(reopenedProjects[0].id)).toBe(true);
     await expect(accountSource.getProject('persisted-autonomous-project')).resolves.toBeNull();
+  });
+
+  test('persists the last successful account synchronization time', async () => {
+    const values = new Map<string, string>();
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) };
+    const scope = { kind: 'account' as const, accountId: 'account-sync-status' };
+    const source = createPersistentBrowserDataSource(scope, storage) as unknown as SyncStatusSource;
+
+    await source.recordSyncSuccess('2026-09-04T10:00:00.000Z');
+
+    const reopened = createPersistentBrowserDataSource(scope, storage) as unknown as SyncStatusSource;
+    await expect(reopened.getLastSyncSuccessAt()).resolves.toBe('2026-09-04T10:00:00.000Z');
   });
 });
