@@ -45,6 +45,7 @@ export interface SyncEngineDataSource extends SyncTrackingDataSource {
   acknowledgeSyncMutations(results: readonly SyncMutationResult[]): Promise<void>;
   getSyncCursor(): Promise<number>;
   applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void>;
+  resetForFullResync(dataGeneration: number): Promise<void>;
 }
 
 export function createLocalSyncId(): string {

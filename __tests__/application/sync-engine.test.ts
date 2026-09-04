@@ -119,4 +119,30 @@ describe('sync engine', () => {
     await Promise.resolve();
     expect(store.listSyncOutbox).toHaveBeenCalledTimes(2);
   });
+
+  test('replaces a stale local replica with a full pull before retrying the exchange', async () => {
+    let pushAttempts = 0;
+    const resetForFullResync = jest.fn(async () => {});
+    const store: SyncEngineStore & { resetForFullResync(dataGeneration: number): Promise<void> } = {
+      listSyncOutbox: async () => [mutation],
+      acknowledgeSyncMutations: async () => {},
+      getSyncCursor: async () => 0,
+      applyRemoteSyncChanges: async () => {},
+      resetForFullResync,
+    };
+    const gateway: SyncEngineGateway & { getDataGeneration(): Promise<number> } = {
+      push: async () => {
+        pushAttempts += 1;
+        if (pushAttempts === 1) throw Object.assign(new Error('stale generation'), { code: 'stale_generation' });
+        return [{ mutationId: mutation.mutationId, entityType: mutation.entityType, entityId: mutation.entityId, operation: mutation.operation, version: 1 }];
+      },
+      pull: async () => [],
+      getDataGeneration: async () => 2,
+    };
+
+    await expect(createSyncEngine({ gateway, store }).syncNow()).resolves.toEqual({ pushed: 1, pulled: 0 });
+
+    expect(resetForFullResync).toHaveBeenCalledWith(2);
+    expect(pushAttempts).toBe(2);
+  });
 });

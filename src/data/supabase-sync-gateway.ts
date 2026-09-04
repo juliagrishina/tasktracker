@@ -2,7 +2,7 @@ import type { RemoteSyncChange, SyncMutationResult, SyncOutboxMutation } from '.
 
 export interface SupabaseSyncClient {
   functions: {
-    invoke(name: string, options: { body: unknown }): Promise<{ data: unknown; error: { message: string } | null }>;
+    invoke(name: string, options: { body: unknown }): Promise<{ data: unknown; error: { message: string; context?: { clone(): { json(): Promise<unknown> } } } | null }>;
   };
 }
 
@@ -10,7 +10,14 @@ export function createSupabaseSyncGateway(client: SupabaseSyncClient | null) {
   const invoke = async (body: unknown): Promise<Record<string, unknown>> => {
     if (client === null) throw new Error('Cloud sync is unavailable.');
     const { data, error } = await client.functions.invoke('sync-protocol', { body });
-    if (error !== null || data === null || typeof data !== 'object' || Array.isArray(data)) throw new Error('Cloud sync request failed.');
+    if (error !== null) {
+      const response = await error.context?.clone().json().catch(() => null);
+      const code = response !== null && typeof response === 'object' && 'code' in response
+        ? (response as { code?: unknown }).code
+        : undefined;
+      throw Object.assign(new Error('Cloud sync request failed.'), { code });
+    }
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) throw new Error('Cloud sync response is invalid.');
     return data as Record<string, unknown>;
   };
   return {
@@ -23,6 +30,11 @@ export function createSupabaseSyncGateway(client: SupabaseSyncClient | null) {
       const response = await invoke({ cursor, limit });
       if (!Array.isArray(response.changes)) throw new Error('Cloud sync response is invalid.');
       return response.changes.map(decodeChange);
+    },
+    getDataGeneration: async (): Promise<number> => {
+      const response = await invoke({ bootstrap: true });
+      if (typeof response.dataGeneration !== 'number') throw new Error('Cloud sync response is invalid.');
+      return response.dataGeneration;
     },
   };
 }

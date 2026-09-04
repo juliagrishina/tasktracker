@@ -17,14 +17,23 @@ Deno.serve(async (request) => {
   const userClient = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
   const { data: { user }, error } = await userClient.auth.getUser(token);
   if (error !== null || user === null || user.is_anonymous || user.email === null) return respond({ error: 'Unauthorized.' }, 401);
-  const body = await request.json().catch(() => null) as { mutations?: unknown; cursor?: unknown; limit?: unknown } | null;
+  const body = await request.json().catch(() => null) as { mutations?: unknown; cursor?: unknown; limit?: unknown; bootstrap?: unknown } | null;
   if (body === null) return respond({ error: 'Invalid request.' }, 400);
 
   if (body.mutations !== undefined) {
     if (!Array.isArray(body.mutations)) return respond({ error: 'Invalid mutations.' }, 400);
     const { data, error: applyError } = await userClient.rpc('apply_sync_mutations', { p_mutations: body.mutations });
-    if (applyError !== null) return respond({ error: 'Sync mutation was rejected.' }, 409);
+    if (applyError !== null) {
+      const code = applyError.message.includes('Invalid or stale sync mutation.') ? 'stale_generation' : 'sync_rejected';
+      return respond({ error: 'Sync mutation was rejected.', code }, 409);
+    }
     return respond({ mutations: data });
+  }
+
+  if (body.bootstrap === true) {
+    const { data, error: bootstrapError } = await userClient.rpc('get_sync_data_generation');
+    if (bootstrapError !== null || typeof data !== 'number') return respond({ error: 'Sync bootstrap was rejected.' }, 409);
+    return respond({ dataGeneration: data });
   }
 
   const cursor = typeof body.cursor === 'number' && Number.isSafeInteger(body.cursor) ? body.cursor : 0;

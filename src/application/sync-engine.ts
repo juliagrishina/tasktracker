@@ -7,11 +7,13 @@ export interface SyncEngineStore {
   acknowledgeSyncMutations(results: readonly SyncMutationResult[]): Promise<void>;
   getSyncCursor(): Promise<number>;
   applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void>;
+  resetForFullResync?(dataGeneration: number): Promise<void>;
 }
 
 export interface SyncEngineGateway {
   push(mutations: readonly SyncOutboxMutation[]): Promise<readonly SyncMutationResult[]>;
   pull(cursor: number, limit: number): Promise<readonly RemoteSyncChange[]>;
+  getDataGeneration?(): Promise<number>;
 }
 
 export interface SyncEngine {
@@ -52,7 +54,7 @@ export function createSyncEngine({
 
   const syncNow = (): Promise<{ pushed: number; pulled: number }> => {
     if (running !== null) return running;
-    running = synchronize()
+    running = synchronizeWithRecovery()
       .then((result) => {
         retryAttempt = 0;
         return result;
@@ -110,6 +112,18 @@ export function createSyncEngine({
     return { pushed, pulled };
   };
 
+  const synchronizeWithRecovery = async (): Promise<{ pushed: number; pulled: number }> => {
+    try {
+      return await synchronize();
+    } catch (error) {
+      if (!isStaleGenerationError(error) || store.resetForFullResync === undefined || gateway.getDataGeneration === undefined) {
+        throw error;
+      }
+      await store.resetForFullResync(await gateway.getDataGeneration());
+      return synchronize();
+    }
+  };
+
   return {
     syncNow,
     notifyLocalMutation: requestDebounced,
@@ -122,4 +136,11 @@ export function createSyncEngine({
       delayed = null;
     },
   };
+}
+
+function isStaleGenerationError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: unknown }).code === 'stale_generation';
 }

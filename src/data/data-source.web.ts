@@ -145,6 +145,19 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     });
   }
 
+  async resetForFullResync(dataGeneration: number): Promise<void> {
+    await this.transaction(async () => {
+      const deviceId = this.syncState?.deviceId ?? createLocalSyncId();
+      this.settings = getDefaultSettings();
+      this.dailyEnergyEntries.clear(); this.projects.clear(); this.taskItems.clear(); this.reminders.clear();
+      this.scheduleBlocks.clear(); this.recurrenceSeries.clear(); this.recurrenceOccurrences.clear();
+      this.recurrenceRevisions.clear(); this.transferHistories.clear();
+      this.syncOutbox.clear(); this.syncEntityVersions.clear();
+      this.syncCursor = 0;
+      this.syncState = { deviceId, dataGeneration };
+    });
+  }
+
   async clearAll(): Promise<void> {
     this.settings = getDefaultSettings();
     this.dailyEnergyEntries.clear(); this.projects.clear(); this.taskItems.clear(); this.reminders.clear();

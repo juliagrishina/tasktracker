@@ -349,6 +349,7 @@ export function AppServicesProvider({
         if (seedDevelopmentData) {
           await seedDemoData(appSource);
         }
+        await syncEngine?.syncNow().catch(() => {});
         const loadedSettings = await repositories.settings.get();
         const loadedDemoTasks = seedDevelopmentData
           ? await loadDemoTaskGroups(appSource)
@@ -358,7 +359,6 @@ export function AppServicesProvider({
         const loadedDailyEnergy = await getDailyEnergyForCurrentDay(appSource);
         void synchronizeRecurrenceNotifications(appSource, notificationScheduler, new Date()).catch(() => {});
         void synchronizeEveningReviewNotification({ now: new Date(), scheduler: notificationScheduler, source: appSource }).catch(() => {});
-        void syncEngine?.syncNow().catch(() => {});
 
         if (isMounted) {
           setSettings(loadedSettings);

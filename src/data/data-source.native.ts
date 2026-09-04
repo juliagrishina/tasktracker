@@ -276,6 +276,23 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
     });
   }
 
+  async resetForFullResync(dataGeneration: number): Promise<void> {
+    await this.transaction(async () => {
+      const database = await this.getDatabase();
+      const tables = ['recurrence_revisions', 'recurrence_occurrences', 'recurrence_series', 'schedule_blocks', 'transfer_history', 'reminders', 'task_items', 'projects', 'daily_energy_entries'];
+      for (const table of tables) await database.execAsync(`DELETE FROM ${table}`);
+      await database.execAsync('DELETE FROM sync_outbox; DELETE FROM sync_entity_versions;');
+      const state = await database.getFirstAsync<{ device_id: string }>('SELECT device_id FROM sync_state WHERE id = 1');
+      const deviceId = state?.device_id ?? createLocalSyncId();
+      await database.runAsync(
+        `INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at) VALUES (1, ?, ?, NULL, ?)
+         ON CONFLICT(id) DO UPDATE SET device_id = excluded.device_id, data_generation = excluded.data_generation, pull_cursor = NULL, updated_at = excluded.updated_at`,
+        [deviceId, dataGeneration, new Date().toISOString()],
+      );
+      await this.saveSettings(getDefaultSettings());
+    });
+  }
+
   async getSettings(): Promise<AppSettings> {
     await this.initialize();
     const database = await this.getDatabase();
