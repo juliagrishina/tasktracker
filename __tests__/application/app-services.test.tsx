@@ -77,6 +77,12 @@ function PlanningSettingsProbe() {
   );
 }
 
+function AccountClearProbe() {
+  const { clearAccountData, isReady } = useAppServices();
+  if (!isReady) return <Text>loading account clear</Text>;
+  return <Pressable onPress={() => void clearAccountData(2)}><Text>Очистить облачную реплику</Text></Pressable>;
+}
+
 describe('AppServicesProvider', () => {
   test('exposes seeded settings and Plan demo data after initialization', async () => {
     const view = await render(
@@ -173,6 +179,24 @@ describe('AppServicesProvider', () => {
         eveningReviewAt: '20:00',
         notificationLeadMinutes: 30,
       });
+    });
+  });
+
+  test('replaces the current account replica with the generation returned by a successful cloud clear', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' }) as unknown as {
+      getLocalDataGeneration(): Promise<number>;
+      getProject(id: string): Promise<unknown>;
+      saveProject(project: { id: string; title: string; description: null; completedAt: null; createdAt: string; updatedAt: string; deletedAt: null }): Promise<void>;
+    };
+    await source.saveProject({ id: 'project-a', title: 'Удаляемая задача', description: null, completedAt: null, createdAt: '2026-09-04T10:00:00.000Z', updatedAt: '2026-09-04T10:00:00.000Z', deletedAt: null });
+    const view = await render(<AppServicesProvider source={source as never} seedDevelopmentData={false}><AccountClearProbe /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Очистить облачную реплику')).toBeOnTheScreen());
+    await fireEvent.press(view.getByText('Очистить облачную реплику'));
+
+    await waitFor(async () => {
+      await expect(source.getProject('project-a')).resolves.toBeNull();
+      await expect(source.getLocalDataGeneration()).resolves.toBe(2);
     });
   });
 });

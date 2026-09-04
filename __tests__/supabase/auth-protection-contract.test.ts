@@ -82,4 +82,15 @@ describe('Epic 11 Auth protection contract', () => {
     expect(deletionService).toContain("return { kind: 'pending', reason: 'auth_delete_failed' }");
     expect(config).toContain('[functions.account-data-action]');
   });
+
+  test('clears the cloud graph while retaining legal acceptance and returns the next generation to the current device', () => {
+    const migration = readRepositoryFile('supabase', 'migrations', '20260904030000_account_data_clear.sql');
+    const functionSource = readRepositoryFile('supabase', 'functions', 'account-data-action', 'index.ts');
+
+    expect(migration).toContain('delete from public.sync_changes where user_id = p_user_id');
+    expect(migration).toContain('delete from public.user_settings where user_id = p_user_id');
+    expect(migration).not.toContain('delete from public.legal_acceptances where user_id = p_user_id');
+    expect(migration).toContain('set data_generation = data_generation + 1');
+    expect(functionSource).toContain('dataGeneration: data');
+  });
 });

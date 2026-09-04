@@ -26,8 +26,8 @@ export function createSupabaseSyncGateway(client: SupabaseSyncClient | null) {
       if (!Array.isArray(response.mutations) || !Array.isArray(response.conflicts)) throw new Error('Cloud sync response is invalid.');
       return { mutations: response.mutations as SyncMutationResult[], conflicts: response.conflicts.map(decodeConflict) };
     },
-    pull: async (cursor: number, limit: number): Promise<readonly RemoteSyncChange[]> => {
-      const response = await invoke({ cursor, limit });
+    pull: async (cursor: number, limit: number, dataGeneration?: number): Promise<readonly RemoteSyncChange[]> => {
+      const response = await invoke({ cursor, limit, dataGeneration });
       if (!Array.isArray(response.changes)) throw new Error('Cloud sync response is invalid.');
       return response.changes.map(decodeChange);
     },

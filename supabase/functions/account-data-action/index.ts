@@ -41,9 +41,9 @@ Deno.serve(async (request) => {
   if ((await tickets.consume({ userId: user.id, operation: body.operation, ticket: issued.ticket })).kind !== 'consumed') return respond({ error: 'Verification failed.' }, 403);
 
   if (body.operation === 'clear_account_data') {
-    const { error } = await admin.rpc('clear_account_business_data', { p_user_id: user.id });
-    if (error !== null) return respond({ error: 'Clear is retryable.' }, 503);
-    return respond({ cleared: true });
+    const { data, error } = await admin.rpc('clear_account_business_data', { p_user_id: user.id });
+    if (error !== null || typeof data !== 'number') return respond({ error: 'Clear is retryable.' }, 503);
+    return respond({ cleared: true, dataGeneration: data });
   }
 
   const deletion = await executeAccountDeletion({

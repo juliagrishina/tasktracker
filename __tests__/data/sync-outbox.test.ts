@@ -67,6 +67,23 @@ describe('local sync outbox', () => {
     await expect(source.listSyncOutbox()).resolves.toEqual([]);
   });
 
+  test('discards an old local outbox when the account starts a new data generation', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' }) as unknown as {
+      getLocalDataGeneration(): Promise<number>;
+      getProject(id: string): Promise<unknown>;
+      listSyncOutbox(): Promise<readonly unknown[]>;
+      resetForFullResync(dataGeneration: number): Promise<void>;
+      saveProject(project: { id: string; title: string; description: null; completedAt: null; createdAt: string; updatedAt: string; deletedAt: null }): Promise<void>;
+    };
+    await source.saveProject({ id: 'project-a', title: 'Очистить', description: null, completedAt: null, createdAt: '2026-09-04T10:00:00.000Z', updatedAt: '2026-09-04T10:00:00.000Z', deletedAt: null });
+
+    await source.resetForFullResync(2);
+
+    await expect(source.getProject('project-a')).resolves.toBeNull();
+    await expect(source.listSyncOutbox()).resolves.toEqual([]);
+    await expect(source.getLocalDataGeneration()).resolves.toBe(2);
+  });
+
   test('keeps a no-time calendar date unchanged when a remote entity is applied on another timezone', async () => {
     const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' }) as unknown as {
       applyRemoteSyncChanges(changes: readonly unknown[], cursor: number): Promise<void>;

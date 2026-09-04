@@ -6,6 +6,7 @@ export interface SyncEngineStore {
   listSyncOutbox(): Promise<readonly SyncOutboxMutation[]>;
   acknowledgeSyncMutations(results: readonly SyncMutationResult[]): Promise<void>;
   getSyncCursor(): Promise<number>;
+  getLocalDataGeneration?(): Promise<number>;
   applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void>;
   resetForFullResync?(dataGeneration: number): Promise<void>;
   recordSyncConflicts?(conflicts: readonly IncomingSyncConflict[]): Promise<unknown>;
@@ -16,7 +17,7 @@ export type SyncActivityState = { kind: 'syncing' | 'synchronized' | 'offline' |
 
 export interface SyncEngineGateway {
   push(mutations: readonly SyncOutboxMutation[]): Promise<readonly SyncMutationResult[] | SyncPushResponse>;
-  pull(cursor: number, limit: number): Promise<readonly RemoteSyncChange[]>;
+  pull(cursor: number, limit: number, dataGeneration?: number): Promise<readonly RemoteSyncChange[]>;
   getDataGeneration?(): Promise<number>;
 }
 
@@ -124,9 +125,10 @@ export function createSyncEngine({
     }
 
     let pulled = 0;
+    const dataGeneration = await store.getLocalDataGeneration?.() ?? 1;
     let cursor = await store.getSyncCursor();
     for (;;) {
-      const changes = await gateway.pull(cursor, batchSize);
+      const changes = await gateway.pull(cursor, batchSize, dataGeneration);
       if (changes.length === 0) break;
       const nextCursor = changes.at(-1)?.changeCursor;
       if (nextCursor === undefined || nextCursor <= cursor) throw new Error('Sync server returned an invalid cursor.');

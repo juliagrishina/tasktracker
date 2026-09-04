@@ -52,7 +52,12 @@ export default function SettingsScreen() {
     onAccountStartEmailChange={(input) => runAccountAction((service) => service.startEmailChange(input))}
     onAccountUpdateDisplayName={(displayName) => runAccountAction((service) => service.updateDisplayName(displayName))}
     onClearAutonomousData={clearAutonomousData}
-    onAccountDataAction={async (input) => { const completed = await performAccountDataAction(input); if (completed) await clearAccountData(); if (completed && input.operation === 'delete_account') await authNavigation?.signOut(); return completed; }}
+    onAccountDataAction={async (input) => {
+      const result = await performAccountDataAction(input);
+      if (result.kind === 'cleared') await clearAccountData(result.dataGeneration);
+      if (result.kind === 'deleted') await authNavigation?.signOut();
+      return result.kind !== 'failed';
+    }}
     onRequestAccountDataCode={() => passwordManagement.requestPasswordChangeCode()}
     onPlanningSettingsChange={settingsActions.updatePlanningSettings}
     onRequestPasswordChangeCode={() => passwordManagement.requestPasswordChangeCode()}

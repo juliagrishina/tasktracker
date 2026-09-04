@@ -150,7 +150,7 @@ interface AppServicesContextValue {
   syncConflicts: readonly SyncConflict[];
   resolveAccountSyncConflict(conflict: SyncConflict, decision: SyncConflictDecision): Promise<void>;
   clearAutonomousData(): Promise<void>;
-  clearAccountData(): Promise<void>;
+  clearAccountData(dataGeneration?: number): Promise<void>;
 }
 
 interface AppServicesProviderProps {
@@ -201,6 +201,13 @@ function isSyncStatusStore(source: AppDataSource): source is AppDataSource & Syn
 } {
   const candidate = source as Partial<SyncEngineStore> & { getLastSyncSuccessAt?: unknown };
   return isSyncEngineStore(source) && typeof candidate.getLastSyncSuccessAt === 'function';
+}
+
+function isSyncResetStore(source: AppDataSource): source is AppDataSource & SyncEngineStore & {
+  resetForFullResync(dataGeneration: number): Promise<void>;
+} {
+  const candidate = source as Partial<SyncEngineStore>;
+  return isSyncEngineStore(source) && typeof candidate.resetForFullResync === 'function';
 }
 
 export function AppServicesProvider({
@@ -508,11 +515,12 @@ export function AppServicesProvider({
           await clearAutonomousWorkspace({ scope: scope ?? { kind: 'autonomous' }, source: appSource });
           await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy()]);
         },
-        clearAccountData: async () => {
-          await appSource.clearAll();
+        clearAccountData: async (dataGeneration) => {
+          if (dataGeneration !== undefined && isSyncResetStore(appSource)) await appSource.resetForFullResync(dataGeneration);
+          else await appSource.clearAll();
           setSettings(await appSource.getSettings());
           setDemoTasks(emptyDemoTaskGroups);
-          await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy()]);
+          await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy(), refreshSyncConflicts(), refreshSyncStatus()]);
         },
       }}>
       {children}

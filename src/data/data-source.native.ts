@@ -314,6 +314,13 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
     return row?.pull_cursor ?? 0;
   }
 
+  async getLocalDataGeneration(): Promise<number> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<{ data_generation: number }>('SELECT data_generation FROM sync_state WHERE id = 1');
+    return row?.data_generation ?? 1;
+  }
+
   async applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void> {
     await this.transaction(async () => {
       for (const change of changes) await this.applyRemoteSyncChange(change);
@@ -336,8 +343,8 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
       const state = await database.getFirstAsync<{ device_id: string }>('SELECT device_id FROM sync_state WHERE id = 1');
       const deviceId = state?.device_id ?? createLocalSyncId();
       await database.runAsync(
-        `INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at) VALUES (1, ?, ?, NULL, ?)
-         ON CONFLICT(id) DO UPDATE SET device_id = excluded.device_id, data_generation = excluded.data_generation, pull_cursor = NULL, updated_at = excluded.updated_at`,
+        `INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at, last_success_at) VALUES (1, ?, ?, NULL, ?, NULL)
+         ON CONFLICT(id) DO UPDATE SET device_id = excluded.device_id, data_generation = excluded.data_generation, pull_cursor = NULL, updated_at = excluded.updated_at, last_success_at = NULL`,
         [deviceId, dataGeneration, new Date().toISOString()],
       );
       await this.saveSettings(getDefaultSettings());

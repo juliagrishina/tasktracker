@@ -17,7 +17,7 @@ Deno.serve(async (request) => {
   const userClient = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
   const { data: { user }, error } = await userClient.auth.getUser(token);
   if (error !== null || user === null || user.is_anonymous || user.email === null) return respond({ error: 'Unauthorized.' }, 401);
-  const body = await request.json().catch(() => null) as { mutations?: unknown; cursor?: unknown; limit?: unknown; bootstrap?: unknown } | null;
+  const body = await request.json().catch(() => null) as { mutations?: unknown; cursor?: unknown; limit?: unknown; dataGeneration?: unknown; bootstrap?: unknown } | null;
   if (body === null) return respond({ error: 'Invalid request.' }, 400);
 
   if (body.mutations !== undefined) {
@@ -51,6 +51,10 @@ Deno.serve(async (request) => {
 
   const cursor = typeof body.cursor === 'number' && Number.isSafeInteger(body.cursor) ? body.cursor : 0;
   const limit = typeof body.limit === 'number' && Number.isSafeInteger(body.limit) ? body.limit : 100;
+  if (typeof body.dataGeneration !== 'number' || !Number.isSafeInteger(body.dataGeneration) || body.dataGeneration < 1) return respond({ error: 'Invalid sync generation.' }, 400);
+  const { data: currentGeneration, error: generationError } = await userClient.rpc('get_sync_data_generation');
+  if (generationError !== null || typeof currentGeneration !== 'number') return respond({ error: 'Sync pull was rejected.' }, 409);
+  if (body.dataGeneration !== currentGeneration) return respond({ error: 'Sync mutation was rejected.', code: 'stale_generation' }, 409);
   const { data, error: pullError } = await userClient.rpc('pull_sync_changes', { p_cursor: cursor, p_limit: limit });
   if (pullError !== null) return respond({ error: 'Sync pull was rejected.' }, 409);
   return respond({ changes: data });

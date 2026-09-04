@@ -169,6 +169,11 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     return this.syncCursor ?? 0;
   }
 
+  async getLocalDataGeneration(): Promise<number> {
+    await this.initialize();
+    return this.syncState?.dataGeneration ?? 1;
+  }
+
   async applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void> {
     await this.transaction(async () => {
       for (const change of changes) this.applyRemoteSyncChange(change);

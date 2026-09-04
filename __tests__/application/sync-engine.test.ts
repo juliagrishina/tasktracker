@@ -145,4 +145,29 @@ describe('sync engine', () => {
     expect(resetForFullResync).toHaveBeenCalledWith(2);
     expect(pushAttempts).toBe(2);
   });
+
+  test('replaces an offline replica even when its stale generation has no pending outbox changes', async () => {
+    let localGeneration = 1;
+    const resetForFullResync = jest.fn(async (generation: number) => { localGeneration = generation; });
+    const store: SyncEngineStore & { getLocalDataGeneration(): Promise<number>; resetForFullResync(dataGeneration: number): Promise<void> } = {
+      listSyncOutbox: async () => [],
+      acknowledgeSyncMutations: async () => {},
+      getSyncCursor: async () => 14,
+      getLocalDataGeneration: async () => localGeneration,
+      applyRemoteSyncChanges: async () => {},
+      resetForFullResync,
+    };
+    const gateway: SyncEngineGateway & { getDataGeneration(): Promise<number> } = {
+      push: async () => [],
+      pull: async (_cursor, _limit, dataGeneration) => {
+        if (dataGeneration === 1) throw Object.assign(new Error('stale generation'), { code: 'stale_generation' });
+        return [];
+      },
+      getDataGeneration: async () => 2,
+    };
+
+    await expect(createSyncEngine({ gateway, store }).syncNow()).resolves.toEqual({ pushed: 0, pulled: 0 });
+
+    expect(resetForFullResync).toHaveBeenCalledWith(2);
+  });
 });
