@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppServices } from '../../application/app-services-provider';
 import type { CreateTimedReminderTaskWithPlanningInput, SaveTaskWithPlanningInput, ScheduleConflict } from '../../application/planning-types';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
+import { createUuid } from '../../domain/uuid';
 import { designTokens } from '../design/tokens';
 import { formatDuration } from '../format-duration';
 import {
@@ -78,7 +79,7 @@ function formatPlanningDate(value: string): string {
 }
 
 function createItemId(type: ItemFormType): string {
-  return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return createUuid();
 }
 
 function getInitialProjectId(item: FormItem | undefined, projectId: string | null | undefined): string | null {
@@ -284,7 +285,7 @@ export function ItemFormSheet({
           };
         });
         const recurrence = planningDraft.repeatFrequency === 'none' ? null : {
-          id: `series-${taskId}`,
+          id: createUuid(),
           frequency: planningDraft.repeatFrequency,
           interval: Number(planningDraft.repeatInterval),
           weekdays: planningDraft.repeatFrequency === 'weekly' && planningDraft.repeatWeekdays.length > 0 ? planningDraft.repeatWeekdays : undefined,
@@ -408,7 +409,7 @@ export function ItemFormSheet({
             const reminderId = item?.id ?? createItemId(type);
             const reminderDate = emptyToNull(remindsOn);
             if (reminderDate === null) throw new Error('Укажите дату напоминания');
-            const taskId = `task-${reminderId}`;
+            const taskId = createUuid();
             const startsAt = new Date(getInstantInTimeZone(reminderDate, reminderTime, settings.timeZoneId));
             const timedReminderInput: CreateTimedReminderTaskWithPlanningInput = {
               reminder: { id: reminderId, ...reminderInput, createdAt: now },
@@ -417,7 +418,7 @@ export function ItemFormSheet({
               planning: {
                 taskId,
                 recurrence: null,
-                blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: settings.timeZoneId, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
+                blocks: [{ id: createUuid(), taskItemId: taskId, occurrenceId: null, timeZoneId: settings.timeZoneId, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
               },
             };
             const result = await planningActions.createTimedReminderTaskWithPlanning(timedReminderInput);

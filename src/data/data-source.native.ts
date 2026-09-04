@@ -26,6 +26,7 @@ import {
   type ScopeMigrationDatabase,
 } from './local-data-scope-migration';
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
+import { migrateLegacyIdsInNativeDatabase } from './native-legacy-id-migration';
 import { migrateDatabase } from './migrations';
 import { createLocalSyncId, createSyncTrackingDataSource, type SyncMetadataDataSource, type SyncOutboxMutation } from './sync-outbox';
 
@@ -1245,6 +1246,7 @@ class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
 
     const database = await this.getDatabase();
     await migrateDatabase(database);
+    await migrateLegacyIdsInNativeDatabase(database);
   }
 
   private getDatabase(): Promise<SQLite.SQLiteDatabase> {

@@ -7,6 +7,7 @@ import { designTokens } from '../design/tokens';
 import { useOptionalAppServices } from '../../application/app-services-provider';
 import { getDefaultSettings } from '../../data/default-settings';
 import { getDateInTimeZone, getInstantInTimeZone, getTimeInTimeZone } from '../../domain/planning';
+import { stableLegacyUuid } from '../../domain/uuid';
 import type { RecurrenceOccurrence, RecurrenceRevision, RecurrenceSeries, Reminder, ScheduleBlock, TaskItem } from '../../domain/entities';
 import { loadPlanReadModel, type PlanReadModel } from '../../application/plan-read-model';
 import { temporaryWebContentStyle } from '../screen-shell';
@@ -247,11 +248,11 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
               if (services === null) return;
               const now = new Date().toISOString();
               const existing = editingOccurrence.occurrence;
-              const occurrenceId = existing?.id ?? `occurrence-${editingOccurrence.seriesId}-${editingOccurrence.occursOn}`;
+              const occurrenceId = existing?.id ?? stableLegacyUuid('recurrence_occurrences', `${editingOccurrence.seriesId}:${editingOccurrence.occursOn}`);
               const blocks = planning.blocks.map((block) => {
                 const startsAt = new Date(getInstantInTimeZone(block.date, block.startsAt, services.settings.timeZoneId));
                 return {
-                  id: `${occurrenceId}-${block.id}`,
+                  id: stableLegacyUuid('schedule_blocks', `${occurrenceId}:${block.id}`),
                   taskItemId: editingOccurrence.task.id,
                   occurrenceId,
                   timeZoneId: services.settings.timeZoneId,

@@ -1,5 +1,6 @@
 import type { AppDataSource } from './contracts';
 import type { LocalDataScope } from './local-data-scopes';
+import { createUuid } from '../domain/uuid';
 
 export type SyncEntityType =
   | 'projects' | 'task_items' | 'reminders' | 'schedule_blocks'
@@ -24,11 +25,7 @@ export interface SyncMetadataDataSource {
 }
 
 export function createLocalSyncId(): string {
-  if (typeof globalThis.crypto?.randomUUID === 'function') {
-    return globalThis.crypto.randomUUID();
-  }
-
-  return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  return createUuid();
 }
 
 export type SyncTrackingDataSource = AppDataSource & Pick<SyncMetadataDataSource, 'listSyncOutbox'>;

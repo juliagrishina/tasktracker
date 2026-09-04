@@ -3,6 +3,7 @@ import {
   createPersistentBrowserDataSource,
 } from '../../src/data/data-source.web';
 import type { Project } from '../../src/domain/entities';
+import { isUuid } from '../../src/domain/uuid';
 
 const project: Project = {
   id: 'autonomous-project',
@@ -49,9 +50,10 @@ describe('web scoped data sources', () => {
       storage,
     );
 
-    await expect(reopenedAutonomousSource.getProject('persisted-autonomous-project')).resolves.toMatchObject({
-      id: 'persisted-autonomous-project',
-    });
+    const reopenedProjects = await reopenedAutonomousSource.listProjects();
+    expect(reopenedProjects).toHaveLength(1);
+    expect(reopenedProjects[0]).toMatchObject({ title: project.title });
+    expect(isUuid(reopenedProjects[0].id)).toBe(true);
     await expect(accountSource.getProject('persisted-autonomous-project')).resolves.toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { formatDuration } from '../format-duration';
 import { PlanningValuePicker, type PlanningValueOption } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
 import { getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
+import { createUuid } from '../../domain/uuid';
 
 export type TaskScheduleMode = 'none' | 'date' | 'period';
 export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays';
@@ -86,7 +87,7 @@ export function createDefaultBlock(defaultDate: string, now = new Date(), timeZo
   return {
     date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     durationMinutes: '60',
-    id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: createUuid(),
     startsAt: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
   };
 }
@@ -176,7 +177,7 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
         <Pressable
           accessibilityLabel="Добавить блок времени"
           accessibilityRole="button"
-          onPress={() => { if (defaultBlock === null) onNoFreeSlot?.(); else update({ blocks: [...value.blocks, { ...defaultBlock, id: `${defaultBlock.id}-${value.blocks.length + 1}` }] }); }}
+          onPress={() => { if (defaultBlock === null) onNoFreeSlot?.(); else update({ blocks: [...value.blocks, { ...defaultBlock, id: createUuid() }] }); }}
           style={styles.addBlockButton}>
           <Text style={styles.addBlockText}>Добавить блок времени</Text>
         </Pressable>

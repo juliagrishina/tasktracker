@@ -14,6 +14,7 @@ import { RecurrenceMoveDialog } from './recurrence-move-dialog';
 import { RecurrenceScopeDialog } from './recurrence-scope-dialog';
 import { CompletionDialog } from './completion-dialog';
 import { FollowUpReminderDialog } from './follow-up-reminder-dialog';
+import { createUuid } from '../../domain/uuid';
 import { UnfinishedTaskDialog } from './unfinished-task-dialog';
 import { EveningReviewDialog } from './evening-review-dialog';
 import { DeletePlanTaskDialog, PlanTaskActionsDialog, type PlanTaskAction } from './plan-task-actions-dialog';
@@ -228,7 +229,7 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
     setIsCompleting(true);
     try {
       await services.backlogActions.createFollowUpReminder({
-        id: `follow-up-${followUpCandidate.task.id}-${followUpCandidate.linkedOccurrenceOn ?? 'single'}`,
+        id: createUuid(),
         taskItemId: followUpCandidate.task.id,
         taskTitle: followUpCandidate.task.title,
         linkedOccurrenceOn: followUpCandidate.linkedOccurrenceOn,

@@ -20,6 +20,7 @@ import {
 import type { AppDataSource } from './contracts';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
+import { migrateLegacyEntityIds } from './legacy-id-migration';
 import { createLocalSyncId, createSyncTrackingDataSource, type SyncMetadataDataSource, type SyncOutboxMutation, type SyncTrackingDataSource } from './sync-outbox';
 
 export interface InMemoryDataSource extends SyncTrackingDataSource {
@@ -480,19 +481,20 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
   }
 
   private restoreSnapshot(snapshot: BrowserDataSnapshot): void {
-    this.settings = snapshot.settings;
-    replaceMap(this.dailyEnergyEntries, new Map(snapshot.dailyEnergyEntries.map((entry) => [entry.recordedOn, entry])));
-    replaceMap(this.projects, new Map(snapshot.projects.map((project) => [project.id, project])));
-    replaceMap(this.taskItems, new Map(snapshot.taskItems.map((task) => [task.id, task])));
-    replaceMap(this.reminders, new Map(snapshot.reminders.map((reminder) => [reminder.id, reminder])));
-    replaceMap(this.scheduleBlocks, new Map(snapshot.scheduleBlocks.map((block) => [block.id, block])));
-    replaceMap(this.recurrenceSeries, new Map(snapshot.recurrenceSeries.map((series) => [series.id, series])));
-    replaceMap(this.recurrenceOccurrences, new Map(snapshot.recurrenceOccurrences.map((occurrence) => [occurrence.id, occurrence])));
-    replaceMap(this.recurrenceRevisions, new Map(snapshot.recurrenceRevisions.map((revision) => [revision.id, revision])));
-    replaceMap(this.transferHistories, new Map(snapshot.transferHistories.map((history) => [history.id, history])));
-    this.syncState = snapshot.syncState;
-    replaceMap(this.syncEntityVersions, new Map(snapshot.syncEntityVersions));
-    replaceMap(this.syncOutbox, new Map(snapshot.syncOutbox.map((mutation) => [mutation.mutationId, mutation])));
+    const migrated = migrateLegacyEntityIds(snapshot);
+    this.settings = migrated.settings;
+    replaceMap(this.dailyEnergyEntries, new Map(migrated.dailyEnergyEntries.map((entry) => [entry.recordedOn, entry])));
+    replaceMap(this.projects, new Map(migrated.projects.map((project) => [project.id, project])));
+    replaceMap(this.taskItems, new Map(migrated.taskItems.map((task) => [task.id, task])));
+    replaceMap(this.reminders, new Map(migrated.reminders.map((reminder) => [reminder.id, reminder])));
+    replaceMap(this.scheduleBlocks, new Map(migrated.scheduleBlocks.map((block) => [block.id, block])));
+    replaceMap(this.recurrenceSeries, new Map(migrated.recurrenceSeries.map((series) => [series.id, series])));
+    replaceMap(this.recurrenceOccurrences, new Map(migrated.recurrenceOccurrences.map((occurrence) => [occurrence.id, occurrence])));
+    replaceMap(this.recurrenceRevisions, new Map(migrated.recurrenceRevisions.map((revision) => [revision.id, revision])));
+    replaceMap(this.transferHistories, new Map(migrated.transferHistories.map((history) => [history.id, history])));
+    this.syncState = migrated.syncState;
+    replaceMap(this.syncEntityVersions, new Map(migrated.syncEntityVersions));
+    replaceMap(this.syncOutbox, new Map(migrated.syncOutbox.map((mutation) => [mutation.mutationId, mutation])));
   }
 
   private deleteTaskRelatedRows(taskItemId: EntityId, deletedAt: string): void {
@@ -569,6 +571,7 @@ export function createPersistentBrowserDataSource(
 ): AppDataSource {
   const storageKey = `tasktracker.browser-data.${databaseNameForScope(scope)}.v1`;
   const source = new BrowserInMemoryDataSource(parseSnapshot(storage.getItem(storageKey)));
+  storage.setItem(storageKey, JSON.stringify(source.exportSnapshot()));
   const persisted = createPersistedDataSource(source, () => {
     storage.setItem(storageKey, JSON.stringify(source.exportSnapshot()));
   });

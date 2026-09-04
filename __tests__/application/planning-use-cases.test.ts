@@ -6,6 +6,7 @@ import type { LocalNotificationScheduler } from '../../src/application/notificat
 import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, moveRecurrenceOccurrence, returnIncompleteTaskToBacklog, saveOccurrenceException, saveRecurrenceRevision, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from '../../src/application/planning-use-cases';
 import { updatePlanningSettings } from '../../src/application/settings-use-cases';
 import { getDefaultSettings } from '../../src/data/default-settings';
+import { isUuid } from '../../src/domain/uuid';
 
 const createdAt = '2026-08-01T00:00:00.000Z';
 const task: TaskItem = { id: 'task-1', kind: 'task', projectId: null, parentTaskId: null, title: 'План', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null };
@@ -156,9 +157,11 @@ describe('planning use cases', () => {
 
     await returnIncompleteTaskToBacklog(source, { taskId: task.id, occurrence: { seriesId: 'return-series', occursOn: '2026-08-10' }, reason: null });
 
-    await expect(source.listTaskItems()).resolves.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: `backlog-${task.id}-2026-08-10`, title: task.title, scheduledOn: null }),
-    ]));
+    const returnedTask = (await source.listTaskItems()).find((item) =>
+      item.id !== task.id && item.title === task.title,
+    );
+    expect(returnedTask).toMatchObject({ scheduledOn: null });
+    expect(isUuid(returnedTask?.id ?? '')).toBe(true);
     await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toMatchObject([
       expect.objectContaining({ taskItemId: task.id }),
     ]);

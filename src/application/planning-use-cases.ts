@@ -2,6 +2,7 @@ import type { AppDataSource } from '../data/contracts';
 import type { EntityId, RecurrenceBlockTemplate, RecurrenceSeries, RecurrenceTaskPatch, Reminder, ScheduleBlock, TaskItem } from '../domain/entities';
 import { assertPlanningDateRange, assertRecurrenceOccurrence, assertRecurrenceRule, doesScheduleBlockOverlapDate, findScheduleConflicts, getDateInTimeZone, getRecurrenceDates, shiftScheduleBlockToDate } from '../domain/planning';
 import { assertScheduleBlockShape } from '../domain/invariants';
+import { createUuid, stableLegacyUuid } from '../domain/uuid';
 import { createReminder, createSubtask, createTask, updateTaskItem } from './backlog-use-cases';
 import { convertReminderToTask } from './convert-reminder-to-task';
 import { cancelScheduleBlockNotification, type LocalNotificationScheduler, synchronizeScheduleBlockNotification } from './notification-scheduling';
@@ -36,7 +37,7 @@ function toBlockTemplates(blocks: readonly ScheduleBlock[]): readonly Recurrence
 
 function fromBlockTemplates(templates: readonly RecurrenceBlockTemplate[], taskItemId: EntityId, now: string): readonly ScheduleBlock[] {
   return templates.map((template, index) => ({
-    id: `revision-template-${index}`,
+    id: stableLegacyUuid('schedule_blocks', `${taskItemId}:${template.startsAt}:${template.endsAt}:${index}`),
     taskItemId,
     occurrenceId: null,
     timeZoneId: template.timeZoneId,
@@ -172,7 +173,7 @@ export async function createTimedReminderTaskWithPlanning(source: AppDataSource,
     const startsOn = input.reminder.remindsOn ?? input.reminder.periodStartOn;
     const recurrence = input.planning.recurrence ?? (input.reminder.repeatRule === null || startsOn === null
       ? null
-      : { id: `series-${input.taskId}`, frequency: input.reminder.repeatRule.frequency, interval: input.reminder.repeatRule.interval, weekdays: input.reminder.repeatRule.weekdays, startsOn, createdAt: input.reminder.createdAt });
+      : { id: createUuid(), frequency: input.reminder.repeatRule.frequency, interval: input.reminder.repeatRule.interval, weekdays: input.reminder.repeatRule.weekdays, startsOn, createdAt: input.reminder.createdAt });
     const planning = { ...input.planning, recurrence };
     await validateTaskPlanning(source, planning);
     await persistTaskPlanning(source, planning, scheduler);
@@ -209,7 +210,7 @@ export async function saveRecurrenceRevision(source: AppDataSource, input: SaveR
   const existing = (await source.listRecurrenceRevisions(series.id)).find((revision) => revision.effectiveFrom === input.effectiveFrom);
   await source.transaction(async () => {
     await source.saveRecurrenceRevision({
-      id: existing?.id ?? `revision-${series.id}-${input.effectiveFrom}`,
+      id: existing?.id ?? stableLegacyUuid('recurrence_revisions', `${series.id}:${input.effectiveFrom}`),
       seriesId: series.id,
       effectiveFrom: input.effectiveFrom,
       frequency: input.recurrence.frequency,
@@ -266,7 +267,7 @@ export async function moveRecurrenceOccurrence(source: AppDataSource, input: Mov
       return;
     }
     const existing = (await source.listRecurrenceOccurrences(series.id)).find((occurrence) => occurrence.occursOn === input.occursOn);
-    const occurrenceId = existing?.id ?? `occurrence-${series.id}-${input.occursOn}`;
+    const occurrenceId = existing?.id ?? stableLegacyUuid('recurrence_occurrences', `${series.id}:${input.occursOn}`);
     if (masterBlocks.length === 0) {
       await source.saveRecurrenceOccurrence({
         id: occurrenceId,
@@ -296,7 +297,7 @@ export async function moveRecurrenceOccurrence(source: AppDataSource, input: Mov
       updatedAt: now,
       deletedAt: null,
     };
-    const blocks = masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, input.targetDate), id: `${occurrenceId}-${block.id}`, occurrenceId, createdAt: now, updatedAt: now, deletedAt: null }));
+    const blocks = masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, input.targetDate), id: stableLegacyUuid('schedule_blocks', `${occurrenceId}:${block.id}`), occurrenceId, createdAt: now, updatedAt: now, deletedAt: null }));
     await persistOccurrenceException(source, { occurrence, blocks }, scheduler);
   });
   if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, new Date());
@@ -311,7 +312,7 @@ export async function setRecurrenceOccurrenceState(source: AppDataSource, series
   const existing = (await source.listRecurrenceOccurrences(seriesId)).find((occurrence) => occurrence.occursOn === occursOn);
   const updatedAt = now.toISOString();
   await source.saveRecurrenceOccurrence({
-    id: existing?.id ?? `occurrence-${seriesId}-${occursOn}`,
+    id: existing?.id ?? stableLegacyUuid('recurrence_occurrences', `${seriesId}:${occursOn}`),
     seriesId,
     occursOn,
     cancelledAt: state === 'cancelled' ? updatedAt : null,
@@ -386,14 +387,14 @@ export async function synchronizeRecurrenceNotifications(source: AppDataSource, 
       if (effective === null || !getRecurrenceDates(effective.rule, occursOn, occursOn).includes(occursOn)) continue;
       const existing = byDate.get(occursOn);
       if (existing?.cancelledAt !== null && existing?.cancelledAt !== undefined || existing?.completedAt !== null && existing?.completedAt !== undefined) continue;
-      const occurrenceId = existing?.id ?? `occurrence-${recurrence.id}-${occursOn}`;
+      const occurrenceId = existing?.id ?? stableLegacyUuid('recurrence_occurrences', `${recurrence.id}:${occursOn}`);
       const masterBlocks = effective.blockTemplates === null
         ? allBlocks.filter((block) => block.taskItemId === task.id && block.occurrenceId === null)
         : fromBlockTemplates(effective.blockTemplates, task.id, recurrence.createdAt);
       if (masterBlocks.length === 0) continue;
       const blocks = existing?.blocksOverridden
         ? (await source.listScheduleBlocks()).filter((block) => block.occurrenceId === occurrenceId)
-        : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, occursOn), id: `${occurrenceId}-${block.id}`, occurrenceId, notificationId: null }));
+        : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, occursOn), id: stableLegacyUuid('schedule_blocks', `${occurrenceId}:${block.id}`), occurrenceId, notificationId: null }));
       const notificationTask = { ...task, ...effective.taskPatch };
       const scheduled = await synchronizeBlocks(source, notificationTask, blocks.map((block) => ({ ...block, notificationId: null })), now, scheduler);
       const notificationIds = scheduled.map((block) => block.notificationId).filter((id): id is string => id !== null && id !== undefined);
@@ -434,7 +435,7 @@ export async function continueIncompleteTask(source: AppDataSource, input: Unfin
   if (series === null || series.itemKind !== 'task' || series.itemId !== task.id) throw new Error('Повторение задачи не найдено');
   await assertTaskRecurrenceOccurrence(source, series, input.occurrence.occursOn);
   const existing = (await source.listRecurrenceOccurrences(series.id)).find((occurrence) => occurrence.occursOn === input.occurrence!.occursOn);
-  const occurrenceId = existing?.id ?? `occurrence-${series.id}-${input.occurrence.occursOn}`;
+  const occurrenceId = existing?.id ?? stableLegacyUuid('recurrence_occurrences', `${series.id}:${input.occurrence.occursOn}`);
   const effective = await getEffectiveTaskRecurrence(source, series, input.occurrence.occursOn);
   if (effective === null) throw new Error('Экземпляр не принадлежит серии повторения');
   const masterBlocks = effective.blockTemplates === null
@@ -442,7 +443,7 @@ export async function continueIncompleteTask(source: AppDataSource, input: Unfin
     : fromBlockTemplates(effective.blockTemplates, task.id, updatedAt);
   const currentBlocks = existing?.blocksOverridden
     ? (await source.listScheduleBlocks()).filter((block) => block.occurrenceId === occurrenceId)
-    : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, input.occurrence!.occursOn), id: `${occurrenceId}-${block.id}`, occurrenceId, createdAt: updatedAt, updatedAt, deletedAt: null }));
+    : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, input.occurrence!.occursOn), id: stableLegacyUuid('schedule_blocks', `${occurrenceId}:${block.id}`), occurrenceId, createdAt: updatedAt, updatedAt, deletedAt: null }));
   const latestId = currentBlocks.reduce<string | null>((result, block) => result === null || new Date(block.endsAt).getTime() > new Date(currentBlocks.find((candidate) => candidate.id === result)!.endsAt).getTime() ? block.id : result, null);
   if (latestId === null) throw new Error('Для повторения нет блока, который можно продлить');
   const extendedBlocks = currentBlocks.map((block) => block.id === latestId ? withThirtyMoreMinutes(block, updatedAt) : { ...block, updatedAt });
@@ -491,7 +492,7 @@ export async function returnIncompleteTaskToBacklog(source: AppDataSource, input
   await source.saveTaskItem({
     ...task,
     ...patch,
-    id: `backlog-${task.id}-${input.occurrence.occursOn}`,
+    id: createUuid(),
     completedAt: null,
     scheduledOn: null,
     periodStartOn: null,
@@ -499,7 +500,7 @@ export async function returnIncompleteTaskToBacklog(source: AppDataSource, input
     createdAt: returnedAt,
     updatedAt: returnedAt,
   });
-  await source.saveTransferHistory({ id: `transfer-${input.taskId}-${input.occurrence.occursOn}-${returnedAt}`, taskItemId: input.taskId, reason: input.reason, returnedAt, createdAt: returnedAt });
+  await source.saveTransferHistory({ id: createUuid(), taskItemId: input.taskId, reason: input.reason, returnedAt, createdAt: returnedAt });
 }
 
 export async function removeRecurrenceOccurrence(source: AppDataSource, input: { seriesId: EntityId; occursOn: string; scope: 'occurrence' | 'series' }, scheduler?: LocalNotificationScheduler): Promise<void> {
@@ -527,7 +528,7 @@ export async function syncReminderRecurrence(source: AppDataSource, reminderId: 
   const current = (await source.listRecurrenceSeries()).filter((series) => series.itemKind === 'reminder' && series.itemId === reminderId);
   if (reminder.repeatRule === null || (reminder.remindsOn === null && reminder.periodStartOn === null)) { for (const series of current) await source.deleteRecurrenceSeries(series.id); return; }
   const now = new Date().toISOString();
-  await source.saveRecurrenceSeries({ id: current[0]?.id ?? `series-${reminderId}`, itemKind: 'reminder', itemId: reminderId, frequency: reminder.repeatRule.frequency, interval: reminder.repeatRule.interval, weekdays: reminder.repeatRule.weekdays, startsOn: reminder.remindsOn ?? reminder.periodStartOn!, createdAt: current[0]?.createdAt ?? now, updatedAt: now, deletedAt: null });
+  await source.saveRecurrenceSeries({ id: current[0]?.id ?? createUuid(), itemKind: 'reminder', itemId: reminderId, frequency: reminder.repeatRule.frequency, interval: reminder.repeatRule.interval, weekdays: reminder.repeatRule.weekdays, startsOn: reminder.remindsOn ?? reminder.periodStartOn!, createdAt: current[0]?.createdAt ?? now, updatedAt: now, deletedAt: null });
 }
 
 export type PlanUntimedReminder = Reminder & { seriesId: EntityId | null; occursOn: string | null };
@@ -603,7 +604,7 @@ export async function returnTaskToBacklog(source: AppDataSource, input: { taskId
       await source.deleteScheduleBlock(block.id);
     }
     for (const series of await source.listRecurrenceSeries()) if (series.itemKind === 'task' && series.itemId === task.id) await source.deleteRecurrenceSeries(series.id);
-    await source.saveTransferHistory({ id: `transfer-${task.id}-${returnedAt}`, taskItemId: task.id, reason: input.reason, returnedAt, createdAt: returnedAt });
+    await source.saveTransferHistory({ id: createUuid(), taskItemId: task.id, reason: input.reason, returnedAt, createdAt: returnedAt });
   });
 }
 

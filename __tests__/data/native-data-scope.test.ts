@@ -11,6 +11,10 @@ jest.mock('../../src/data/local-data-scope-migration', () => ({
   migrateLegacyDatabaseToAutonomousScope: jest.fn().mockResolvedValue({ copied: false }),
 }));
 
+jest.mock('../../src/data/native-legacy-id-migration', () => ({
+  migrateLegacyIdsInNativeDatabase: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { createDataSource } from '../../src/data/data-source.native';
 
 describe('native scoped data source', () => {
