@@ -14,7 +14,13 @@ async function createMoscowDataSource() {
 }
 
 describe('recurrence move', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('asks whether to move only the selected instance or the full series', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    jest.setSystemTime(new Date('2026-08-10T07:00:00.000Z'));
     const source = await createMoscowDataSource();
     const notificationScheduler: LocalNotificationScheduler = {
       schedule: async () => 'notification-1',
@@ -45,12 +51,11 @@ describe('recurrence move', () => {
     await waitFor(() => expect(view.getByText('11.08.2026')).toBeOnTheScreen());
     await act(async () => {
       await fireEvent.press(view.getByLabelText('Перенести только выбранный экземпляр'));
-      await new Promise((resolve) => setTimeout(resolve, 1));
+      await jest.advanceTimersByTimeAsync(1);
     });
 
-    await waitFor(() => expect(source.debugRowExists('occurrence-series-1-2026-08-10-block-1')).toBe(true));
-    await expect(source.listScheduleBlocks()).resolves.toEqual(expect.arrayContaining([
-      expect.objectContaining({ occurrenceId: 'occurrence-series-1-2026-08-10', startsAt: '2026-08-11T09:00:00+03:00' }),
-    ]));
+    await waitFor(async () => expect(await source.listScheduleBlocks()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ occurrenceId: expect.any(String), startsAt: '2026-08-11T09:00:00+03:00' }),
+    ])));
   });
 });

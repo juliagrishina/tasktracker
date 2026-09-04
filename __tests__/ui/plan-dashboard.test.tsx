@@ -23,6 +23,10 @@ describe('ProgressRing', () => {
 });
 
 describe('DayDashboard', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('keeps a completed block in the plan and marks it as completed', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
@@ -245,6 +249,8 @@ describe('DayDashboard', () => {
   });
 
   test('completes a recurring plan instance without asking for a series scope', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    jest.setSystemTime(new Date('2026-08-28T07:00:00.000Z'));
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
@@ -337,6 +343,8 @@ describe('DayDashboard', () => {
   });
 
   test('completes only the prompted recurring occurrence', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    jest.setSystemTime(new Date('2026-08-28T07:00:00.000Z'));
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
