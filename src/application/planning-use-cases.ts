@@ -97,7 +97,7 @@ async function persistTaskPlanning(source: AppDataSource, input: SaveTaskPlannin
     const currentBlock = { ...block, notificationId: current?.notificationId ?? null };
     const scheduled = scheduler === undefined
       ? currentBlock
-      : await synchronizeScheduleBlockNotification({ block: currentBlock, notificationLeadMinutes: settings.notificationLeadMinutes, now: new Date(), scheduler, taskTitle: task.title });
+      : await synchronizeScheduleBlockNotification({ block: currentBlock, displayTimeZoneId: settings.timeZoneId, notificationLeadMinutes: settings.notificationLeadMinutes, now: new Date(), scheduler, taskTitle: task.title });
     await source.saveScheduleBlock(scheduled);
   }
   const series = (await source.listRecurrenceSeries()).filter((candidate) => candidate.itemKind === 'task' && candidate.itemId === input.taskId);
@@ -262,7 +262,7 @@ export async function moveRecurrenceOccurrence(source: AppDataSource, input: Mov
   const now = new Date().toISOString();
   await source.transaction(async () => {
     if (input.scope === 'series') {
-      for (const block of masterBlocks) await source.saveScheduleBlock({ ...shiftScheduleBlockToDate(block, shiftedDate(block.startsAt.slice(0, 10), input.occursOn, input.targetDate)), updatedAt: now });
+      for (const block of masterBlocks) await source.saveScheduleBlock({ ...shiftScheduleBlockToDate(block, shiftedDate(getDateInTimeZone(block.startsAt, block.timeZoneId), input.occursOn, input.targetDate)), updatedAt: now });
       await source.saveRecurrenceSeries({ ...series, startsOn: shiftedDate(series.startsOn, input.occursOn, input.targetDate), updatedAt: now });
       return;
     }
@@ -341,7 +341,7 @@ function withThirtyMoreMinutes(block: ScheduleBlock, updatedAt: string): Schedul
 async function synchronizeBlocks(source: AppDataSource, task: TaskItem, blocks: readonly ScheduleBlock[], now: Date, scheduler: LocalNotificationScheduler | undefined): Promise<readonly ScheduleBlock[]> {
   if (scheduler === undefined) return blocks;
   const settings = await source.getSettings();
-  return Promise.all(blocks.map((block) => synchronizeScheduleBlockNotification({ block, notificationLeadMinutes: settings.notificationLeadMinutes, now, scheduler, taskTitle: task.title })));
+  return Promise.all(blocks.map((block) => synchronizeScheduleBlockNotification({ block, displayTimeZoneId: settings.timeZoneId, notificationLeadMinutes: settings.notificationLeadMinutes, now, scheduler, taskTitle: task.title })));
 }
 
 const recurrenceNotificationHorizonDays = 90;

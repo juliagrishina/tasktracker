@@ -317,7 +317,13 @@ export function AppServicesProvider({
         }
         const updatedSettings = { ...settings, timeZoneId, timeZoneMode: 'manual' as const };
         await appSource.saveSettings(updatedSettings);
-        setSettings(updatedSettings);
+        const rescheduledSettings = await updatePlanningSettings(appSource, {
+          workdayStartsAt: updatedSettings.workdayStartsAt,
+          workdayEndsAt: updatedSettings.workdayEndsAt,
+          eveningReviewAt: updatedSettings.eveningReviewAt,
+          notificationLeadMinutes: updatedSettings.notificationLeadMinutes,
+        }, notificationScheduler);
+        setSettings(rescheduledSettings);
         await refreshDailyEnergy();
         syncEngine?.notifyLocalMutation();
       },
@@ -328,7 +334,13 @@ export function AppServicesProvider({
           timeZoneMode: 'device' as const,
         };
         await appSource.saveSettings(updatedSettings);
-        setSettings(updatedSettings);
+        const rescheduledSettings = await updatePlanningSettings(appSource, {
+          workdayStartsAt: updatedSettings.workdayStartsAt,
+          workdayEndsAt: updatedSettings.workdayEndsAt,
+          eveningReviewAt: updatedSettings.eveningReviewAt,
+          notificationLeadMinutes: updatedSettings.notificationLeadMinutes,
+        }, notificationScheduler);
+        setSettings(rescheduledSettings);
         await refreshDailyEnergy();
         syncEngine?.notifyLocalMutation();
       },

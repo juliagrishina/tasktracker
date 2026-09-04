@@ -52,6 +52,7 @@ async function synchronizeOneTimeBlockNotifications(
     if (task === undefined || task.completedAt !== null) continue;
     const updatedBlock = await synchronizeScheduleBlockNotification({
       block,
+      displayTimeZoneId: settings.timeZoneId,
       notificationLeadMinutes: settings.notificationLeadMinutes,
       now,
       scheduler,

@@ -52,6 +52,12 @@ function TimeZoneModeProbe() {
   );
 }
 
+function TimeZoneChangeProbe() {
+  const { isReady, settingsActions } = useAppServices();
+  if (!isReady) return <Text>loading timezone change</Text>;
+  return <Pressable onPress={() => void settingsActions.updateTimeZone('Asia/Ho_Chi_Minh')}><Text>Сменить пояс</Text></Pressable>;
+}
+
 function PlanningSettingsProbe() {
   const { isReady, settings, settingsActions } = useAppServices();
 
@@ -129,6 +135,20 @@ describe('AppServicesProvider', () => {
       expect(view.getByText('device')).toBeOnTheScreen();
       await expect(source.getSettings()).resolves.toMatchObject({ timeZoneMode: 'device' });
     });
+  });
+
+  test('rebuilds local schedule notifications in the newly effective device timezone', async () => {
+    const source = createInMemoryDataSource();
+    const notificationScheduler = { schedule: jest.fn().mockResolvedValue('notification-1'), cancel: jest.fn() };
+    await source.saveTaskItem({ id: 'timezone-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Созвон', description: null, estimatedDurationMinutes: null, scheduledOn: null, periodStartOn: null, periodEndOn: null, completedAt: null, createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z', deletedAt: null });
+    await source.saveScheduleBlock({ id: 'timezone-block', taskItemId: 'timezone-task', occurrenceId: null, notificationId: null, timeZoneId: 'Europe/Moscow', startsAt: '2030-09-01T10:00:00+03:00', endsAt: '2030-09-01T11:00:00+03:00', createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z', deletedAt: null });
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false} notificationScheduler={notificationScheduler}><TimeZoneChangeProbe /></AppServicesProvider>);
+    await waitFor(() => expect(view.getByText('Сменить пояс')).toBeOnTheScreen());
+    notificationScheduler.schedule.mockClear();
+
+    await fireEvent.press(view.getByText('Сменить пояс'));
+
+    await waitFor(() => expect(notificationScheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ body: 'Созвон начнётся в 14:00' })));
   });
 
   test('exposes an action that persists planning settings', async () => {

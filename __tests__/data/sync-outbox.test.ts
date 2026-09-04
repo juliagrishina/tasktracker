@@ -66,4 +66,17 @@ describe('local sync outbox', () => {
     await expect(source.getProject('project-a')).resolves.toMatchObject({ title: 'Автономный проект' });
     await expect(source.listSyncOutbox()).resolves.toEqual([]);
   });
+
+  test('keeps a no-time calendar date unchanged when a remote entity is applied on another timezone', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' }) as unknown as {
+      applyRemoteSyncChanges(changes: readonly unknown[], cursor: number): Promise<void>;
+      getTaskItem(id: string): Promise<{ scheduledOn: string | null } | null>;
+    };
+    await source.applyRemoteSyncChanges([{
+      changeCursor: 1, entityType: 'task_items', entityId: 'task-a', operation: 'upsert', version: 1,
+      payload: { id: 'task-a', kind: 'task', projectId: null, parentTaskId: null, title: 'Без времени', description: null, estimatedDurationMinutes: null, scheduledOn: '2026-09-01', periodStartOn: null, periodEndOn: null, completedAt: null, createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z', deletedAt: null },
+    }], 1);
+
+    await expect(source.getTaskItem('task-a')).resolves.toMatchObject({ scheduledOn: '2026-09-01' });
+  });
 });

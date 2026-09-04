@@ -73,6 +73,21 @@ describe('planning domain', () => {
     });
   });
 
+  test('keeps a recurring block wall-clock time in its source IANA zone when the instant crosses UTC midnight', () => {
+    const sourceZoneBlock = {
+      ...block,
+      startsAt: '2026-08-03T21:30:00.000Z',
+      endsAt: '2026-08-03T22:30:00.000Z',
+      timeZoneId: 'Europe/Moscow',
+    };
+
+    expect(shiftScheduleBlockToDate(sourceZoneBlock, '2026-08-05')).toMatchObject({
+      startsAt: '2026-08-05T00:30:00+03:00',
+      endsAt: '2026-08-05T01:30:00+03:00',
+    });
+    expect(getTimeInTimeZone(sourceZoneBlock.startsAt, 'Asia/Ho_Chi_Minh')).toBe('04:30');
+  });
+
   test('finds overlap but allows adjacent blocks and makes a future five-minute default', () => {
     expect(findScheduleConflicts({ ...block, id: 'candidate', startsAt: '2026-08-03T09:30:00+03:00', endsAt: '2026-08-03T10:30:00+03:00' }, [block])).toHaveLength(1);
     expect(findScheduleConflicts({ ...block, id: 'candidate', startsAt: block.endsAt, endsAt: '2026-08-03T11:00:00+03:00' }, [block])).toHaveLength(0);
