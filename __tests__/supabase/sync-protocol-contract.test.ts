@@ -33,6 +33,13 @@ describe('cloud sync protocol contract', () => {
     expect(migration).toContain('grant execute on function public.pull_sync_changes(bigint, integer) to authenticated');
   });
 
+  test('recreates the pull RPC before adding its payload return column', () => {
+    const migration = readRepositoryFile('supabase', 'migrations', '20260904000000_sync_change_payloads.sql');
+
+    expect(migration).toContain('drop function if exists public.pull_sync_changes(bigint, integer);');
+    expect(migration).toContain('grant execute on function public.pull_sync_changes(bigint, integer) to authenticated');
+  });
+
   test('keeps the Edge boundary in the JWT owner context and never uses the service role', () => {
     const source = readRepositoryFile('supabase', 'functions', 'sync-protocol', 'index.ts');
     const config = readRepositoryFile('supabase', 'config.toml');

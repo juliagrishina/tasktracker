@@ -30,7 +30,12 @@ begin
 end;
 $$;
 
-create or replace function public.pull_sync_changes(p_cursor bigint default 0, p_limit integer default 100)
+-- PostgreSQL does not allow CREATE OR REPLACE to add an OUT column to an
+-- existing function. Recreate the RPC so the payload column is part of its
+-- return row type, then restore the least-privilege caller grant.
+drop function if exists public.pull_sync_changes(bigint, integer);
+
+create function public.pull_sync_changes(p_cursor bigint default 0, p_limit integer default 100)
 returns table(change_cursor bigint, entity_type text, entity_id text, operation text, version bigint, changed_at timestamptz, payload jsonb)
 language sql
 security definer
@@ -52,6 +57,7 @@ as $$
 $$;
 
 revoke all on function public.sync_change_payload(uuid, text, text, timestamptz) from public;
+grant execute on function public.pull_sync_changes(bigint, integer) to authenticated;
 
 do $$
 begin
