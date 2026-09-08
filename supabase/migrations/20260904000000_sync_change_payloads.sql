@@ -64,6 +64,7 @@ begin
   alter publication supabase_realtime add table public.sync_changes;
 exception when duplicate_object then null;
 end;
+$$;
 
 create policy sync_changes_realtime_owner on public.sync_changes
 for select to authenticated

@@ -38,6 +38,7 @@ describe('cloud sync protocol contract', () => {
 
     expect(migration).toContain('drop function if exists public.pull_sync_changes(bigint, integer);');
     expect(migration).toContain('grant execute on function public.pull_sync_changes(bigint, integer) to authenticated');
+    expect(migration).toContain('end;\n$$;\n\ncreate policy sync_changes_realtime_owner');
   });
 
   test('keeps the Edge boundary in the JWT owner context and never uses the service role', () => {
