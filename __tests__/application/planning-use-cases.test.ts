@@ -187,22 +187,27 @@ describe('planning use cases', () => {
   });
 
   test('persists a newly scheduled notification when a future block is saved', async () => {
-    const source = createInMemoryDataSource();
-    const scheduler: LocalNotificationScheduler = {
-      schedule: jest.fn().mockResolvedValue('notification-1'),
-      cancel: jest.fn(),
-    };
-    const futureBlock = {
-      ...block,
-      startsAt: '2026-09-01T10:00:00+03:00',
-      endsAt: '2026-09-01T11:00:00+03:00',
-    };
-    await source.saveTaskItem(task);
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-01T06:00:00.000Z'));
+    try {
+      const source = createInMemoryDataSource();
+      const scheduler: LocalNotificationScheduler = {
+        schedule: jest.fn().mockResolvedValue('notification-1'),
+        cancel: jest.fn(),
+      };
+      const futureBlock = {
+        ...block,
+        startsAt: '2026-09-01T10:00:00+03:00',
+        endsAt: '2026-09-01T11:00:00+03:00',
+      };
+      await source.saveTaskItem(task);
 
-    await saveTaskPlanning(source, { taskId: task.id, blocks: [futureBlock], recurrence: null }, scheduler);
+      await saveTaskPlanning(source, { taskId: task.id, blocks: [futureBlock], recurrence: null }, scheduler);
 
-    await expect(source.getScheduleBlock(block.id)).resolves.toMatchObject({ notificationId: 'notification-1' });
-    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: '2026-09-01T06:50:00.000Z' }));
+      await expect(source.getScheduleBlock(block.id)).resolves.toMatchObject({ notificationId: 'notification-1' });
+      expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ scheduledAt: '2026-09-01T06:50:00.000Z' }));
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('projects date-only and period tasks, then records an atomic return to Backlog', async () => {
