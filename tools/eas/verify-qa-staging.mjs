@@ -4,6 +4,10 @@ import { resolve } from 'node:path';
 
 const expectedUrl = 'https://zwckrqbdepgvenanyans.supabase.co';
 const envPath = resolve(process.cwd(), '.env.local');
+const requiredNames = [
+  'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+  'EXPO_PUBLIC_SUPABASE_URL',
+];
 
 function readEnvironmentFile(path) {
   return Object.fromEntries(
@@ -27,8 +31,16 @@ function ensureIgnored(path) {
   }
 }
 
+function sameNames(actualNames, expectedNames) {
+  return actualNames.length === expectedNames.length && actualNames.every((name, index) => name === expectedNames[index]);
+}
+
 const variables = readEnvironmentFile(envPath);
 ensureIgnored('.env.local');
+
+if (!sameNames(Object.keys(variables).sort(), requiredNames)) {
+  throw new Error('The local QA environment must contain only the two approved public staging variables.');
+}
 
 if (variables.EXPO_PUBLIC_SUPABASE_URL !== expectedUrl) {
   throw new Error('QA work is allowed only for the configured staging Supabase project.');

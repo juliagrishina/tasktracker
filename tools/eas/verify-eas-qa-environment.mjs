@@ -39,9 +39,24 @@ function sameNames(actualNames, expectedNames) {
 ensureIgnored(temporaryEnvFile);
 
 try {
+  const easInvocation = process.platform === 'win32'
+    ? {
+        command: process.env.ComSpec ?? 'cmd.exe',
+        args: [
+          '/d',
+          '/s',
+          '/c',
+          `npx.cmd --offline --yes eas-cli@latest env:pull --environment preview --path ${temporaryEnvFile}`,
+        ],
+      }
+    : {
+        command: 'npx',
+        args: ['--offline', '--yes', 'eas-cli@latest', 'env:pull', '--environment', 'preview', '--path', temporaryEnvFile],
+      };
+
   execFileSync(
-    process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['--yes', 'eas-cli@latest', 'env:pull', '--environment', 'preview', '--path', temporaryEnvFile],
+    easInvocation.command,
+    easInvocation.args,
     { stdio: 'inherit' },
   );
 
