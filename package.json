@@ -8,6 +8,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "web:export": "expo export --platform web",
+    "qa:verify": "node tools/eas/verify-qa-staging.mjs",
+    "qa:publish": "npm run qa:verify && node tools/eas/verify-eas-qa-environment.mjs && npx eas-cli@latest update --channel qa --environment preview",
     "lint": "eslint src __tests__ jest.setup.ts eslint.config.js",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand"
