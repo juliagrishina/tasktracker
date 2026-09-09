@@ -7,6 +7,9 @@ import { getCompletionEligibility } from '../../src/application/completion-eligi
 import { getEveningReviewItems } from '../../src/application/evening-review';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
+import { stableLegacyUuid } from '../../src/domain/uuid';
+
+const demoId = (entityType: string, legacyId: string): string => stableLegacyUuid(entityType, legacyId);
 
 describe('development demo data', () => {
   afterEach(() => {
@@ -19,12 +22,12 @@ describe('development demo data', () => {
     await seedDemoData(source);
     await seedDemoData(source);
 
-    await expect(source.getProject('demo-project-personal')).resolves.not.toBeNull();
-    await expect(source.getTaskItem('demo-plan-week-draft')).resolves.not.toBeNull();
-    await expect(source.getReminder('demo-reminder-insurance')).resolves.not.toBeNull();
-    await expect(source.getScheduleBlock('demo-plan-week-draft-block')).resolves.not.toBeNull();
-    await expect(source.getRecurrenceSeries('demo-plan-week-draft-recurrence')).resolves.not.toBeNull();
-    await expect(source.getTaskItem('demo-completed-review')).resolves.toMatchObject({
+    await expect(source.getProject(demoId('projects', 'demo-project-personal'))).resolves.not.toBeNull();
+    await expect(source.getTaskItem(demoId('task_items', 'demo-plan-week-draft'))).resolves.not.toBeNull();
+    await expect(source.getReminder(demoId('reminders', 'demo-reminder-insurance'))).resolves.not.toBeNull();
+    await expect(source.getScheduleBlock(demoId('schedule_blocks', 'demo-plan-week-draft-block'))).resolves.not.toBeNull();
+    await expect(source.getRecurrenceSeries(demoId('recurrence_series', 'demo-plan-week-draft-recurrence'))).resolves.not.toBeNull();
+    await expect(source.getTaskItem(demoId('task_items', 'demo-completed-review'))).resolves.toMatchObject({
       completedAt: expect.any(String),
     });
     await expect(source.getSettings()).resolves.toMatchObject({
@@ -77,12 +80,12 @@ describe('development demo data', () => {
     await seedDemoData(source);
 
     await expect(getCompletionEligibility(source, new Date('2026-08-28T12:00:00.000Z'))).resolves.toEqual([
-      expect.objectContaining({ taskItemId: 'demo-plan-week-draft' }),
+      expect.objectContaining({ taskItemId: demoId('task_items', 'demo-plan-week-draft') }),
     ]);
     await expect(getEveningReviewItems(source, '2026-08-28')).resolves.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'demo-evening-review-task', kind: 'task' }),
-        expect.objectContaining({ id: 'demo-reminder-evening-review', kind: 'reminder' }),
+        expect.objectContaining({ id: demoId('task_items', 'demo-evening-review-task'), kind: 'task' }),
+        expect.objectContaining({ id: demoId('reminders', 'demo-reminder-evening-review'), kind: 'reminder' }),
       ]),
     );
   });

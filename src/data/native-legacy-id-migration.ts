@@ -69,7 +69,18 @@ async function replacePrimaryKeys(database: SQLiteDatabase, table: string, entit
   const rows = await database.getAllAsync<IdentifierRow>(`SELECT id FROM ${table}`);
   for (const row of rows) {
     const nextId = isUuid(row.id) ? row.id : stableLegacyUuid(entityType, row.id);
-    if (nextId !== row.id) await database.runAsync(`UPDATE ${table} SET id = ? WHERE id = ?`, [nextId, row.id]);
+    if (nextId === row.id) continue;
+
+    const existing = await database.getFirstAsync<IdentifierRow>(
+      `SELECT id FROM ${table} WHERE id = ?`,
+      [nextId],
+    );
+    if (existing !== null) {
+      await database.runAsync(`DELETE FROM ${table} WHERE id = ?`, [row.id]);
+      continue;
+    }
+
+    await database.runAsync(`UPDATE ${table} SET id = ? WHERE id = ?`, [nextId, row.id]);
   }
 }
 
