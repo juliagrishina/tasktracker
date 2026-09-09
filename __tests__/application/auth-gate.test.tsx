@@ -205,6 +205,60 @@ describe('AuthGate', () => {
     expect(anonymousStarts).toBe(1);
   });
 
+  test('shows a safe service message when anonymous sign-in is unavailable before registration', async () => {
+    const storage = createMemoryStorage();
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => ({ kind: 'signedOut' }),
+          startAutonomousSession: async () => {
+            throw new Error('Anonymous Supabase sign-in is unavailable.');
+          },
+        }}
+        entryState={createAuthEntryState(storage)}
+        scopeRegistry={createDataScopeRegistry(storage)}>
+        <Text>Основной экран</Text>
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByText('Создать аккаунт')).toBeOnTheScreen());
+    await fireEvent.changeText(view.getByLabelText('Имя'), 'Мария Иванова');
+    await fireEvent.changeText(view.getByLabelText('Email'), 'maria@example.com');
+    await fireEvent.changeText(view.getByLabelText('Пароль'), 'P@ssword2026');
+    await fireEvent.changeText(view.getByLabelText('Повторите пароль'), 'P@ssword2026');
+    await fireEvent.press(view.getByLabelText('Принять Пользовательское соглашение и Политику конфиденциальности'));
+    await fireEvent.press(view.getByText('Создать аккаунт'));
+
+    await waitFor(() => expect(view.getByText('Регистрация временно недоступна. Попробуйте позже.')).toBeOnTheScreen());
+  });
+
+  test('mentions the network only when starting anonymous sign-in fails because of the network', async () => {
+    const storage = createMemoryStorage();
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => ({ kind: 'signedOut' }),
+          startAutonomousSession: async () => {
+            throw new Error('Network request failed');
+          },
+        }}
+        entryState={createAuthEntryState(storage)}
+        scopeRegistry={createDataScopeRegistry(storage)}>
+        <Text>Основной экран</Text>
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByText('Создать аккаунт')).toBeOnTheScreen());
+    await fireEvent.changeText(view.getByLabelText('Имя'), 'Мария Иванова');
+    await fireEvent.changeText(view.getByLabelText('Email'), 'maria@example.com');
+    await fireEvent.changeText(view.getByLabelText('Пароль'), 'P@ssword2026');
+    await fireEvent.changeText(view.getByLabelText('Повторите пароль'), 'P@ssword2026');
+    await fireEvent.press(view.getByLabelText('Принять Пользовательское соглашение и Политику конфиденциальности'));
+    await fireEvent.press(view.getByText('Создать аккаунт'));
+
+    await waitFor(() => expect(view.getByText('Не удалось подготовить регистрацию. Проверьте подключение к интернету и повторите попытку.')).toBeOnTheScreen());
+  });
+
   test('does not create an anonymous identity when registration input is invalid', async () => {
     const storage = createMemoryStorage();
     let anonymousStarts = 0;

@@ -63,6 +63,17 @@ async function clearAccountWorkspaceForScope(scope: LocalDataScope): Promise<voi
   await createDataSource(scope).clearAll();
 }
 
+function registrationPreparationErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (/anonymous.*(?:unavailable|disabled|not enabled)/u.test(message)) {
+    return 'Регистрация временно недоступна. Попробуйте позже.';
+  }
+  if (/(?:network|internet|offline|fetch|connection|timeout)/u.test(message)) {
+    return 'Не удалось подготовить регистрацию. Проверьте подключение к интернету и повторите попытку.';
+  }
+  return 'Не удалось подготовить регистрацию. Попробуйте ещё раз.';
+}
+
 export function useAuthGateNavigation(): AuthGateNavigation | null {
   return useContext(AuthGateNavigationContext);
 }
@@ -261,8 +272,8 @@ export function AuthGate({
       if ((await gateway.restoreSession()).kind === 'signedOut') {
         await gateway.startAutonomousSession();
       }
-    } catch {
-      setRegistrationError('Не удалось начать регистрацию без подключения к интернету.');
+    } catch (error) {
+      setRegistrationError(registrationPreparationErrorMessage(error));
       return;
     }
     const result = await registration.start(input);
