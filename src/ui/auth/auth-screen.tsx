@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
+import { PasswordInput } from '../primitives/password-input';
 
 type AuthMode = 'registration' | 'login';
 
@@ -89,31 +90,31 @@ export function AuthScreen({
               textContentType="emailAddress"
               value={email}
             />
-            <TextInput
+            <PasswordInput
               accessibilityLabel="Пароль"
               autoCapitalize="none"
               autoComplete={isRegistration ? 'new-password' : 'current-password'}
               onChangeText={setPassword}
               placeholder="Пароль"
               placeholderTextColor={designTokens.color.text.tertiary}
-              secureTextEntry
               style={styles.input}
               textContentType={isRegistration ? 'newPassword' : 'password'}
               value={password}
+              visibilityLabel="пароль"
             />
             {isRegistration ? (
               <>
-                <TextInput
+                <PasswordInput
                   accessibilityLabel="Повторите пароль"
                   autoCapitalize="none"
                   autoComplete="new-password"
                   onChangeText={setPasswordConfirmation}
                   placeholder="Повторите пароль"
                   placeholderTextColor={designTokens.color.text.tertiary}
-                  secureTextEntry
                   style={styles.input}
                   textContentType="newPassword"
                   value={passwordConfirmation}
+                  visibilityLabel="повтор пароля"
                 />
                 <Pressable
                   accessibilityLabel="Принять Пользовательское соглашение и Политику конфиденциальности"

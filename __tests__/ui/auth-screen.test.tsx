@@ -27,4 +27,24 @@ describe('AuthScreen', () => {
 
     expect(continueWithoutAccount).toHaveBeenCalledTimes(1);
   });
+
+  test('lets the user reveal and hide each registration password independently', async () => {
+    const view = await render(<AuthScreen onContinueWithoutAccount={jest.fn()} />);
+    const password = view.getByLabelText('Пароль');
+    const passwordConfirmation = view.getByLabelText('Повторите пароль');
+
+    expect(password.props.secureTextEntry).toBe(true);
+    expect(passwordConfirmation.props.secureTextEntry).toBe(true);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Показать пароль' }));
+
+    expect(view.getByLabelText('Пароль').props.secureTextEntry).toBe(false);
+    expect(view.getByLabelText('Повторите пароль').props.secureTextEntry).toBe(true);
+    expect(view.getByRole('button', { name: 'Скрыть пароль' })).toBeOnTheScreen();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Показать повтор пароля' }));
+
+    expect(view.getByLabelText('Повторите пароль').props.secureTextEntry).toBe(false);
+    expect(view.getByRole('button', { name: 'Скрыть повтор пароля' })).toBeOnTheScreen();
+  });
 });

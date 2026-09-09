@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { maskEmail } from '../../domain/account-auth-validation';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
+import { PasswordInput } from '../primitives/password-input';
 
 export interface PasswordRecoveryScreenProps {
   email: string | null;
@@ -46,8 +47,8 @@ export function PasswordRecoveryScreen({
             {infoMessage === null ? null : <Text style={styles.info}>{infoMessage}</Text>}
             {isConfirming ? <>
               <TextInput accessibilityLabel="Код восстановления" autoComplete="one-time-code" keyboardType="number-pad" maxLength={6} onChangeText={(value) => setCode(value.replace(/\D/gu, ''))} placeholder="000000" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} textContentType="oneTimeCode" value={code} />
-              <TextInput accessibilityLabel="Новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPassword} placeholder="Новый пароль" placeholderTextColor={designTokens.color.text.tertiary} secureTextEntry style={styles.input} textContentType="newPassword" value={password} />
-              <TextInput accessibilityLabel="Повторите новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordConfirmation} placeholder="Повторите новый пароль" placeholderTextColor={designTokens.color.text.tertiary} secureTextEntry style={styles.input} textContentType="newPassword" value={passwordConfirmation} />
+              <PasswordInput accessibilityLabel="Новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPassword} placeholder="Новый пароль" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} textContentType="newPassword" value={password} visibilityLabel="новый пароль" />
+              <PasswordInput accessibilityLabel="Повторите новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordConfirmation} placeholder="Повторите новый пароль" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} textContentType="newPassword" value={passwordConfirmation} visibilityLabel="повтор нового пароля" />
               <ActionButton label="Сохранить новый пароль" onPress={() => onConfirm({ email, code, password, passwordConfirmation })} tone="primary" />
               <ActionButton label="Отправить код повторно" onPress={onResend} tone="soft" />
             </> : <>

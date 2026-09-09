@@ -5,6 +5,7 @@ import type { AccountProfileResult, AccountProfileState } from '../../applicatio
 import type { PasswordManagementResult } from '../../application/password-management';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
+import { PasswordInput } from '../primitives/password-input';
 import { SurfaceCard } from '../primitives/surface-card';
 
 interface AccountSettingsCardProps {
@@ -152,7 +153,7 @@ export function AccountSettingsCard({
         }} tone="secondary" />
 
         <Text style={styles.fieldLabel}>Новый email</Text>
-        <TextInput accessibilityLabel="Текущий пароль для смены email" autoComplete="current-password" onChangeText={setCurrentPassword} secureTextEntry style={styles.input} textContentType="password" value={currentPassword} />
+        <PasswordInput accessibilityLabel="Текущий пароль для смены email" autoComplete="current-password" onChangeText={setCurrentPassword} style={styles.input} textContentType="password" value={currentPassword} visibilityLabel="текущий пароль для смены email" />
         <TextInput accessibilityLabel="Новый email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" onChangeText={setNewEmail} style={styles.input} textContentType="emailAddress" value={newEmail} />
         <ActionButton label="Отправить код на новый email" onPress={() => {
           if (onStartEmailChange !== undefined) void onStartEmailChange({ currentPassword, email: newEmail }).then(handleResult).catch(handleActionFailure);
@@ -171,13 +172,13 @@ export function AccountSettingsCard({
       </View> : null}
       {isChangingPassword ? <View style={styles.editor}>
         <Text style={styles.fieldLabel}>Смена пароля</Text>
-        <TextInput accessibilityLabel="Текущий пароль" autoComplete="current-password" onChangeText={setPasswordChangeCurrentPassword} secureTextEntry style={styles.input} textContentType="password" value={passwordChangeCurrentPassword} />
+        <PasswordInput accessibilityLabel="Текущий пароль" autoComplete="current-password" onChangeText={setPasswordChangeCurrentPassword} style={styles.input} textContentType="password" value={passwordChangeCurrentPassword} visibilityLabel="текущий пароль" />
         <ActionButton label={passwordChangeCodeRequested ? 'Отправить новый код' : 'Отправить код для смены пароля'} onPress={() => {
           if (onRequestPasswordChangeCode !== undefined) void onRequestPasswordChangeCode().then(handlePasswordResult).catch(handleActionFailure);
         }} tone="secondary" />
         <TextInput accessibilityLabel="Код для смены пароля" autoComplete="one-time-code" keyboardType="number-pad" maxLength={6} onChangeText={setPasswordChangeCode} style={styles.input} textContentType="oneTimeCode" value={passwordChangeCode} />
-        <TextInput accessibilityLabel="Новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordChangePassword} secureTextEntry style={styles.input} textContentType="newPassword" value={passwordChangePassword} />
-        <TextInput accessibilityLabel="Повторите новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordChangeConfirmation} secureTextEntry style={styles.input} textContentType="newPassword" value={passwordChangeConfirmation} />
+        <PasswordInput accessibilityLabel="Новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordChangePassword} style={styles.input} textContentType="newPassword" value={passwordChangePassword} visibilityLabel="новый пароль" />
+        <PasswordInput accessibilityLabel="Повторите новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordChangeConfirmation} style={styles.input} textContentType="newPassword" value={passwordChangeConfirmation} visibilityLabel="повтор нового пароля" />
         <ActionButton label="Сохранить новый пароль" onPress={() => {
           if (onChangePassword !== undefined) void onChangePassword({
             currentPassword: passwordChangeCurrentPassword,

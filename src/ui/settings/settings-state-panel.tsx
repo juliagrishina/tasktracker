@@ -19,6 +19,7 @@ import type { AccountSyncStatus } from '../../application/app-services-provider'
 import { PlanningValuePicker } from '../backlog/planning-value-picker';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
+import { PasswordInput } from '../primitives/password-input';
 import { StatusPill } from '../primitives/status-pill';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
@@ -236,7 +237,7 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
           {account.kind === 'authenticated' ? <><ActionButton label="Очистить все данные" onPress={() => openAccountOperation('clear_account_data')} tone="secondary" /><ActionButton label="Удалить аккаунт" onPress={() => openAccountOperation('delete_account')} tone="danger" />
           {accountOperation !== null ? <View style={styles.warning}>
             <Text style={styles.warningText}>{accountOperation === 'delete_account' ? 'При удалении аккаунта будут безвозвратно удалены аккаунт, профиль и все связанные данные на всех устройствах.' : 'Вы действительно хотите удалить все данные аккаунта? Сам аккаунт, имя, email и пароль сохранятся.'}</Text>
-            <TextInput accessibilityLabel="Текущий пароль для удаления" secureTextEntry onChangeText={setAccountPassword} value={accountPassword} style={styles.input} />
+            <PasswordInput accessibilityLabel="Текущий пароль для удаления" onChangeText={setAccountPassword} value={accountPassword} style={styles.input} visibilityLabel="текущий пароль для удаления" />
             <ActionButton label="Отправить код подтверждения" onPress={() => { void requestAccountDataCode(); }} tone="secondary" />
             <TextInput accessibilityLabel="Код подтверждения удаления" keyboardType="number-pad" maxLength={6} onChangeText={setAccountCode} value={accountCode} style={styles.input} />
             <View style={styles.buttonRow}><View style={styles.actionWrap}><ActionButton label="Отмена" onPress={() => setAccountOperation(null)} tone="secondary" /></View><View style={styles.actionWrap}><ActionButton disabled={accountPassword === '' || !/^\d{6}$/u.test(accountCode)} label={accountOperation === 'delete_account' ? 'Удалить аккаунт безвозвратно' : 'Удалить все данные'} onPress={() => { void completeAccountOperation(); }} tone="danger" /></View></View>

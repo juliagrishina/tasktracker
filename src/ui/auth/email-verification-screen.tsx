@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { maskEmail } from '../../domain/account-auth-validation';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
+import { PasswordInput } from '../primitives/password-input';
 
 export interface EmailVerificationScreenProps {
   email: string;
@@ -73,29 +74,29 @@ export function EmailVerificationScreen({
             />
             {requiresPassword ? (
               <>
-                <TextInput
+                <PasswordInput
                   accessibilityLabel="Новый пароль"
                   autoCapitalize="none"
                   autoComplete="new-password"
                   onChangeText={setPassword}
                   placeholder="Новый пароль"
                   placeholderTextColor={designTokens.color.text.tertiary}
-                  secureTextEntry
                   style={styles.input}
                   textContentType="newPassword"
                   value={password}
+                  visibilityLabel="новый пароль"
                 />
-                <TextInput
+                <PasswordInput
                   accessibilityLabel="Повторите новый пароль"
                   autoCapitalize="none"
                   autoComplete="new-password"
                   onChangeText={setPasswordConfirmation}
                   placeholder="Повторите новый пароль"
                   placeholderTextColor={designTokens.color.text.tertiary}
-                  secureTextEntry
                   style={styles.input}
                   textContentType="newPassword"
                   value={passwordConfirmation}
+                  visibilityLabel="повтор нового пароля"
                 />
               </>
             ) : null}
