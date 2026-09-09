@@ -141,6 +141,35 @@ describe('Auth session state machine', () => {
     expect(signInAnonymously).toHaveBeenCalledTimes(1);
   });
 
+  test('keeps the Supabase Auth context when starting an autonomous session', async () => {
+    const anonymousSupabaseSession = {
+      expires_at: null,
+      user: {
+        id: 'anonymous-user',
+        is_anonymous: true,
+        email: null,
+        email_confirmed_at: null,
+      },
+    };
+    const auth = {
+      fetch: jest.fn().mockResolvedValue({
+        data: { session: anonymousSupabaseSession },
+        error: null,
+      }),
+      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
+      signInAnonymously: async function () {
+        return this.fetch();
+      },
+    };
+    const gateway = createSupabaseAuthGateway({ auth });
+
+    await expect(gateway.startAutonomousSession()).resolves.toEqual({
+      kind: 'autonomous',
+      userId: 'anonymous-user',
+    });
+    expect(auth.fetch).toHaveBeenCalledTimes(1);
+  });
+
   test('signs in with email and password and returns the confirmed account state', async () => {
     const gateway = createSupabaseAuthGateway({
       auth: {

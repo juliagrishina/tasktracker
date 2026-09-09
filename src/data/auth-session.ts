@@ -87,12 +87,11 @@ export function createSupabaseAuthGateway(
         return { kind: 'autonomous', userId: null };
       }
 
-      const signInAnonymously = client.auth.signInAnonymously;
-      if (signInAnonymously === undefined) {
+      if (client.auth.signInAnonymously === undefined) {
         throw new Error('Anonymous Supabase sign-in is unavailable.');
       }
 
-      const { data, error } = await signInAnonymously();
+      const { data, error } = await client.auth.signInAnonymously();
       if (error !== null) {
         throw error;
       }
