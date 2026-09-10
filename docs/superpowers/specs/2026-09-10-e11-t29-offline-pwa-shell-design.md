@@ -75,7 +75,7 @@ Worker генерируется с `skipWaiting: false` и `clientsClaim: false`
 1. `web:export` создаёт `dist/sw.js` и worker precache manifest содержит shell assets.
 2. Worker registration использует root `/sw.js` и `updateViaCache: 'none'`.
 3. Конфигурация не содержит `runtimeCaching`, `skipWaiting: true` или `clientsClaim: true`.
-4. Export worker и public files не содержат Supabase URL, publishable key, OTP-маршруты, Auth endpoint или injected secret.
+4. Service worker и его precache manifest содержат только URL и ревизии статических файлов; в них нет ответов Supabase/Auth/OTP, access/refresh token, service role, SMTP-данных или иных секретов. Web-бандл может содержать только публичные staging URL и publishable key.
 5. Manifest и иконки по-прежнему попадают в build output.
 
 Общие проверки: focused Jest tests, `npm run typecheck`, `npm run lint`, полный `npm test`, `npm run web:export` и ручной PWA smoke на desktop/iPhone. Ручной smoke выполняется только после E11-T30 на отдельном HTTPS staging URL: service workers не работают как целевая PWA-проверка через Expo Go, localhost или нестабильный tunnel.
