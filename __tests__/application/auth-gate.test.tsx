@@ -8,11 +8,35 @@ import { createAuthEntryState } from '../../src/data/auth-entry-state';
 import { createDataScopeRegistry } from '../../src/data/local-data-scopes';
 
 describe('AuthGate', () => {
+  test('keeps a remembered autonomous session behind Auth in the default product mode', async () => {
+    const storage = createMemoryStorage();
+    const scopes = createDataScopeRegistry(storage);
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => ({ kind: 'autonomous', userId: 'anon-user-17' }),
+          startAutonomousSession: async () => ({ kind: 'autonomous', userId: 'anon-user-17' }),
+        }}
+        entryState={{
+          shouldOpenApp: async () => true,
+          continueWithoutAccount: async () => {},
+        }}
+        scopeRegistry={scopes}>
+        <Text>Основной экран</Text>
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByText('Создать аккаунт')).toBeOnTheScreen());
+    expect(view.queryByText('Основной экран')).toBeNull();
+    await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'autonomous' });
+  });
+
   test('keeps first launch on Auth and opens only the autonomous area after an explicit choice', async () => {
     const storage = createMemoryStorage();
     const scopes = createDataScopeRegistry(storage);
     const view = await render(
       <AuthGate
+        guestAccessEnabled
         authGateway={{
           restoreSession: async () => ({ kind: 'signedOut' }),
           startAutonomousSession: async () => ({ kind: 'autonomous', userId: null }),
@@ -36,6 +60,7 @@ describe('AuthGate', () => {
     const storage = createMemoryStorage();
     const view = await render(
       <AuthGate
+        guestAccessEnabled
         authGateway={{
           restoreSession: async () => ({ kind: 'signedOut' }),
           startAutonomousSession: async () => {
@@ -321,6 +346,7 @@ describe('AuthGate', () => {
     await waitFor(() => expect(view.getByText('Подтвердите email')).toBeOnTheScreen());
     expect(view.getByLabelText('Новый пароль')).toBeOnTheScreen();
     expect(view.getByLabelText('Повторите новый пароль')).toBeOnTheScreen();
+    expect(view.queryByLabelText('Продолжить локально')).toBeNull();
   });
 
   test('keeps the pending registration local-only when the user continues without email confirmation', async () => {
@@ -345,6 +371,7 @@ describe('AuthGate', () => {
     });
     const view = await render(
       <AuthGate
+        guestAccessEnabled
         authGateway={{
           restoreSession: async () => ({ kind: 'pendingVerification', userId: 'anon-user-17', email: 'maria@example.com' }),
           startAutonomousSession: async () => ({ kind: 'autonomous', userId: 'anon-user-17' }),

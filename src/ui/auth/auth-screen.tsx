@@ -20,7 +20,8 @@ type AuthMode = 'registration' | 'login';
 
 export interface AuthScreenProps {
   initialMode?: AuthMode;
-  onContinueWithoutAccount: () => void;
+  allowGuestAccess?: boolean;
+  onContinueWithoutAccount?: () => void;
   onForgotPassword?: () => void;
   onSignIn?: (input: { email: string; password: string }) => void;
   onSignUp?: (input: { displayName: string; email: string; password: string; passwordConfirmation: string; termsAccepted: boolean }) => void;
@@ -30,6 +31,7 @@ export interface AuthScreenProps {
 
 export function AuthScreen({
   initialMode = 'registration',
+  allowGuestAccess = false,
   onContinueWithoutAccount,
   onForgotPassword = () => {},
   onSignIn = () => {},
@@ -164,9 +166,13 @@ export function AuthScreen({
               </>
             )}
 
-            <View style={styles.separator} />
-            <ActionButton label="Продолжить без аккаунта" onPress={onContinueWithoutAccount} tone="soft" />
-            <Text style={styles.offlineHint}>Планы останутся на этом устройстве.</Text>
+            {allowGuestAccess && onContinueWithoutAccount !== undefined ? (
+              <>
+                <View style={styles.separator} />
+                <ActionButton label="Продолжить без аккаунта" onPress={onContinueWithoutAccount} tone="soft" />
+                <Text style={styles.offlineHint}>Планы останутся на этом устройстве.</Text>
+              </>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

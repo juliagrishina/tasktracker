@@ -8,6 +8,7 @@ import { ActionButton } from '../primitives/action-button';
 import { PasswordInput } from '../primitives/password-input';
 
 export interface EmailVerificationScreenProps {
+  allowGuestAccess?: boolean;
   email: string;
   resendAvailableAtMs: number;
   requiresPassword: boolean;
@@ -16,10 +17,11 @@ export interface EmailVerificationScreenProps {
   onConfirm: (input: { code: string; password: string; passwordConfirmation: string }) => void;
   onResend: () => void;
   onChangeEmail: () => void;
-  onContinueLocally: () => void;
+  onContinueLocally?: () => void;
 }
 
 export function EmailVerificationScreen({
+  allowGuestAccess = false,
   email,
   resendAvailableAtMs,
   requiresPassword,
@@ -114,9 +116,11 @@ export function EmailVerificationScreen({
             <Pressable accessibilityLabel="Изменить email" onPress={onChangeEmail} style={styles.textAction}>
               <Text style={styles.textActionLabel}>Изменить email</Text>
             </Pressable>
-            <Pressable accessibilityLabel="Продолжить локально" onPress={onContinueLocally} style={styles.textAction}>
-              <Text style={styles.textActionLabel}>Продолжить локально</Text>
-            </Pressable>
+            {allowGuestAccess && onContinueLocally !== undefined ? (
+              <Pressable accessibilityLabel="Продолжить локально" onPress={onContinueLocally} style={styles.textAction}>
+                <Text style={styles.textActionLabel}>Продолжить локально</Text>
+              </Pressable>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -19,9 +19,15 @@ describe('AuthScreen', () => {
     expect(view.getByLabelText('Забыли пароль?')).toBeOnTheScreen();
   });
 
-  test('allows an offline start without an account', async () => {
+  test('does not expose the guest entry action in the default product mode', async () => {
+    const view = await render(<AuthScreen onContinueWithoutAccount={jest.fn()} />);
+
+    expect(view.queryByLabelText('Продолжить без аккаунта')).toBeNull();
+  });
+
+  test('keeps the guest entry implementation available behind an explicit enablement', async () => {
     const continueWithoutAccount = jest.fn();
-    const view = await render(<AuthScreen onContinueWithoutAccount={continueWithoutAccount} />);
+    const view = await render(<AuthScreen allowGuestAccess onContinueWithoutAccount={continueWithoutAccount} />);
 
     await fireEvent.press(view.getByLabelText('Продолжить без аккаунта'));
 

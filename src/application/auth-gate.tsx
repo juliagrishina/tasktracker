@@ -29,6 +29,7 @@ import {
   createWorkspaceTransferService,
   type WorkspaceTransferService,
 } from './workspace-import';
+import { productAccessPolicy } from './product-access-policy';
 
 interface AutonomousAuthGateway extends AuthGateway {
   startAutonomousSession(): Promise<AuthSessionState>;
@@ -46,6 +47,7 @@ interface AuthGateProps {
   passwordManagement?: PasswordManagement;
   workspaceTransfer?: WorkspaceTransferService;
   clearAccountWorkspace?: (scope: LocalDataScope) => Promise<void>;
+  guestAccessEnabled?: boolean;
 }
 
 type GateState = 'loading' | 'auth' | 'verification' | 'passwordRecovery' | 'workspaceTransfer' | 'app';
@@ -93,6 +95,7 @@ export function AuthGate({
   passwordManagement = defaultPasswordManagement,
   workspaceTransfer = createWorkspaceTransferService({ sourceForScope: createDataSource }),
   clearAccountWorkspace = clearAccountWorkspaceForScope,
+  guestAccessEnabled = productAccessPolicy.guestAccessEnabled,
 }: AuthGateProps) {
   const [gateState, setGateState] = useState<GateState>('loading');
   const [authScreenMode, setAuthScreenMode] = useState<AuthScreenMode>('registration');
@@ -118,7 +121,9 @@ export function AuthGate({
     void (async () => {
       try {
         const session = await gateway.restoreSession();
-        const shouldOpenApp = await entryState.shouldOpenApp(session);
+        const shouldOpenApp = session.kind === 'autonomous' && !guestAccessEnabled
+          ? false
+          : await entryState.shouldOpenApp(session);
         if (isMounted) {
           if (shouldOpenApp) {
             if (session.kind === 'authenticated') {
@@ -152,7 +157,7 @@ export function AuthGate({
     return () => {
       isMounted = false;
     };
-  }, [entryState, gateway, registration]);
+  }, [entryState, gateway, guestAccessEnabled, registration, scopeRegistry]);
 
   useEffect(() => {
     if (activeScope.kind !== 'account' || gateway.subscribe === undefined) return;
@@ -176,6 +181,7 @@ export function AuthGate({
   }, [activeScope, clearAccountWorkspace, gateway, scopeRegistry]);
 
   const continueWithoutAccount = async () => {
+    if (!guestAccessEnabled) return;
     try {
       await gateway.startAutonomousSession();
     } catch {
@@ -328,6 +334,7 @@ export function AuthGate({
   };
 
   const continueLocallyWhileVerificationIsPending = async () => {
+    if (!guestAccessEnabled) return;
     await scopeRegistry.openAutonomousScope();
     await entryState.continueWithoutAccount();
     setGateState('app');
@@ -383,10 +390,11 @@ export function AuthGate({
   if (gateState === 'auth') {
     return (
       <AuthScreen
+        allowGuestAccess={guestAccessEnabled}
         initialMode={authScreenMode}
-        onContinueWithoutAccount={() => {
+        onContinueWithoutAccount={guestAccessEnabled ? () => {
           void continueWithoutAccount();
-        }}
+        } : undefined}
         onSignUp={(input) => {
           void startRegistration(input);
         }}
@@ -443,6 +451,7 @@ export function AuthGate({
   if (gateState === 'verification' && pendingEmail !== null) {
     return (
       <EmailVerificationScreen
+        allowGuestAccess={guestAccessEnabled}
         email={pendingEmail}
         errorMessage={verificationError}
         infoMessage={verificationInfo}
@@ -457,9 +466,9 @@ export function AuthGate({
         onResend={() => {
           void resendRegistrationCode();
         }}
-        onContinueLocally={() => {
+        onContinueLocally={guestAccessEnabled ? () => {
           void continueLocallyWhileVerificationIsPending();
-        }}
+        } : undefined}
         requiresPassword={pendingPassword === null}
         resendAvailableAtMs={resendAvailableAtMs}
       />
