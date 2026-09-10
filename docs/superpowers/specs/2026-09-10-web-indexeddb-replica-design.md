@@ -8,7 +8,9 @@
 
 В scope входят только данные web-реплики `AppDataSource`:
 
-- автономная область и каждая известная account area;
+- каждая известная account area, а также ранее сохранённая autonomous область как
+  изолированный legacy snapshot для миграции или очистки, не как пользовательский
+  режим;
 - настройки и бизнес-сущности;
 - sync state, cursor, entity versions, outbox и conflicts.
 
@@ -44,7 +46,7 @@
 
 Persistent wrapper сохраняет snapshot только после успешного завершения бизнес-операции. Для одиночной mutation и для `transaction()` он снимает snapshot до изменения. Если IndexedDB не подтверждает запись, wrapper восстанавливает этот снимок в памяти и отклоняет операцию. Это сохраняет согласованность бизнес-данных и outbox.
 
-Области изолированы ключом `databaseNameForScope`; запись Account A не читает, не обновляет и не заменяет запись Account B или autonomous area.
+Области изолированы ключом `databaseNameForScope`; запись Account A не читает, не обновляет и не заменяет запись Account B или legacy autonomous area. После E11-T27 автономный snapshot не даёт пользовательского входа в рабочую область и остаётся только безопасным источником миграции/очистки.
 
 В средах без IndexedDB (SSR и Jest без injected fake) сохраняется текущий in-memory fallback. Он не объявляется persistent storage и не запускает legacy migration.
 
@@ -58,10 +60,10 @@ Persistent wrapper сохраняет snapshot только после успе�
 
 Автоматически проверяются:
 
-1. Миграция валидного автономного и account snapshot со всеми sync-полями.
+1. Миграция валидного legacy autonomous и account snapshot со всеми sync-полями.
 2. Неполный совместимый snapshot: defaults применяются без потери существующих строк.
 3. Повреждённый JSON и сбой write/readback: legacy значение остаётся читаемым и не помечается мигрированным.
-4. Изоляция autonomous, Account A и Account B после повторного создания data source.
+4. Изоляция legacy autonomous, Account A и Account B после повторного создания data source.
 5. Create/edit и enqueue outbox → reload → offline reopen → последующая синхронизация; snapshot не теряет pending mutation.
 6. Ошибка IndexedDB persistence откатывает и business mutation, и outbox mutation.
 
