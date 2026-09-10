@@ -18,6 +18,11 @@ import {
 } from '../domain/invariants';
 
 import type { AppDataSource } from './contracts';
+import {
+  createIndexedDbBrowserSnapshotStore,
+  type BrowserSnapshotStore,
+  type IndexedDbFactory,
+} from './browser-indexeddb-storage';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
 import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
 import { migrateLegacyEntityIds } from './legacy-id-migration';
@@ -34,7 +39,7 @@ export interface BrowserScopeStorage {
   setItem(key: string, value: string): void;
 }
 
-interface BrowserDataSnapshot {
+export interface BrowserDataSnapshot {
   settings: AppSettings | null;
   dailyEnergyEntries: DailyEnergyEntry[];
   projects: Project[];
@@ -562,7 +567,7 @@ class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource
     };
   }
 
-  private restoreSnapshot(snapshot: BrowserDataSnapshot): void {
+  restoreSnapshot(snapshot: BrowserDataSnapshot): void {
     const migrated = migrateLegacyEntityIds(snapshot);
     this.settings = migrated.settings;
     replaceMap(this.dailyEnergyEntries, new Map(migrated.dailyEnergyEntries.map((entry) => [entry.recordedOn, entry])));
@@ -661,32 +666,98 @@ export function createDataSource(scope: LocalDataScope = { kind: 'autonomous' })
   }
 
   const browserStorage = getBrowserStorage();
+  const indexedDb = getBrowserIndexedDb();
   const source = browserStorage === null
     ? createInMemoryDataSource(scope)
-    : createPersistentBrowserDataSource(scope, browserStorage);
+    : indexedDb === null
+      ? createLegacyPersistentBrowserDataSource(scope, browserStorage)
+      : createPersistentBrowserDataSource(scope, {
+        legacyStorage: browserStorage,
+        snapshotStore: createIndexedDbBrowserSnapshotStore<BrowserDataSnapshot>(indexedDb),
+      });
   scopedDataSources.set(scopeKey, source);
   return source;
 }
 
+export interface BrowserPersistentDataSourceOptions {
+  legacyStorage: BrowserScopeStorage;
+  snapshotStore: BrowserSnapshotStore<BrowserDataSnapshot>;
+}
+
 export function createPersistentBrowserDataSource(
+  scope: LocalDataScope,
+  options: BrowserPersistentDataSourceOptions,
+): AppDataSource {
+  const storageKey = `tasktracker.browser-data.${databaseNameForScope(scope)}.v1`;
+  const source = new BrowserInMemoryDataSource();
+  let migratedFromLegacy = false;
+  const ready = hydrateFromIndexedDbOrLegacy(source, databaseNameForScope(scope), storageKey, options)
+    .then((didMigrateFromLegacy) => { migratedFromLegacy = didMigrateFromLegacy; });
+  const persisted = createPersistedDataSource(source, ready, async () => {
+    await options.snapshotStore.write(databaseNameForScope(scope), {
+      schemaVersion: 1,
+      migratedFromLegacy,
+      snapshot: source.exportSnapshot(),
+    });
+  });
+  return createSyncTrackingDataSource(persisted, scope);
+}
+
+function createLegacyPersistentBrowserDataSource(
   scope: LocalDataScope,
   storage: BrowserScopeStorage,
 ): AppDataSource {
   const storageKey = `tasktracker.browser-data.${databaseNameForScope(scope)}.v1`;
   const source = new BrowserInMemoryDataSource(parseSnapshot(storage.getItem(storageKey)));
-  storage.setItem(storageKey, JSON.stringify(source.exportSnapshot()));
-  const persisted = createPersistedDataSource(source, () => {
+  const persisted = createPersistedDataSource(source, Promise.resolve(), async () => {
     storage.setItem(storageKey, JSON.stringify(source.exportSnapshot()));
   });
   return createSyncTrackingDataSource(persisted, scope);
 }
 
+async function hydrateFromIndexedDbOrLegacy(
+  source: BrowserInMemoryDataSource,
+  scopeKey: string,
+  storageKey: string,
+  options: BrowserPersistentDataSourceOptions,
+): Promise<boolean> {
+  try {
+    const stored = await options.snapshotStore.read(scopeKey);
+    if (stored !== null) {
+      const snapshot = stored.schemaVersion === 1 ? parseSnapshotValue(stored.snapshot) : undefined;
+      if (snapshot !== undefined) source.restoreSnapshot(snapshot);
+      return snapshot === undefined ? false : stored.migratedFromLegacy;
+    }
+
+    const legacySnapshot = parseSnapshot(options.legacyStorage.getItem(storageKey));
+    if (legacySnapshot === undefined) return false;
+
+    await options.snapshotStore.write(scopeKey, {
+      schemaVersion: 1,
+      migratedFromLegacy: true,
+      snapshot: legacySnapshot,
+    });
+    const readBack = await options.snapshotStore.read(scopeKey);
+    const migratedSnapshot = readBack?.schemaVersion === 1
+      ? parseSnapshotValue(readBack.snapshot)
+      : undefined;
+    if (migratedSnapshot === undefined) return false;
+    source.restoreSnapshot(migratedSnapshot);
+    return true;
+  } catch {
+    // Legacy storage is intentionally left untouched: it is the recovery copy.
+    return false;
+  }
+}
+
 function createPersistedDataSource(
   source: BrowserInMemoryDataSource,
-  persist: () => void,
+  ready: Promise<void>,
+  persist: () => Promise<void>,
 ): AppDataSource {
   let transactionDepth = 0;
   let changedDuringTransaction = false;
+  let transactionSnapshot: BrowserDataSnapshot | null = null;
 
   return new Proxy(source, {
     get(target, property, receiver) {
@@ -697,31 +768,47 @@ function createPersistedDataSource(
 
       if (property === 'transaction') {
         return async (operation: () => Promise<unknown>) => {
+          await ready;
+          const isOuterTransaction = transactionDepth === 0;
+          if (isOuterTransaction) transactionSnapshot = target.exportSnapshot();
           transactionDepth += 1;
-          let completed = false;
           try {
             const result = await value.call(target, operation);
-            completed = true;
+            if (isOuterTransaction && changedDuringTransaction) {
+              await persist();
+            }
             return result;
+          } catch (error) {
+            if (isOuterTransaction && transactionSnapshot !== null) {
+              target.restoreSnapshot(transactionSnapshot);
+            }
+            throw error;
           } finally {
             transactionDepth -= 1;
-            if (transactionDepth === 0) {
-              if (completed && changedDuringTransaction) {
-                persist();
-              }
+            if (isOuterTransaction) {
               changedDuringTransaction = false;
+              transactionSnapshot = null;
             }
           }
         };
       }
 
       return async (...args: unknown[]) => {
+        await ready;
+        const snapshot = isMutation(property) && transactionDepth === 0
+          ? target.exportSnapshot()
+          : null;
         const result = await value.apply(target, args);
         if (isMutation(property)) {
           if (transactionDepth > 0) {
             changedDuringTransaction = true;
           } else {
-            persist();
+            try {
+              await persist();
+            } catch (error) {
+              if (snapshot !== null) target.restoreSnapshot(snapshot);
+              throw error;
+            }
           }
         }
         return result;
@@ -731,7 +818,7 @@ function createPersistedDataSource(
 }
 
 function isMutation(property: PropertyKey): boolean {
-  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll' || property === 'enqueueSyncMutation' || property === 'recordSyncConflicts' || property === 'removeSyncConflict' || property === 'recordSyncSuccess');
+  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll' || property === 'enqueueSyncMutation' || property === 'acknowledgeSyncMutations' || property === 'recordSyncConflicts' || property === 'removeSyncConflict' || property === 'recordSyncSuccess' || property === 'applyRemoteSyncChanges' || property === 'resetForFullResync');
 }
 
 function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
@@ -740,35 +827,42 @@ function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
   }
 
   try {
-    const snapshot = JSON.parse(value) as Partial<BrowserDataSnapshot>;
-    if (!Array.isArray(snapshot.projects) || !Array.isArray(snapshot.taskItems)) {
-      return undefined;
-    }
-
-    return {
-      settings: snapshot.settings ?? null,
-      dailyEnergyEntries: snapshot.dailyEnergyEntries ?? [],
-      projects: snapshot.projects,
-      taskItems: snapshot.taskItems,
-      reminders: snapshot.reminders ?? [],
-      scheduleBlocks: snapshot.scheduleBlocks ?? [],
-      recurrenceSeries: snapshot.recurrenceSeries ?? [],
-      recurrenceOccurrences: snapshot.recurrenceOccurrences ?? [],
-      recurrenceRevisions: snapshot.recurrenceRevisions ?? [],
-      transferHistories: snapshot.transferHistories ?? [],
-      syncState: snapshot.syncState ?? null,
-      syncCursor: snapshot.syncCursor ?? null,
-      syncEntityVersions: Array.isArray(snapshot.syncEntityVersions) ? snapshot.syncEntityVersions : [],
-      syncOutbox: Array.isArray(snapshot.syncOutbox) ? snapshot.syncOutbox : [],
-      syncConflicts: Array.isArray(snapshot.syncConflicts) ? snapshot.syncConflicts : [],
-    };
+    return parseSnapshotValue(JSON.parse(value));
   } catch {
     return undefined;
   }
 }
 
+function parseSnapshotValue(value: unknown): BrowserDataSnapshot | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const snapshot = value as Partial<BrowserDataSnapshot>;
+  if (!Array.isArray(snapshot.projects) || !Array.isArray(snapshot.taskItems)) return undefined;
+
+  return {
+    settings: snapshot.settings ?? null,
+    dailyEnergyEntries: Array.isArray(snapshot.dailyEnergyEntries) ? snapshot.dailyEnergyEntries : [],
+    projects: snapshot.projects,
+    taskItems: snapshot.taskItems,
+    reminders: Array.isArray(snapshot.reminders) ? snapshot.reminders : [],
+    scheduleBlocks: Array.isArray(snapshot.scheduleBlocks) ? snapshot.scheduleBlocks : [],
+    recurrenceSeries: Array.isArray(snapshot.recurrenceSeries) ? snapshot.recurrenceSeries : [],
+    recurrenceOccurrences: Array.isArray(snapshot.recurrenceOccurrences) ? snapshot.recurrenceOccurrences : [],
+    recurrenceRevisions: Array.isArray(snapshot.recurrenceRevisions) ? snapshot.recurrenceRevisions : [],
+    transferHistories: Array.isArray(snapshot.transferHistories) ? snapshot.transferHistories : [],
+    syncState: snapshot.syncState ?? null,
+    syncCursor: snapshot.syncCursor ?? null,
+    syncEntityVersions: Array.isArray(snapshot.syncEntityVersions) ? snapshot.syncEntityVersions : [],
+    syncOutbox: Array.isArray(snapshot.syncOutbox) ? snapshot.syncOutbox : [],
+    syncConflicts: Array.isArray(snapshot.syncConflicts) ? snapshot.syncConflicts : [],
+  };
+}
+
 function getBrowserStorage(): BrowserScopeStorage | null {
   return (globalThis as { localStorage?: BrowserScopeStorage }).localStorage ?? null;
+}
+
+function getBrowserIndexedDb(): IndexedDbFactory | null {
+  return (globalThis as { indexedDB?: IndexedDbFactory }).indexedDB ?? null;
 }
 
 function pickSharedSettings(payload: Record<string, unknown>): Partial<AppSettings> {

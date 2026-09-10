@@ -1,13 +1,31 @@
 import {
   createDataSource,
   createPersistentBrowserDataSource,
+  type BrowserDataSnapshot,
+  type BrowserScopeStorage,
 } from '../../src/data/data-source.web';
+import type { BrowserSnapshotRecord, BrowserSnapshotStore } from '../../src/data/browser-indexeddb-storage';
 import type { Project } from '../../src/domain/entities';
 import { isUuid } from '../../src/domain/uuid';
 
 interface SyncStatusSource {
   getLastSyncSuccessAt(): Promise<string | null>;
   recordSyncSuccess(at: string): Promise<void>;
+}
+
+function createSnapshotStore(): BrowserSnapshotStore<BrowserDataSnapshot> {
+  const snapshots = new Map<string, BrowserSnapshotRecord<BrowserDataSnapshot>>();
+  return {
+    read: async (scopeKey) => snapshots.get(scopeKey) ?? null,
+    write: async (scopeKey, record) => { snapshots.set(scopeKey, record); },
+  };
+}
+
+function persistentOptions(
+  storage: BrowserScopeStorage,
+  snapshotStore: BrowserSnapshotStore<BrowserDataSnapshot>,
+) {
+  return { legacyStorage: storage, snapshotStore };
 }
 
 const project: Project = {
@@ -40,19 +58,20 @@ describe('web scoped data sources', () => {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),
     };
+    const snapshotStore = createSnapshotStore();
     const autonomousSource = createPersistentBrowserDataSource(
       { kind: 'autonomous' },
-      storage,
+      persistentOptions(storage, snapshotStore),
     );
     await autonomousSource.saveProject({ ...project, id: 'persisted-autonomous-project' });
 
     const reopenedAutonomousSource = createPersistentBrowserDataSource(
       { kind: 'autonomous' },
-      storage,
+      persistentOptions(storage, snapshotStore),
     );
     const accountSource = createPersistentBrowserDataSource(
       { kind: 'account', accountId: 'account-b' },
-      storage,
+      persistentOptions(storage, snapshotStore),
     );
 
     const reopenedProjects = await reopenedAutonomousSource.listProjects();
@@ -65,12 +84,13 @@ describe('web scoped data sources', () => {
   test('persists the last successful account synchronization time', async () => {
     const values = new Map<string, string>();
     const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) };
+    const snapshotStore = createSnapshotStore();
     const scope = { kind: 'account' as const, accountId: 'account-sync-status' };
-    const source = createPersistentBrowserDataSource(scope, storage) as unknown as SyncStatusSource;
+    const source = createPersistentBrowserDataSource(scope, persistentOptions(storage, snapshotStore)) as unknown as SyncStatusSource;
 
     await source.recordSyncSuccess('2026-09-04T10:00:00.000Z');
 
-    const reopened = createPersistentBrowserDataSource(scope, storage) as unknown as SyncStatusSource;
+    const reopened = createPersistentBrowserDataSource(scope, persistentOptions(storage, snapshotStore)) as unknown as SyncStatusSource;
     await expect(reopened.getLastSyncSuccessAt()).resolves.toBe('2026-09-04T10:00:00.000Z');
   });
 });
