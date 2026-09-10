@@ -7,7 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "web:export": "expo export --platform web",
+    "web:export": "expo export --platform web && node scripts/generate-pwa-service-worker.cjs",
     "lint": "eslint src __tests__ jest.setup.ts eslint.config.js",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand"
@@ -51,7 +51,8 @@
     "jest-expo": "~57.0.5",
     "react-test-renderer": "19.2.3",
     "test-renderer": "1.1.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "workbox-build": "^7.4.1"
   },
   "private": true
 }

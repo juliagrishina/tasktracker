@@ -30,7 +30,7 @@
 `npm run web:export` остаётся единой командой production export, но после Expo export запускает локальный script генерации worker. Script:
 
 1. проверяет, что `dist` существует после успешного Expo export;
-2. генерирует `dist/sw.js` и вспомогательные Workbox assets только из файлов `dist`;
+2. генерирует один self-contained `dist/sw.js` только из файлов `dist`; Workbox runtime встроен, чтобы Windows-пути с кириллицей не создавали внешние импорты;
 3. precache’ит HTML, JavaScript, CSS, шрифты, изображения, manifest и favicon;
 4. исключает прежний `sw.js`, Workbox runtime files и source maps из input manifest;
 5. не задаёт `runtimeCaching`, navigation fallback или network interception.
