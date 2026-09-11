@@ -93,5 +93,5 @@ runVerification({ envFile, distDirectory, inspectDist }) // => undefined
 
 ### Task 4: External operations gate and final scope review
 
-- [ ] Run `git status --short --branch`, `git log --oneline -4` and inspect the full T30 diff. Confirm no EAS project was linked, no EAS variable changed, no deployment was published and no Supabase redirect changed during repository implementation.
+- [x] Run `git status --short --branch`, `git log --oneline -4` and inspect the full T30 diff. Confirm no EAS project was linked, no EAS variable changed, no deployment was published and no Supabase redirect changed during repository implementation.
 - [ ] Report the final SHA, checks and untouched external actions. Ask separately for permission before each external action: EAS link/first deployment; EAS preview variables; staging Supabase Redirect URL; staging browser/iPhone PWA smoke.
