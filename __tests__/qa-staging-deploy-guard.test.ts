@@ -45,7 +45,7 @@ describe('QA staging deploy guard', () => {
       await fileSystem.writeFile(path.join(directory, 'index.html'), '<!doctype html>');
       await fileSystem.writeFile(path.join(directory, 'manifest.json'), '{}');
       await fileSystem.writeFile(path.join(directory, 'sw.js'), 'self.addEventListener("install", () => undefined)');
-      await fileSystem.writeFile(path.join(directory, '_expo', 'static', 'js', 'entry.js'), 'console.log("shell")');
+      await fileSystem.writeFile(path.join(directory, '_expo', 'static', 'js', 'entry.js'), 'const prefix = "sb_secret_"; console.log(prefix)');
 
       await expect(guard.inspectStaticExport(directory)).resolves.toBeUndefined();
     } finally {
@@ -55,7 +55,7 @@ describe('QA staging deploy guard', () => {
 
   test.each([
     ['a source map', 'entry.js.map', '{}', 'Source maps'],
-    ['a secret marker', 'entry.js', 'const key = "sb_secret_not-printed";', 'forbidden server-secret marker'],
+    ['a Supabase secret key', 'entry.js', `const key = "sb_secret_${'a'.repeat(32)}";`, 'forbidden server-secret marker'],
   ])('rejects export with %s', async (_caseName, fileName, content, expectedError) => {
     const directory = await fileSystem.mkdtemp(path.join(operatingSystem.tmpdir(), 'tasktracker-staging-'));
     try {

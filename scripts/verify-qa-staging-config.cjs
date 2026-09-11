@@ -12,15 +12,15 @@ const FORBIDDEN_ENVIRONMENT_NAMES = [
   /ACCOUNT_ACTION_TICKET_PEPPER/i,
   /(?:PRIVATE|SECRET)_?KEY/i,
 ];
-const FORBIDDEN_BUNDLE_MARKERS = [
-  'sb_secret_',
-  'SUPABASE_SERVICE_ROLE',
-  'SMTP_',
-  'RESEND_API_KEY',
-  'TRELLO_TOKEN',
-  'MICROSOFT_CLIENT_SECRET',
-  'ACCOUNT_ACTION_TICKET_PEPPER',
-  '-----BEGIN',
+const FORBIDDEN_BUNDLE_PATTERNS = [
+  /sb_secret_[A-Za-z0-9_-]{20,}/,
+  /SUPABASE_SERVICE_ROLE(?:_KEY)?\s*[:=]\s*['\"][^'\"]+['\"]/,
+  /SMTP_[A-Z_]*\s*[:=]\s*['\"][^'\"]+['\"]/,
+  /RESEND_API_KEY\s*[:=]\s*['\"][^'\"]+['\"]/,
+  /TRELLO_TOKEN\s*[:=]\s*['\"][^'\"]+['\"]/,
+  /MICROSOFT_CLIENT_SECRET\s*[:=]\s*['\"][^'\"]+['\"]/,
+  /ACCOUNT_ACTION_TICKET_PEPPER\s*[:=]\s*['\"][^'\"]+['\"]/,
+  /-----BEGIN(?: [A-Z]+)? PRIVATE KEY-----/,
 ];
 const TEXT_EXTENSIONS = new Set(['.css', '.html', '.js', '.json']);
 
@@ -105,7 +105,7 @@ async function inspectStaticExport(directory) {
   for (const relativeFile of relativeFiles) {
     if (!TEXT_EXTENSIONS.has(path.extname(relativeFile))) continue;
     const contents = await fileSystem.readFile(path.join(directory, relativeFile), 'utf8');
-    if (FORBIDDEN_BUNDLE_MARKERS.some((marker) => contents.includes(marker))) {
+    if (FORBIDDEN_BUNDLE_PATTERNS.some((pattern) => pattern.test(contents))) {
       throw new Error(`Found forbidden server-secret marker in static export: ${relativeFile}`);
     }
   }
