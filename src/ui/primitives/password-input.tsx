@@ -29,6 +29,7 @@ export function PasswordInput({
       <TextInput
         {...inputProps}
         accessibilityLabel={accessibilityLabel}
+        key={isVisible ? 'visible' : 'hidden'}
         secureTextEntry={!isVisible}
         style={[style, styles.input]}
       />

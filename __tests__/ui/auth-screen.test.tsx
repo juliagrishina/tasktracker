@@ -53,4 +53,17 @@ describe('AuthScreen', () => {
     expect(view.getByLabelText('Повторите пароль').props.secureTextEntry).toBe(false);
     expect(view.getByRole('button', { name: 'Скрыть повтор пароля' })).toBeOnTheScreen();
   });
+
+  test('recreates a password input after visibility changes while preserving its value', async () => {
+    const view = await render(<AuthScreen onContinueWithoutAccount={jest.fn()} />);
+    const passwordBeforeToggle = view.getByLabelText('Пароль');
+
+    await fireEvent.changeText(passwordBeforeToggle, 'Test1!Visible');
+    await fireEvent.press(view.getByRole('button', { name: 'Показать пароль' }));
+
+    const passwordAfterToggle = view.getByLabelText('Пароль');
+    expect(passwordAfterToggle).not.toBe(passwordBeforeToggle);
+    expect(passwordAfterToggle.props.value).toBe('Test1!Visible');
+    expect(passwordAfterToggle.props.secureTextEntry).toBe(false);
+  });
 });

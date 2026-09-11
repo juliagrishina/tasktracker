@@ -99,6 +99,52 @@ describe('account registration', () => {
       invalidated: false,
     });
   });
+
+  test('explains when an email provider rate limit prevents sending the initial code', async () => {
+    const gateway = new RecordingRegistrationGateway();
+    gateway.linkError = Object.assign(new Error('Email rate limit exceeded'), { status: 429 });
+    const registration = createAccountRegistration({
+      gateway,
+      store: createMemoryPendingRegistrationStore(),
+      now: () => 1_000,
+    });
+
+    await expect(
+      registration.start({
+        displayName: 'Мария Иванова',
+        email: 'maria@example.com',
+        password: 'P@ssword2026',
+        passwordConfirmation: 'P@ssword2026',
+        termsAccepted: true,
+      }),
+    ).resolves.toEqual({
+      kind: 'requestFailed',
+      message: 'Слишком много писем было отправлено. Попробуйте позже.',
+    });
+  });
+
+  test('explains when an email provider rate limit prevents resending a code', async () => {
+    const gateway = new RecordingRegistrationGateway();
+    gateway.resendError = Object.assign(new Error('Too many requests'), { status: 429 });
+    const registration = createAccountRegistration({
+      gateway,
+      store: createMemoryPendingRegistrationStore({
+        displayName: 'Мария Иванова',
+        email: 'maria@example.com',
+        issuedAtMs: 1_000,
+        resendAvailableAtMs: 61_000,
+        failedAttempts: 0,
+        invalidated: false,
+        userId: 'anon-user-17',
+      }),
+      now: () => 61_000,
+    });
+
+    await expect(registration.resend()).resolves.toEqual({
+      kind: 'requestFailed',
+      message: 'Слишком много писем было отправлено. Попробуйте позже.',
+    });
+  });
 });
 
 class RecordingRegistrationGateway implements AccountRegistrationGateway {
@@ -106,8 +152,13 @@ class RecordingRegistrationGateway implements AccountRegistrationGateway {
   passwordsSet: string[] = [];
   accountSetups: Array<{ userId: string; displayName: string }> = [];
   rejectVerification = false;
+  linkError: Error | null = null;
+  resendError: Error | null = null;
 
   async linkEmailIdentity(input: { displayName: string; email: string }): Promise<{ userId: string }> {
+    if (this.linkError !== null) {
+      throw this.linkError;
+    }
     this.linkedIdentity = input;
     return { userId: 'anon-user-17' };
   }
@@ -126,5 +177,9 @@ class RecordingRegistrationGateway implements AccountRegistrationGateway {
     this.accountSetups.push(input);
   }
 
-  async resendEmailCode(): Promise<void> {}
+  async resendEmailCode(): Promise<void> {
+    if (this.resendError !== null) {
+      throw this.resendError;
+    }
+  }
 }

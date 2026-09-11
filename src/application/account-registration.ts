@@ -102,8 +102,8 @@ export function createAccountRegistration({
           invalidated: false,
         });
         return { kind: 'pending', userId, email };
-      } catch {
-        return { kind: 'requestFailed', message: 'Не удалось отправить код. Попробуйте ещё раз.' };
+      } catch (error) {
+        return { kind: 'requestFailed', message: emailRequestFailureMessage(error) };
       }
     },
     confirm: async ({ code, password }) => {
@@ -165,8 +165,8 @@ export function createAccountRegistration({
           invalidated: false,
         });
         return { kind: 'resent', email: pending.email };
-      } catch {
-        return { kind: 'requestFailed', message: 'Не удалось отправить новый код. Попробуйте ещё раз.' };
+      } catch (error) {
+        return { kind: 'requestFailed', message: emailRequestFailureMessage(error) };
       }
     },
     getPending: () => store.load(),
@@ -222,4 +222,23 @@ function passwordErrorMessage(requirements: readonly string[]): string {
     specialCharacter: 'специальный символ',
   };
   return `Пароль должен содержать: ${requirements.map((requirement) => descriptions[requirement]).join(', ')}.`;
+}
+
+function emailRequestFailureMessage(error: unknown): string {
+  if (isEmailRateLimited(error)) {
+    return 'Слишком много писем было отправлено. Попробуйте позже.';
+  }
+  return 'Не удалось отправить код. Попробуйте ещё раз.';
+}
+
+function isEmailRateLimited(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const candidate = error as { status?: unknown; message?: unknown };
+  if (candidate.status === 429) {
+    return true;
+  }
+  return typeof candidate.message === 'string'
+    && /(?:rate limit|too many requests|email rate)/iu.test(candidate.message);
 }
