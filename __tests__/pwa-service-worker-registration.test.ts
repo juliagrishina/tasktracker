@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
-
 import { serviceWorkerRegistrationScript } from '../src/pwa/service-worker-registration';
+
+const fileSystem = jest.requireActual<{ readFileSync(path: string, encoding: string): string }>('node:fs');
 
 describe('PWA service worker registration', () => {
   test('registers the root worker after load without forcing an update', () => {
@@ -13,7 +13,7 @@ describe('PWA service worker registration', () => {
   });
 
   test('injects the registration snippet into the web HTML entry', () => {
-    const htmlEntry = readFileSync(`${process.cwd()}/src/app/+html.tsx`, 'utf8');
+    const htmlEntry = fileSystem.readFileSync(`${process.cwd()}/src/app/+html.tsx`, 'utf8');
 
     expect(htmlEntry).toContain('serviceWorkerRegistrationScript');
     expect(htmlEntry).toContain('dangerouslySetInnerHTML');

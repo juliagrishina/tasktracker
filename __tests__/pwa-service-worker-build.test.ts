@@ -1,14 +1,36 @@
-import { execFile as execFileCallback } from 'node:child_process';
-import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { promisify } from 'node:util';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-
-const { createPwaServiceWorkerConfig } = require('../scripts/generate-pwa-service-worker.cjs') as {
+const { createPwaServiceWorkerConfig } = jest.requireActual<{
   createPwaServiceWorkerConfig(directory: string): Record<string, unknown>;
-};
+}>('../scripts/generate-pwa-service-worker.cjs');
 
-const execFile = promisify(execFileCallback);
+const childProcess = jest.requireActual<{
+  execFile(
+    file: string,
+    args: string[],
+    callback: (error: Error | null, stdout: string, stderr: string) => void,
+  ): unknown;
+}>('node:child_process');
+const fileSystem = jest.requireActual<{
+  mkdtemp(prefix: string): Promise<string>;
+  mkdir(path: string, options: { recursive: boolean }): Promise<void>;
+  readdir(path: string): Promise<string[]>;
+  readFile(path: string, encoding: string): Promise<string>;
+  rm(path: string, options: { recursive: boolean; force: boolean }): Promise<void>;
+  writeFile(path: string, data: string): Promise<void>;
+}>('node:fs/promises');
+const operatingSystem = jest.requireActual<{ tmpdir(): string }>('node:os');
+const path = jest.requireActual<{ join(...paths: string[]): string }>('node:path');
+
+function runNode(args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    childProcess.execFile(process.execPath, args, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr || error.message));
+        return;
+      }
+      resolve(stdout);
+    });
+  });
+}
 
 describe('PWA service worker build', () => {
   test('creates a non-claiming static-only Workbox configuration', () => {
@@ -16,7 +38,7 @@ describe('PWA service worker build', () => {
 
     expect(config).toMatchObject({
       globDirectory: 'C:/tmp/dist',
-      swDest: join('C:/tmp/dist', 'sw.js'),
+      swDest: path.join('C:/tmp/dist', 'sw.js'),
       cleanupOutdatedCaches: true,
       inlineWorkboxRuntime: true,
       skipWaiting: false,
@@ -28,27 +50,27 @@ describe('PWA service worker build', () => {
   });
 
   test('writes a worker for static export files only', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'tasktracker-pwa-'));
+    const directory = await fileSystem.mkdtemp(path.join(operatingSystem.tmpdir(), 'tasktracker-pwa-'));
 
     try {
-      await mkdir(join(directory, '_expo', 'static', 'js'), { recursive: true });
-      await writeFile(join(directory, 'index.html'), '<!doctype html>');
-      await writeFile(join(directory, 'manifest.json'), '{}');
-      await writeFile(join(directory, '_expo', 'static', 'js', 'entry.js'), 'console.log(1)');
+      await fileSystem.mkdir(path.join(directory, '_expo', 'static', 'js'), { recursive: true });
+      await fileSystem.writeFile(path.join(directory, 'index.html'), '<!doctype html>');
+      await fileSystem.writeFile(path.join(directory, 'manifest.json'), '{}');
+      await fileSystem.writeFile(path.join(directory, '_expo', 'static', 'js', 'entry.js'), 'console.log(1)');
 
-      const scriptPath = join(process.cwd(), 'scripts', 'generate-pwa-service-worker.cjs');
+      const scriptPath = path.join(process.cwd(), 'scripts', 'generate-pwa-service-worker.cjs');
       const command = `const { generatePwaServiceWorker } = require(${JSON.stringify(scriptPath)}); generatePwaServiceWorker(${JSON.stringify(directory)}).then((result) => process.stdout.write(JSON.stringify(result))).catch((error) => { console.error(error); process.exitCode = 1; });`;
-      const { stdout } = await execFile(process.execPath, ['-e', command]);
+      const stdout = await runNode(['-e', command]);
       const result = JSON.parse(stdout) as { count: number };
-      const worker = await readFile(join(directory, 'sw.js'), 'utf8');
+      const worker = await fileSystem.readFile(path.join(directory, 'sw.js'), 'utf8');
 
       expect(result.count).toBeGreaterThanOrEqual(3);
       expect(worker).toContain('index.html');
       expect(worker).toContain('manifest.json');
       expect(worker).toContain('entry.js');
-      expect(await readdir(directory)).not.toEqual(expect.arrayContaining([expect.stringMatching(/^workbox-/)]));
+      expect(await fileSystem.readdir(directory)).not.toEqual(expect.arrayContaining([expect.stringMatching(/^workbox-/)]));
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      await fileSystem.rm(directory, { recursive: true, force: true });
     }
   }, 20_000);
 });
