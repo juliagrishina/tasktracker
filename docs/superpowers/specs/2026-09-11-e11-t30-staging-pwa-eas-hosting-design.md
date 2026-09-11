@@ -24,9 +24,10 @@ aliases. Для бесплатного контура используется �
 ### EAS Hosting identity
 
 В репозитории появляется минимальный `eas.json`, который фиксирует поддерживаемую
-версию EAS CLI. Когда пользователь отдельно разрешит внешнее действие, первый
-deploy связывает Expo project с владельцем `grishina13` и записывает generated
-project ID в `app.json` (`expo.extra.eas.projectId`).
+версию EAS CLI. Когда пользователь отдельно разрешит внешнее действие, `eas init`
+связывает Expo project с владельцем `grishina13` и записывает generated project
+ID в `app.json` (`expo.extra.eas.projectId`) отдельным reviewed Git-коммитом до
+первого deploy.
 
 Первый deploy запрашивает preview domain `plan-my-plan`. При успехе постоянный
 staging alias имеет вид:

@@ -24,7 +24,7 @@
 ## File structure
 
 - `eas.json` — minimum EAS CLI version, no build/submit/deploy profile.
-- `app.json` — `expo.owner: "grishina13"`; no project ID until `eas init` is explicitly approved.
+- `app.json` — `expo.owner: "grishina13"`; generated project ID появляется только после отдельно одобренного `eas init` и фиксируется reviewed commit до deploy.
 - `qa/staging-web-contract.json` — canonical public staging Supabase URL and exact allowed public app variable names.
 - `scripts/verify-qa-staging-config.cjs` — dotenv parser, environment validator and static-output inspector.
 - `__tests__/qa-staging-deploy-guard.test.ts` — unit coverage for pure guard functions and CLI failure paths.

@@ -8,7 +8,7 @@ describe('EAS Hosting staging configuration', () => {
   test('keeps Hosting staging-only and deploy explicit', () => {
     expect(appConfig.expo.owner).toBe('grishina13');
     expect(appConfig.expo.web?.output).toBe('static');
-    expect(appConfig.expo.extra?.eas?.projectId).toBeUndefined();
+    expect(appConfig.expo.extra?.eas?.projectId).toMatch(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
     expect(easConfig.cli?.version).toBe('>= 23.2.0');
 
     expect(packageConfig.scripts).toMatchObject({

@@ -33,11 +33,11 @@ preflight не являются таким разрешением.
 npx --yes eas-cli@23.2.0 deploy --environment preview --alias staging --dev-domain plan-my-plan --export-dir dist
 ```
 
-Команда может предложить создать или связать Expo project владельца `grishina13`.
-Это допустимо только в этом одобренном шаге. После успеха проверить, что Expo
-показал immutable deployment ID и staging alias ожидаемого формата, затем
-добавить generated `expo.extra.eas.projectId` в `app.json` отдельным reviewed
-Git-коммитом.
+До этой команды выполнить `eas init --account grishina13 --non-interactive` в
+том же отдельно одобренном внешнем шаге. Он создаёт или связывает Expo project
+владельца `grishina13`; generated `expo.extra.eas.projectId` нужно проверить и
+зафиксировать отдельным reviewed Git-коммитом до deploy. После успешной публикации
+проверить immutable deployment ID и staging alias ожидаемого формата.
 
 Если Expo сообщает, что `plan-my-plan` недоступен, остановиться. Не выбирать
 вариант автоматически, не использовать `planmyplan.ru` и не выполнять второй
