@@ -70,13 +70,16 @@ Guard не считает URL «staging» по эвристике: его stagin
 
 Проверка `dist` требует `sw.js`, `manifest.json` и статические HTML/JS assets,
 не выводя содержимое bundle или environment values. Она отклоняет source maps и
-типичные server-secret markers. Она не пытается кэшировать API responses и не
+credential-shaped server secrets; одиночная строка-префикс из публичной SDK сама
+по себе не считается credential. Она не пытается кэшировать API responses и не
 меняет generated service worker.
 
-`qa:staging:deploy` остаётся явной внешней командой. После successful
-`qa:staging:export` она вызывает pinned EAS CLI с `--environment preview`,
-`--alias staging`, `--export-dir dist` и first-deploy domain `plan-my-plan`.
-Команда не запускается автоматически из npm lifecycle, git hook или CI.
+Первый deploy остаётся отдельной явной внешней командой: он дополнительно
+запрашивает `--dev-domain plan-my-plan`. После него `qa:staging:deploy` служит
+только для повторных staging deploy и вызывает pinned EAS CLI с
+`--environment preview`, `--alias staging` и `--export-dir dist`.
+Ни одна из команд не запускается автоматически из npm lifecycle, git hook или
+CI.
 
 ### External staging setup
 
