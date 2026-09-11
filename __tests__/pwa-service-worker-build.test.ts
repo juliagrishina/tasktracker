@@ -41,6 +41,7 @@ describe('PWA service worker build', () => {
       swDest: path.join('C:/tmp/dist', 'sw.js'),
       cleanupOutdatedCaches: true,
       inlineWorkboxRuntime: true,
+      sourcemap: false,
       skipWaiting: false,
       clientsClaim: false,
     });

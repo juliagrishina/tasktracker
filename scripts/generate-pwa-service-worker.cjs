@@ -11,6 +11,7 @@ function createPwaServiceWorkerConfig(distDirectory = defaultDistDirectory) {
     swDest: path.join(distDirectory, 'sw.js'),
     cleanupOutdatedCaches: true,
     inlineWorkboxRuntime: true,
+    sourcemap: false,
     skipWaiting: false,
     clientsClaim: false,
   };

@@ -32,7 +32,7 @@
 1. проверяет, что `dist` существует после успешного Expo export;
 2. генерирует один self-contained `dist/sw.js` только из файлов `dist`; Workbox runtime встроен, чтобы Windows-пути с кириллицей не создавали внешние импорты;
 3. precache’ит HTML, JavaScript, CSS, шрифты, изображения, manifest и favicon;
-4. исключает прежний `sw.js`, Workbox runtime files и source maps из input manifest;
+4. исключает прежний `sw.js`, Workbox runtime files и source maps из input manifest и задаёт `sourcemap: false`, чтобы Workbox не создавал отдельный `sw.js.map` в `dist`;
 5. не задаёт `runtimeCaching`, navigation fallback или network interception.
 
 Такой worker не кэширует ни один HTTP response, который не является файлом build output. В частности, Supabase/Auth/OTP/Edge Function запросы всегда используют обычную сеть; их недоступность обрабатывают существующие Auth и sync слои.

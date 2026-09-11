@@ -15,7 +15,7 @@
 - Keep `expo.web.output` as `static`; do not implement EAS Hosting, deploy, Redirect URL changes, offline first sign-in, re-auth or sync-engine changes.
 - Public staging URL and publishable key may be in the web bundle. Worker and precache manifest must not contain a token, service role, SMTP credential or API response.
 - Do not configure `runtimeCaching`, navigation fallback, `skipWaiting: true` or `clientsClaim: true`.
-- Precache only HTML, JS, CSS, fonts, icons, images, favicon and web manifest. Exclude source maps and generated worker files; set `inlineWorkboxRuntime: true` so Windows paths with Cyrillic characters never become external worker imports.
+- Precache only HTML, JS, CSS, fonts, icons, images, favicon and web manifest. Exclude source maps and generated worker files; set `sourcemap: false` so Workbox does not emit `sw.js.map`, and `inlineWorkboxRuntime: true` so Windows paths with Cyrillic characters never become external worker imports.
 - Do not commit `dist`, cache data, `.env`, sessions or credentials.
 
 ### Task 1: Generate the shell-only worker
@@ -27,7 +27,7 @@
 - [x] Write `__tests__/pwa-service-worker-build.test.ts` before the script exists. Require the future module and test that `createPwaServiceWorkerConfig('C:/tmp/dist')` has `globDirectory`, `swDest: 'C:/tmp/dist/sw.js'`, `cleanupOutdatedCaches: true`, `skipWaiting: false`, `clientsClaim: false`, `globIgnores` containing `sw.js` and `**/*.map`, and no `runtimeCaching` or `navigateFallback` property.
 - [x] Add a second test that writes temporary `index.html`, `manifest.json` and `_expo/static/js/entry.js`, calls `generatePwaServiceWorker(tempDirectory)`, and expects generated `sw.js` to reference all three files.
 - [x] Run `npm test -- --runInBand __tests__/pwa-service-worker-build.test.ts`; it must fail because the generator is absent.
-- [x] Install `workbox-build` as a dev dependency. Implement the CommonJS script with `generateSW`, static `globPatterns` for `html,js,css,json,png,jpg,jpeg,webp,svg,ico,woff,woff2,ttf,otf`, ignores `sw.js`, `workbox-*.js` and maps, `swDest`, `cleanupOutdatedCaches: true`, `inlineWorkboxRuntime: true`, `skipWaiting: false`, `clientsClaim: false`, and no runtime or navigation options. Export both functions and fail the CLI when Workbox reports zero files.
+- [x] Install `workbox-build` as a dev dependency. Implement the CommonJS script with `generateSW`, static `globPatterns` for `html,js,css,json,png,jpg,jpeg,webp,svg,ico,woff,woff2,ttf,otf`, ignores `sw.js`, `workbox-*.js` and maps, `swDest`, `cleanupOutdatedCaches: true`, `inlineWorkboxRuntime: true`, `sourcemap: false`, `skipWaiting: false`, `clientsClaim: false`, and no runtime or navigation options. Export both functions and fail the CLI when Workbox reports zero files.
 - [x] Change `web:export` to `expo export --platform web && node scripts/generate-pwa-service-worker.cjs`.
 - [x] Re-run the focused test; it must pass. Commit the test, generator, `package.json` and lockfile as `feat(pwa): generate offline shell worker`.
 
