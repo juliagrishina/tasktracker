@@ -145,6 +145,29 @@ describe('account registration', () => {
       message: 'Слишком много писем было отправлено. Попробуйте позже.',
     });
   });
+
+  test('suggests signing in when registration reports an existing email without confirming its state', async () => {
+    const gateway = new RecordingRegistrationGateway();
+    gateway.linkError = new Error('User already registered');
+    const registration = createAccountRegistration({
+      gateway,
+      store: createMemoryPendingRegistrationStore(),
+      now: () => 1_000,
+    });
+
+    await expect(
+      registration.start({
+        displayName: 'Мария Иванова',
+        email: 'maria@example.com',
+        password: 'P@ssword2026',
+        passwordConfirmation: 'P@ssword2026',
+        termsAccepted: true,
+      }),
+    ).resolves.toEqual({
+      kind: 'requestFailed',
+      message: 'Не удалось создать аккаунт. Если вы уже регистрировались, войдите.',
+    });
+  });
 });
 
 class RecordingRegistrationGateway implements AccountRegistrationGateway {

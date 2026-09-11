@@ -228,6 +228,9 @@ function emailRequestFailureMessage(error: unknown): string {
   if (isEmailRateLimited(error)) {
     return 'Слишком много писем было отправлено. Попробуйте позже.';
   }
+  if (isExistingAccountError(error)) {
+    return 'Не удалось создать аккаунт. Если вы уже регистрировались, войдите.';
+  }
   return 'Не удалось отправить код. Попробуйте ещё раз.';
 }
 
@@ -241,4 +244,13 @@ function isEmailRateLimited(error: unknown): boolean {
   }
   return typeof candidate.message === 'string'
     && /(?:rate limit|too many requests|email rate)/iu.test(candidate.message);
+}
+
+function isExistingAccountError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const message = (error as { message?: unknown }).message;
+  return typeof message === 'string'
+    && /(?:already registered|already exists|email.*(?:already|exists|taken))/iu.test(message);
 }
