@@ -93,3 +93,17 @@ CI или npm lifecycle.
 [`Epic 11 e2e checklist`](../testing/epic-11-auth-and-sync-e2e-checklist.md).
 Expo Go, LAN URL, ngrok и Cloudflare tunnel не являются доказательством
 установленной PWA-приёмки.
+
+## Выполненный staging record — 2026-09-11
+
+- Expo project создан у `grishina13`; его не секретный ID зафиксирован в
+  `app.json` коммитом `8d68609`.
+- Первый immutable deployment: `a0g153ez3k`; stable alias:
+  `https://plan-my-plan--staging.expo.app`.
+- В EAS environment `preview` подтверждены ровно две public variables:
+  `EXPO_PUBLIC_SUPABASE_URL` и `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Их
+  значения здесь и в Git не записываются.
+- Alias добавлен в Redirect URLs только Supabase project `planmyplan-staging`.
+- Desktop browser smoke открыл HTTPS alias и получил Auth screen без
+  пользовательского входа без аккаунта. Установка на iPhone и offline-сценарии
+  выполняются отдельно по E11-T31.
