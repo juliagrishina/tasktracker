@@ -61,6 +61,15 @@ describe('cloud sync protocol contract', () => {
     expect(source).not.toContain("applyError.message.includes('Invalid or stale sync mutation.')");
   });
 
+  test('assigns a server creation timestamp to the settings singleton when the device payload has none', () => {
+    const migration = readRepositoryFile('supabase', 'migrations', '20260913010000_default_user_settings_created_at.sql');
+
+    expect(migration).toContain('create or replace function public.sync_normalize_payload');
+    expect(migration).toContain("p_entity_type = 'user_settings'");
+    expect(migration).toContain("'created_at'");
+    expect(migration).toContain('to_jsonb(now()::text)');
+  });
+
   test('returns an owner-scoped server snapshot and continues after an optimistic-lock conflict', () => {
     const migration = readRepositoryFile('supabase', 'migrations', '20260904020000_sync_conflict_snapshot.sql');
     const source = readRepositoryFile('supabase', 'functions', 'sync-protocol', 'index.ts');

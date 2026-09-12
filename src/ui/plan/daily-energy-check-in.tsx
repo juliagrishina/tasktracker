@@ -31,13 +31,14 @@ export function DailyEnergyCheckIn({
   );
   const pickerRef = useRef<ScrollView>(null);
   const pendingInitialScroll = useRef(false);
-  const pickerHasLaidOut = useRef(false);
+  const pickerContentIsReady = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) {
-      pickerHasLaidOut.current = false;
+      pendingInitialScroll.current = false;
+      pickerContentIsReady.current = false;
       return;
     }
     const selectedValue = initialEnergyPercent ?? defaultEnergyPercent;
@@ -47,7 +48,7 @@ export function DailyEnergyCheckIn({
       setSelectedEnergyPercent(selectedValue);
       setError(null);
       pendingInitialScroll.current = true;
-      if (!pickerHasLaidOut.current) return;
+      if (!pickerContentIsReady.current) return;
       pendingInitialScroll.current = false;
       pickerRef.current?.scrollTo({ animated: false, y: scrollOffsetForEnergy(selectedValue) });
     });
@@ -93,8 +94,8 @@ export function DailyEnergyCheckIn({
           <View accessibilityLabel="Вертикальный выбор энергии" style={styles.pickerFrame}>
             <ScrollView
               decelerationRate="fast"
-              onLayout={() => {
-                pickerHasLaidOut.current = true;
+              onContentSizeChange={() => {
+                pickerContentIsReady.current = true;
                 if (!visible || !pendingInitialScroll.current) return;
                 pendingInitialScroll.current = false;
                 const selectedValue = initialEnergyPercent ?? defaultEnergyPercent;
