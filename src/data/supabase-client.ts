@@ -1,10 +1,18 @@
 import { AppState, Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
+import Constants from 'expo-constants';
 import { createClient, processLock } from '@supabase/supabase-js';
 import { authSessionStorage } from './auth-session-storage';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const runtimePublicConfig = Constants.expoConfig?.extra as {
+  publicSupabaseUrl?: unknown;
+  publicSupabasePublishableKey?: unknown;
+} | undefined;
+const supabaseUrl = publicConfigurationValue(process.env.EXPO_PUBLIC_SUPABASE_URL, runtimePublicConfig?.publicSupabaseUrl);
+const supabasePublishableKey = publicConfigurationValue(
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+  runtimePublicConfig?.publicSupabasePublishableKey,
+);
 
 export const supabase = supabaseUrl && supabasePublishableKey
   ? createClient(supabaseUrl, supabasePublishableKey, {
@@ -41,4 +49,9 @@ if (Platform.OS !== 'web' && supabase !== null) {
       supabase.auth.stopAutoRefresh();
     }
   });
+}
+
+function publicConfigurationValue(buildTimeValue: string | undefined, runtimeValue: unknown): string | undefined {
+  if (typeof buildTimeValue === 'string' && buildTimeValue !== '') return buildTimeValue;
+  return typeof runtimeValue === 'string' && runtimeValue !== '' ? runtimeValue : undefined;
 }

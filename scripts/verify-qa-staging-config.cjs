@@ -88,7 +88,7 @@ async function listFiles(directory, relativeDirectory = '') {
   return files;
 }
 
-async function inspectStaticExport(directory) {
+async function inspectStaticExport(directory, expectedPublicSupabaseUrl) {
   const files = await listFiles(directory);
   const relativeFiles = files.map((file) => file.split(path.sep).join('/'));
 
@@ -107,6 +107,17 @@ async function inspectStaticExport(directory) {
     const contents = await fileSystem.readFile(path.join(directory, relativeFile), 'utf8');
     if (FORBIDDEN_BUNDLE_PATTERNS.some((pattern) => pattern.test(contents))) {
       throw new Error(`Found forbidden server-secret marker in static export: ${relativeFile}`);
+    }
+  }
+
+  if (typeof expectedPublicSupabaseUrl === 'string' && expectedPublicSupabaseUrl !== '') {
+    const containsPublicSupabaseUrl = await Promise.all(
+      relativeFiles
+        .filter((file) => TEXT_EXTENSIONS.has(path.extname(file)))
+        .map(async (relativeFile) => (await fileSystem.readFile(path.join(directory, relativeFile), 'utf8')).includes(expectedPublicSupabaseUrl)),
+    );
+    if (!containsPublicSupabaseUrl.some(Boolean)) {
+      throw new Error('Missing reviewed public Supabase URL in static export');
     }
   }
 }
@@ -128,8 +139,9 @@ async function runVerification({ envFile, distDirectory, inspectDist }) {
     fileSystem.readFile(CONTRACT_PATH, 'utf8'),
     fileSystem.readFile(envFile, 'utf8'),
   ]);
-  validateStagingEnvironment(parseDotenv(envSource), JSON.parse(contractSource));
-  if (inspectDist) await inspectStaticExport(distDirectory);
+  const values = parseDotenv(envSource);
+  validateStagingEnvironment(values, JSON.parse(contractSource));
+  if (inspectDist) await inspectStaticExport(distDirectory, values.EXPO_PUBLIC_SUPABASE_URL);
 }
 
 if (require.main === module) {

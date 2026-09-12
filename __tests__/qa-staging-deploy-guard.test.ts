@@ -1,5 +1,5 @@
 const guard = jest.requireActual<{
-  inspectStaticExport(directory: string): Promise<void>;
+  inspectStaticExport(directory: string, expectedPublicSupabaseUrl?: string): Promise<void>;
   parseDotenv(source: string): Record<string, string>;
   validateStagingEnvironment(values: Record<string, string>, contract: { publicVariableNames: string[]; supabaseUrl: string }): void;
 }>('../scripts/verify-qa-staging-config.cjs');
@@ -45,9 +45,27 @@ describe('QA staging deploy guard', () => {
       await fileSystem.writeFile(path.join(directory, 'index.html'), '<!doctype html>');
       await fileSystem.writeFile(path.join(directory, 'manifest.json'), '{}');
       await fileSystem.writeFile(path.join(directory, 'sw.js'), 'self.addEventListener("install", () => undefined)');
-      await fileSystem.writeFile(path.join(directory, '_expo', 'static', 'js', 'entry.js'), 'const prefix = "sb_secret_"; console.log(prefix)');
+      await fileSystem.writeFile(
+        path.join(directory, '_expo', 'static', 'js', 'entry.js'),
+        'const url = "https://staging.example.supabase.co"; const prefix = "sb_secret_"; console.log(url, prefix)',
+      );
 
-      await expect(guard.inspectStaticExport(directory)).resolves.toBeUndefined();
+      await expect(guard.inspectStaticExport(directory, contract.supabaseUrl)).resolves.toBeUndefined();
+    } finally {
+      await fileSystem.rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects a static shell export without the reviewed public Supabase URL', async () => {
+    const directory = await fileSystem.mkdtemp(path.join(operatingSystem.tmpdir(), 'tasktracker-staging-'));
+    try {
+      await fileSystem.mkdir(path.join(directory, '_expo', 'static', 'js'), { recursive: true });
+      await fileSystem.writeFile(path.join(directory, 'index.html'), '<!doctype html>');
+      await fileSystem.writeFile(path.join(directory, 'manifest.json'), '{}');
+      await fileSystem.writeFile(path.join(directory, 'sw.js'), 'self.addEventListener("install", () => undefined)');
+      await fileSystem.writeFile(path.join(directory, '_expo', 'static', 'js', 'entry.js'), 'console.log("shell")');
+
+      await expect(guard.inspectStaticExport(directory, contract.supabaseUrl)).rejects.toThrow('Missing reviewed public Supabase URL');
     } finally {
       await fileSystem.rm(directory, { recursive: true, force: true });
     }

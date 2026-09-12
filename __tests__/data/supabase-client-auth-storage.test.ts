@@ -15,6 +15,15 @@ jest.mock('react-native', () => ({
 
 jest.mock('react-native-url-polyfill/auto', () => ({}));
 
+jest.mock('expo-constants', () => ({
+  expoConfig: {
+    extra: {
+      publicSupabaseUrl: 'https://runtime.example.supabase.co',
+      publicSupabasePublishableKey: 'runtime-publishable-key',
+    },
+  },
+}));
+
 jest.mock('../../src/data/auth-session-storage', () => ({
   authSessionStorage: { getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() },
 }));
@@ -24,9 +33,27 @@ describe('Supabase Auth client session storage', () => {
   const originalKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   afterEach(() => {
-    process.env.EXPO_PUBLIC_SUPABASE_URL = originalUrl;
-    process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = originalKey;
+    restoreEnvironmentVariable('EXPO_PUBLIC_SUPABASE_URL', originalUrl);
+    restoreEnvironmentVariable('EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY', originalKey);
     jest.resetModules();
+  });
+
+  test('uses public runtime config when a static web bundle has no process environment', () => {
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+    delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    jest.resetModules();
+
+    const { createClient } = jest.requireMock('@supabase/supabase-js') as {
+      createClient: jest.Mock;
+    };
+
+    jest.requireActual('../../src/data/supabase-client');
+
+    expect(createClient).toHaveBeenCalledWith(
+      'https://runtime.example.supabase.co',
+      'runtime-publishable-key',
+      expect.objectContaining({ auth: expect.any(Object) }),
+    );
   });
 
   test('uses the dedicated secure session adapter and only the publishable client key', () => {
@@ -71,3 +98,11 @@ describe('Supabase Auth client session storage', () => {
     );
   });
 });
+
+function restoreEnvironmentVariable(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}
