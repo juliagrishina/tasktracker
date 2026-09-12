@@ -30,8 +30,17 @@ Deno.serve(async (request) => {
         if (Array.isArray(data)) mutations.push(...data);
         continue;
       }
-      if (applyError.message.includes('Invalid or stale sync mutation.')) return respond({ error: 'Sync mutation was rejected.', code: 'stale_generation' }, 409);
+      if (applyError.message.includes('Sync data generation is stale.')) return respond({ error: 'Sync mutation was rejected.', code: 'stale_generation' }, 409);
       if (!applyError.message.includes('Sync version conflict.') || mutation === null || typeof mutation !== 'object' || Array.isArray(mutation)) {
+        const candidate = mutation !== null && typeof mutation === 'object' && !Array.isArray(mutation)
+          ? mutation as { entityType?: unknown; operation?: unknown }
+          : null;
+        console.error(JSON.stringify({
+          event: 'sync_mutation_rejected',
+          entityType: typeof candidate?.entityType === 'string' ? candidate.entityType : 'unknown',
+          operation: typeof candidate?.operation === 'string' ? candidate.operation : 'unknown',
+          databaseCode: applyError.code,
+        }));
         return respond({ error: 'Sync mutation was rejected.', code: 'sync_rejected' }, 409);
       }
       const candidate = mutation as { entityType?: unknown; entityId?: unknown };

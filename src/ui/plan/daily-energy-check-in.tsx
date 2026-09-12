@@ -7,6 +7,10 @@ const energyValues = Array.from({ length: 21 }, (_, index) => index * 5);
 const defaultEnergyPercent = 75;
 const pickerRowHeight = designTokens.size.touchTargetMin;
 
+function scrollOffsetForEnergy(value: number): number {
+  return Math.max(0, energyValues.indexOf(value) * pickerRowHeight - pickerRowHeight);
+}
+
 interface DailyEnergyCheckInProps {
   initialEnergyPercent?: number | null;
   onRequestClose: () => void;
@@ -26,21 +30,26 @@ export function DailyEnergyCheckIn({
     initialEnergyPercent ?? defaultEnergyPercent,
   );
   const pickerRef = useRef<ScrollView>(null);
+  const pendingInitialScroll = useRef(false);
+  const pickerHasLaidOut = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      pickerHasLaidOut.current = false;
+      return;
+    }
     const selectedValue = initialEnergyPercent ?? defaultEnergyPercent;
     let isCurrent = true;
     void Promise.resolve().then(() => {
       if (!isCurrent) return;
       setSelectedEnergyPercent(selectedValue);
       setError(null);
-      pickerRef.current?.scrollTo({
-        animated: false,
-        y: Math.max(0, energyValues.indexOf(selectedValue) * pickerRowHeight - pickerRowHeight),
-      });
+      pendingInitialScroll.current = true;
+      if (!pickerHasLaidOut.current) return;
+      pendingInitialScroll.current = false;
+      pickerRef.current?.scrollTo({ animated: false, y: scrollOffsetForEnergy(selectedValue) });
     });
     return () => { isCurrent = false; };
   }, [initialEnergyPercent, visible]);
@@ -84,6 +93,13 @@ export function DailyEnergyCheckIn({
           <View accessibilityLabel="Вертикальный выбор энергии" style={styles.pickerFrame}>
             <ScrollView
               decelerationRate="fast"
+              onLayout={() => {
+                pickerHasLaidOut.current = true;
+                if (!visible || !pendingInitialScroll.current) return;
+                pendingInitialScroll.current = false;
+                const selectedValue = initialEnergyPercent ?? defaultEnergyPercent;
+                pickerRef.current?.scrollTo({ animated: false, y: scrollOffsetForEnergy(selectedValue) });
+              }}
               onMomentumScrollEnd={(event) => {
                 const index = Math.max(0, Math.min(energyValues.length - 1, Math.round(event.nativeEvent.contentOffset.y / pickerRowHeight)));
                 setSelectedEnergyPercent(energyValues[index]);

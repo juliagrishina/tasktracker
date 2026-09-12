@@ -54,6 +54,13 @@ describe('cloud sync protocol contract', () => {
     expect(config).toContain('verify_jwt = true');
   });
 
+  test('labels only a proven data-generation mismatch as stale', () => {
+    const source = readRepositoryFile('supabase', 'functions', 'sync-protocol', 'index.ts');
+
+    expect(source).toContain("applyError.message.includes('Sync data generation is stale.')");
+    expect(source).not.toContain("applyError.message.includes('Invalid or stale sync mutation.')");
+  });
+
   test('returns an owner-scoped server snapshot and continues after an optimistic-lock conflict', () => {
     const migration = readRepositoryFile('supabase', 'migrations', '20260904020000_sync_conflict_snapshot.sql');
     const source = readRepositoryFile('supabase', 'functions', 'sync-protocol', 'index.ts');

@@ -147,7 +147,12 @@ export function createSyncEngine({
       if (!isStaleGenerationError(error) || store.resetForFullResync === undefined || gateway.getDataGeneration === undefined) {
         throw error;
       }
-      await store.resetForFullResync(await gateway.getDataGeneration());
+      const localGeneration = await store.getLocalDataGeneration?.();
+      const remoteGeneration = await gateway.getDataGeneration();
+      if (localGeneration === undefined || localGeneration === remoteGeneration) {
+        throw error;
+      }
+      await store.resetForFullResync(remoteGeneration);
       return synchronize();
     }
   };

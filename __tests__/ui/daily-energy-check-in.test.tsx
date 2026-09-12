@@ -5,13 +5,15 @@ import * as mockReact from 'react';
 import { DailyEnergyCheckIn } from '../../src/ui/plan/daily-energy-check-in';
 
 const mockScrollTo = jest.fn();
+let capturedOnLayout: ((event: unknown) => void) | undefined;
 
 jest.mock('react-native', () => {
   return {
     Modal: ({ children, visible }: { children: ReactNode; visible: boolean }) => visible ? mockReact.createElement(mockReact.Fragment, null, children) : null,
     Pressable: 'Pressable',
-    ScrollView: mockReact.forwardRef(({ children }: { children: ReactNode }, ref) => {
+    ScrollView: mockReact.forwardRef(({ children, onLayout }: { children: ReactNode; onLayout?: (event: unknown) => void }, ref) => {
       mockReact.useImperativeHandle(ref, () => ({ scrollTo: mockScrollTo }));
+      capturedOnLayout = onLayout;
       return mockReact.createElement(mockReact.Fragment, null, children);
     }),
     Platform: {
@@ -25,7 +27,12 @@ jest.mock('react-native', () => {
 });
 
 describe('DailyEnergyCheckIn', () => {
-  test('scrolls its initial 75-percent selection into view after opening', async () => {
+  beforeEach(() => {
+    mockScrollTo.mockClear();
+    capturedOnLayout = undefined;
+  });
+
+  test('scrolls its initial 75-percent selection into view after the picker has laid out', async () => {
     await act(async () => {
       render(
         <DailyEnergyCheckIn
@@ -34,6 +41,14 @@ describe('DailyEnergyCheckIn', () => {
           visible
         />,
       );
+      await Promise.resolve();
+    });
+
+    expect(mockScrollTo).not.toHaveBeenCalled();
+    expect(capturedOnLayout).toEqual(expect.any(Function));
+
+    await act(async () => {
+      capturedOnLayout?.({});
     });
 
     await waitFor(() => expect(mockScrollTo).toHaveBeenCalledWith({ animated: false, y: 616 }));

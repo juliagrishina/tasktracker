@@ -123,10 +123,11 @@ describe('sync engine', () => {
   test('replaces a stale local replica with a full pull before retrying the exchange', async () => {
     let pushAttempts = 0;
     const resetForFullResync = jest.fn(async () => {});
-    const store: SyncEngineStore & { resetForFullResync(dataGeneration: number): Promise<void> } = {
+    const store: SyncEngineStore & { getLocalDataGeneration(): Promise<number>; resetForFullResync(dataGeneration: number): Promise<void> } = {
       listSyncOutbox: async () => [mutation],
       acknowledgeSyncMutations: async () => {},
       getSyncCursor: async () => 0,
+      getLocalDataGeneration: async () => 1,
       applyRemoteSyncChanges: async () => {},
       resetForFullResync,
     };
@@ -144,6 +145,27 @@ describe('sync engine', () => {
 
     expect(resetForFullResync).toHaveBeenCalledWith(2);
     expect(pushAttempts).toBe(2);
+  });
+
+  test('preserves the local replica when a stale-generation response has the same generation as this device', async () => {
+    const resetForFullResync = jest.fn(async () => {});
+    const store: SyncEngineStore & { getLocalDataGeneration(): Promise<number>; resetForFullResync(dataGeneration: number): Promise<void> } = {
+      listSyncOutbox: async () => [mutation],
+      acknowledgeSyncMutations: async () => {},
+      getSyncCursor: async () => 0,
+      getLocalDataGeneration: async () => 1,
+      applyRemoteSyncChanges: async () => {},
+      resetForFullResync,
+    };
+    const gateway: SyncEngineGateway & { getDataGeneration(): Promise<number> } = {
+      push: async () => { throw Object.assign(new Error('sync mutation rejected'), { code: 'stale_generation' }); },
+      pull: async () => [],
+      getDataGeneration: async () => 1,
+    };
+
+    await expect(createSyncEngine({ gateway, store }).syncNow()).rejects.toThrow('sync mutation rejected');
+
+    expect(resetForFullResync).not.toHaveBeenCalled();
   });
 
   test('replaces an offline replica even when its stale generation has no pending outbox changes', async () => {
