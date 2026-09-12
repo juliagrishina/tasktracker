@@ -33,6 +33,24 @@ SMTP staging включён (Resend), а минимальный интервал
 секунд. Повторная регистрация не является способом сбросить существующий
 серверный аккаунт: после очистки PWA следует использовать «Войти».
 
+## Дополнение: 2026-09-12 — PWA runtime-конфигурация Auth
+
+**Immutable deployment:** `02viz8dyv3`
+**Commit:** `e2c60386a9cbc8f7dbe0db88d7e9d7b74c98bdff`
+
+Physical QA выявила, что предыдущий статический web bundle не содержал
+публичный staging Supabase origin. Вследствие этого web/PWA создавала
+`supabase = null` и не доходила до Auth API при регистрации; это объясняло
+отсутствие записи в staging Auth logs и общее сообщение об ошибке отправки.
+
+Исправление передаёт два уже публичных клиентских параметра через Expo runtime
+config и использует их, когда `process.env` недоступен в статическом web bundle.
+Output guard теперь требует reviewed staging URL в `dist`; проверка не читает и
+не выводит publishable key. Новая публикация прошла полный pipeline: 100 suites
+/ 437 tests, 0 ESLint errors (11 существующих test-only warnings), web-export и
+output guard. Post-deploy HTTPS smoke вернул 200 и подтвердил reviewed origin в
+опубликованном JavaScript bundle.
+
 ## Итог desktop части
 
 Staging alias открылся по HTTPS и показал только авторизационный экран. На
