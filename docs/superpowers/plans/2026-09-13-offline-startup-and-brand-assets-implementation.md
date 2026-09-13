@@ -432,4 +432,3 @@ git push
 - [ ] **Step 6: Request staging approval**
 
 Do not deploy automatically. Ask for a new explicit staging approval. After approval, run the guarded staging deployment and report immutable deployment identifier, commit SHA, HTTPS smoke result, and the iPhone checklist. Do not merge the branch or publish production.
-
