@@ -104,7 +104,7 @@ git commit -m "fix: recover account workspace offline"
 - Modify: `src/application/account-profile-provider.ts`
 - Modify: `src/app/(tabs)/settings.tsx`
 - Test: `__tests__/application/account-profile.test.ts`
-- Test: `__tests__/ui/settings-screen.test.tsx`
+- Create: `__tests__/ui/settings-screen.test.tsx`
 
 **Interfaces:**
 - Consumes: profile cache keyed by the active account's `userId`.
