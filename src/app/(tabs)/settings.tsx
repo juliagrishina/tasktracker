@@ -1,36 +1,43 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { type AccountProfileResult, type AccountProfileService, type AccountProfileState } from '../../application/account-profile';
-import { createCurrentAccountProfileService } from '../../application/account-profile-provider';
+import { createAccountProfileServiceForUser } from '../../application/account-profile-provider';
 import { passwordManagement } from '../../application/password-management-provider';
 import { performAccountDataAction } from '../../application/account-data-actions-provider';
 import { useAppServices } from '../../application/app-services-provider';
-import { useAuthGateNavigation } from '../../application/auth-gate';
+import { useAuthGateNavigation, useAuthGateWorkspace } from '../../application/auth-gate';
 import { notificationPermissionGateway } from '../../application/notification-permission-gateway';
 import { SettingsStatePanel } from '../../ui/settings/settings-state-panel';
 
 export default function SettingsScreen() {
   const { clearAccountData, clearAutonomousData, settings, settingsActions, syncAccountData, syncStatus, syncConflicts, resolveAccountSyncConflict } = useAppServices();
   const authNavigation = useAuthGateNavigation();
+  const workspace = useAuthGateWorkspace();
   const [account, setAccount] = useState<AccountProfileState>({ kind: 'withoutAccount' });
   const [accountService, setAccountService] = useState<AccountProfileService | null>(null);
 
   useEffect(() => {
     let mounted = true;
     void (async () => {
-      try {
-        const service = await createCurrentAccountProfileService();
-        if (!mounted) return;
-        setAccountService(service);
-        setAccount(service === null ? { kind: 'withoutAccount' } : await service.load());
-      } catch {
-        if (mounted) setAccount({ kind: 'withoutAccount' });
+      if (workspace.kind !== 'account') {
+        setAccountService(null);
+        setAccount({ kind: 'withoutAccount' });
+        return;
       }
+
+      const service = createAccountProfileServiceForUser(workspace.accountId);
+      setAccountService(service);
+      const cached = await service.loadCached();
+      if (!mounted) return;
+      setAccount(cached);
+      void service.refresh().then((fresh) => {
+        if (mounted && fresh.kind === 'authenticated') setAccount(fresh);
+      });
     })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [workspace]);
 
   const runAccountAction = useCallback(async (action: (service: AccountProfileService) => Promise<AccountProfileResult>): Promise<AccountProfileResult> => {
     if (accountService === null) {

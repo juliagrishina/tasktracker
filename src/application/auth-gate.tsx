@@ -21,6 +21,7 @@ import { WorkspaceTransferChoice } from '../ui/auth/workspace-transfer-choice';
 import {
   accountRegistration as defaultAccountRegistration,
 } from './account-registration-provider';
+import { refreshAccountProfileCacheForUser } from './account-profile-provider';
 import type { AccountRegistration } from './account-registration';
 import { passwordManagement as defaultPasswordManagement } from './password-management-provider';
 import type { PasswordManagement, PasswordManagementResult } from './password-management';
@@ -142,6 +143,7 @@ export function AuthGate({
             if (session.kind === 'authenticated') {
               await scopeRegistry.openAccountScope(session.userId);
               setActiveScope({ kind: 'account', accountId: session.userId });
+              void refreshAccountProfileCacheForUser(session.userId);
             } else {
               await scopeRegistry.openAutonomousScope();
               setActiveScope({ kind: 'autonomous' });
@@ -216,6 +218,7 @@ export function AuthGate({
   const openAccount = async (accountId: string) => {
     await scopeRegistry.openAccountScope(accountId);
     setActiveScope({ kind: 'account', accountId });
+    void refreshAccountProfileCacheForUser(accountId);
     setSignedInAccountId(null);
     setWorkspaceTransferError(null);
     setGateState('app');
@@ -322,6 +325,7 @@ export function AuthGate({
     const result = await registration.confirm({ code: input.code, password });
     if (result.kind === 'activated') {
       await scopeRegistry.openAccountScope(result.userId);
+      void refreshAccountProfileCacheForUser(result.userId);
       setPendingPassword(null);
       setGateState('app');
       return;

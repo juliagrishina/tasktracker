@@ -6,6 +6,36 @@ import {
 } from '../../src/application/account-profile';
 
 describe('account profile service', () => {
+  test('shows the cached account immediately when the remote profile is unavailable', async () => {
+    const gateway = new RecordingAccountProfileGateway();
+    gateway.onlineProfile = null;
+    const profile = createAccountProfileService({
+      cache: createMemoryProfileCache({
+        userId: 'user-17',
+        displayName: 'Юлия Гришина',
+        email: 'julia@example.com',
+        emailConfirmed: true,
+        pendingEmail: null,
+      }),
+      gateway,
+    });
+
+    await expect(profile.loadCached()).resolves.toEqual({
+      kind: 'authenticated',
+      displayName: 'Юлия Гришина',
+      email: 'julia@example.com',
+      emailConfirmed: true,
+      pendingEmail: null,
+    });
+    await expect(profile.refresh()).resolves.toEqual({
+      kind: 'authenticated',
+      displayName: 'Юлия Гришина',
+      email: 'julia@example.com',
+      emailConfirmed: true,
+      pendingEmail: null,
+    });
+  });
+
   test('keeps the current email active while a validated email change waits for new-address OTP', async () => {
     const gateway = new RecordingAccountProfileGateway();
     const cache = createMemoryProfileCache();

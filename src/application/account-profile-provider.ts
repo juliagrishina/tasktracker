@@ -15,11 +15,13 @@ export const accountProfileGateway = createSupabaseAccountProfileGateway(
   supabase as unknown as SupabaseAccountProfileClient | null,
 );
 
-export async function createCurrentAccountProfileService(): Promise<AccountProfileService | null> {
-  const profile = await accountProfileGateway.getProfile();
-  if (profile === null) return null;
+export function createAccountProfileServiceForUser(userId: string): AccountProfileService {
   return createAccountProfileService({
-    cache: createAccountProfileCache({ storage: authSessionStorage, userId: profile.userId }),
+    cache: createAccountProfileCache({ storage: authSessionStorage, userId }),
     gateway: accountProfileGateway,
   });
+}
+
+export async function refreshAccountProfileCacheForUser(userId: string): Promise<void> {
+  await createAccountProfileServiceForUser(userId).refresh();
 }

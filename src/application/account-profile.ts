@@ -36,6 +36,8 @@ export type AccountProfileResult =
 
 export interface AccountProfileService {
   load(): Promise<AccountProfileState>;
+  loadCached(): Promise<AccountProfileState>;
+  refresh(): Promise<AccountProfileState>;
   updateDisplayName(input: string): Promise<AccountProfileResult>;
   startEmailChange(input: { currentPassword: string; email: string }): Promise<AccountProfileResult>;
   confirmEmailChange(input: { code: string }): Promise<AccountProfileResult>;
@@ -63,6 +65,11 @@ export function createAccountProfileService({
     return profile;
   };
 
+  const loadCachedProfile = async (): Promise<AccountProfileState> => {
+    const profile = await cache.load();
+    return profile === null ? { kind: 'withoutAccount' } : toState(profile);
+  };
+
   const currentProfile = async (): Promise<AccountProfile | null> => {
     try {
       return await loadOnlineProfile();
@@ -73,8 +80,21 @@ export function createAccountProfileService({
 
   return {
     async load(): Promise<AccountProfileState> {
-      const profile = await currentProfile();
-      return profile === null ? { kind: 'withoutAccount' } : toState(profile);
+      const cached = await loadCachedProfile();
+      return cached.kind === 'authenticated' ? cached : loadOnlineProfile()
+        .then((profile) => profile === null ? cached : toState(profile))
+        .catch(() => cached);
+    },
+
+    loadCached: loadCachedProfile,
+
+    async refresh(): Promise<AccountProfileState> {
+      try {
+        const profile = await loadOnlineProfile();
+        return profile === null ? loadCachedProfile() : toState(profile);
+      } catch {
+        return loadCachedProfile();
+      }
     },
 
     async updateDisplayName(input: string): Promise<AccountProfileResult> {
