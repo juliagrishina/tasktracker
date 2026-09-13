@@ -2,7 +2,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
 
-import { formatPlanDate, type PlanLoadDay, type PlanLoadTone, type PlanMonthLoadWeeks } from './plan-period-model';
+import { formatPlanDate, type PlanLoadDay, type PlanMonthLoadWeeks } from './plan-period-model';
+import { getPlanLoadAppearance } from './plan-load-appearance';
 
 interface MonthLoadGridProps {
   onSelectDate: (isoDate: string) => void;
@@ -11,31 +12,7 @@ interface MonthLoadGridProps {
   weeks: PlanMonthLoadWeeks;
 }
 
-interface LoadToneStyle {
-  border: string;
-  foreground: string;
-  surface: string;
-}
-
 const weekdayHeadings = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'] as const;
-
-const loadToneStyles: Record<PlanLoadTone, LoadToneStyle> = {
-  low: {
-    border: designTokens.color.feedback.success.base,
-    foreground: designTokens.color.feedback.success.foreground,
-    surface: designTokens.color.feedback.success.surface,
-  },
-  medium: {
-    border: designTokens.color.feedback.warning.border,
-    foreground: designTokens.color.feedback.warning.foreground,
-    surface: designTokens.color.feedback.warning.surface,
-  },
-  high: {
-    border: designTokens.color.calendar.load.high.border,
-    foreground: designTokens.color.feedback.danger.foreground,
-    surface: designTokens.color.calendar.load.high.surface,
-  },
-};
 
 export function MonthLoadGrid({ onSelectDate, selectedDate, todayDate, weeks }: MonthLoadGridProps) {
   return (
@@ -55,7 +32,7 @@ export function MonthLoadGrid({ onSelectDate, selectedDate, todayDate, weeks }: 
 }
 
 function MonthLoadCell({ day, onPress, selected, today }: { day: PlanLoadDay; onPress: (isoDate: string) => void; selected: boolean; today: boolean }) {
-  const tone = loadToneStyles[day.tone];
+  const tone = getPlanLoadAppearance(day.tone);
   const label = `${formatPlanDate(day.isoDate)}: загрузка ${day.loadPercent}%${today ? ', сегодня' : ''}`;
 
   return (

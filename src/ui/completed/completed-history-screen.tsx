@@ -135,9 +135,6 @@ export function CompletedHistoryScreen() {
           </View>
         ))}
 
-        <View style={styles.warning}>
-          <Text style={styles.warningText}>Удалить окончательно доступно только с подтверждением.</Text>
-        </View>
         {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
       </ScrollView>
       {selectedItem === null ? null : <PlanTaskActionsDialog isCompleted itemKind={selectedItem.kind === 'reminder' ? 'reminder' : 'task'} onAction={(action) => void runAction(action)} onDeletePermanently={() => { setItemPendingPermanentDeletion({ item: selectedItem, scope: 'item' }); setSelectedItem(null); }} onDeleteSeries={selectedItem.occurrence === null ? undefined : () => { setItemPendingPermanentDeletion({ item: selectedItem, scope: 'series' }); setSelectedItem(null); }} onRequestClose={() => setSelectedItem(null)} taskTitle={selectedItem.title} visible />}

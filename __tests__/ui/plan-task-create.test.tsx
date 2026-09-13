@@ -30,7 +30,7 @@ describe('Plan task creation sheet', () => {
     });
   });
 
-  test('opens the approved planning states from the Plan FAB', async () => {
+  test('opens the Plan create form with an editable nearest time block', async () => {
     const view = await render(
       <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
         <PlanScreen initialDate="2026-08-05" />
@@ -44,7 +44,8 @@ describe('Plan task creation sheet', () => {
 
     await waitFor(() => {
       expect(view.getByText('Новая задача')).toBeOnTheScreen();
-      expect(view.getByText('Без даты')).toBeOnTheScreen();
+      expect(view.getByText('Блок 1')).toBeOnTheScreen();
+      expect(view.getByLabelText('Дата блока 1')).toHaveTextContent(/05\.08\.2026/);
       expect(view.getByText('Повторение')).toBeOnTheScreen();
     });
 
@@ -61,8 +62,8 @@ describe('Plan task creation sheet', () => {
 
     await fireEvent.press(view.getByText('Добавить блок времени'));
     await waitFor(() => {
-      expect(view.getByLabelText('Начало блока 1')).toBeOnTheScreen();
-      expect(view.getByLabelText('Длительность блока 1')).toBeOnTheScreen();
+      expect(view.getByLabelText('Начало блока 2')).toBeOnTheScreen();
+      expect(view.getByLabelText('Длительность блока 2')).toBeOnTheScreen();
     });
   });
 
@@ -85,7 +86,6 @@ describe('Plan task creation sheet', () => {
     await waitFor(() => {
       expect(view.getByLabelText('Название').props.value).toBe('Подготовить план релиза');
     });
-    await fireEvent.press(view.getByLabelText('Добавить блок времени'));
     await waitFor(() => {
       expect(view.getByLabelText('Начало блока 1')).toBeOnTheScreen();
     });
@@ -102,7 +102,7 @@ describe('Plan task creation sheet', () => {
     });
   });
 
-  test('puts a new task without a time block into the selected plan day', async () => {
+  test('keeps the selected plan date when the default time block is removed', async () => {
     const source = createInMemoryDataSource();
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><PlanScreen initialDate="2026-08-05" /></AppServicesProvider>);
 
@@ -114,6 +114,8 @@ describe('Plan task creation sheet', () => {
     await waitFor(() => expect(view.getByLabelText('Название')).toBeOnTheScreen());
     await fireEvent.changeText(view.getByLabelText('Название'), 'Задача выбранного дня');
     await waitFor(() => expect(view.getByLabelText('Название').props.value).toBe('Задача выбранного дня'));
+    await waitFor(() => expect(view.getByLabelText('Удалить блок 1')).toBeOnTheScreen());
+    await fireEvent.press(view.getByLabelText('Удалить блок 1'));
     await fireEvent.press(view.getByText('Создать'));
 
     await waitFor(async () => {

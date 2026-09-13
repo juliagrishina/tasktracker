@@ -200,18 +200,18 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
-          <CardTitle action="Изменить" onAction={() => openPlanningSettingsEditor('plan')} title="План дня" />
-          <SettingsRow description="Знаменатель загрузки" label="Рабочий диапазон" value={`${settings.workdayStartsAt}–${settings.workdayEndsAt}`} />
-          <SettingsRow description="Дела без времени" label="Вечерняя проверка" value={settings.eveningReviewAt} />
+          <CardTitle title="План дня" />
+          <SettingsRow description="Знаменатель загрузки" label="Рабочий диапазон" onPress={() => openPlanningSettingsEditor('plan')} value={`${settings.workdayStartsAt}–${settings.workdayEndsAt}`} />
+          <SettingsRow description="Дела без времени" label="Вечерняя проверка" onPress={() => openPlanningSettingsEditor('plan')} value={settings.eveningReviewAt} />
           <SettingsRow description={settings.timeZoneMode === 'manual' ? 'Выбран вручную из списка IANA' : 'Определяется автоматически устройством'} label="Часовой пояс" onPress={() => setIsTimeZonePickerVisible(true)} value={settings.timeZoneId} />
           {settings.timeZoneMode === 'manual' ? <View style={styles.deviceTimeZoneAction}><ActionButton label="Использовать пояс устройства" onPress={() => void activateDeviceTimeZone()} tone="soft" /></View> : <Text style={styles.settingDescription}>Сейчас используется пояс устройства: {settings.timeZoneId}</Text>}
-          {planningSettingsEditorPlacement === 'plan' ? <PlanningSettingsEditor includePlanFields isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} settings={planningSettings} /> : null}
+          {planningSettingsEditorPlacement === 'plan' ? <PlanningSettingsEditor isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} section="plan" settings={planningSettings} /> : null}
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
           <CardTitle action={notificationPermissionAction(notificationPermissionStatus).label} actionTone={notificationPermissionAction(notificationPermissionStatus).tone} onAction={notificationPermissions === undefined ? undefined : () => setIsNotificationPermissionPromptVisible(true)} title="Уведомления" />
           <SettingsRow description="До задачи или встречи" label="Предварительное" onPress={() => openPlanningSettingsEditor('notifications')} value={`${settings.notificationLeadMinutes} минут`} />
-          {planningSettingsEditorPlacement === 'notifications' ? <PlanningSettingsEditor isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} settings={planningSettings} /> : null}
+          {planningSettingsEditorPlacement === 'notifications' ? <PlanningSettingsEditor isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} section="notifications" settings={planningSettings} /> : null}
           {isNotificationPermissionPromptVisible ? <View style={styles.permissionPrompt}>
             <Text style={styles.settingDescription}>Разрешите локальные напоминания, когда будете готовы. План дня останется доступен в любом случае.</Text>
             <View style={styles.buttonRow}>
@@ -226,11 +226,11 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
 
         <SurfaceCard style={styles.card}>
           <CardTitle title="Данные аккаунта и устройства" />
-          <Text style={styles.storageDescription}>Проекты, задачи, подзадачи, напоминания, блоки расписания и настройки хранятся только на этом устройстве.</Text>
+          <Text style={styles.storageDescription}>Планы доступны без сети благодаря локальной копии на этом устройстве.</Text>
           <View style={styles.warning}>
-            <Text style={styles.warningText}>При удалении приложения или переходе на другое устройство эти данные не восстанавливаются.</Text>
+            <Text style={styles.warningText}>После восстановления сети изменения синхронизируются с вашим аккаунтом.</Text>
           </View>
-          <Text style={styles.storageDescription}>Анонимная учётная запись и история поведения не являются резервной копией и не восстанавливают ваши данные.</Text>
+          <Text style={styles.storageDescription}>Удаление приложения или данных браузера удаляет только локальную копию: войдите в тот же аккаунт при наличии сети, чтобы загрузить синхронизированные данные. Удаление данных аккаунта на всех устройствах требует отдельного подтверждения ниже.</Text>
           {account.kind === 'authenticated' ? <AccountSyncStatusPanel conflictCount={syncConflicts.length} onSyncAccountData={onSyncAccountData} status={syncStatus} /> : null}
           {syncConflicts.map((conflict) => <SyncConflictCard conflict={conflict} key={conflict.id} onResolve={onResolveSyncConflict} />)}
           {account.kind === 'withoutAccount' && onClearAutonomousData !== undefined ? <ActionButton label="Очистить все данные" onPress={() => setIsClearConfirmationVisible(true)} tone="secondary" /> : null}
@@ -342,17 +342,17 @@ const notificationLeadOptions = Array.from({ length: 25 }, (_, index) => {
   return { label: `${value} минут`, value };
 });
 
-function PlanningSettingsEditor({ includePlanFields = false, isSaving, onCancel, onChange, onSave, settings }: {
-  includePlanFields?: boolean;
+function PlanningSettingsEditor({ isSaving, onCancel, onChange, onSave, section, settings }: {
   isSaving: boolean;
   onCancel: () => void;
   onChange: Dispatch<SetStateAction<UpdatePlanningSettingsInput>>;
   onSave: () => void;
+  section: 'plan' | 'notifications';
   settings: UpdatePlanningSettingsInput;
 }) {
   return <View style={styles.planEditor}>
-    <Text style={styles.editorTitle}>{includePlanFields ? 'Параметры плана' : 'Предварительное уведомление'}</Text>
-    {includePlanFields ? <>
+    <Text style={styles.editorTitle}>{section === 'plan' ? 'Параметры плана' : 'Предварительное уведомление'}</Text>
+    {section === 'plan' ? <>
       <Text style={styles.fieldLabel}>Рабочий диапазон</Text>
       <View style={styles.pickerRow}>
         <View style={styles.pickerColumn}><Text style={styles.fieldHint}>Начало</Text><PlanningValuePicker accessibilityLabel="Начало рабочего дня" onChange={(workdayStartsAt) => onChange((current) => ({ ...current, workdayStartsAt }))} options={timeOptions} title="Начало рабочего дня" value={settings.workdayStartsAt} /></View>
@@ -361,11 +361,13 @@ function PlanningSettingsEditor({ includePlanFields = false, isSaving, onCancel,
       <Text style={styles.fieldLabel}>Вечерняя проверка</Text>
       <PlanningValuePicker accessibilityLabel="Время вечерней проверки" onChange={(eveningReviewAt) => onChange((current) => ({ ...current, eveningReviewAt }))} options={timeOptions} title="Время вечерней проверки" value={settings.eveningReviewAt} />
     </> : null}
-    <Text style={styles.fieldLabel}>Предварительное уведомление</Text>
-    <PlanningValuePicker accessibilityLabel="Интервал уведомления" onChange={(notificationLeadMinutes) => onChange((current) => ({ ...current, notificationLeadMinutes: Number(notificationLeadMinutes) }))} options={notificationLeadOptions} title="Интервал уведомления" value={String(settings.notificationLeadMinutes)} />
+    {section === 'notifications' ? <>
+      <Text style={styles.fieldLabel}>Предварительное уведомление</Text>
+      <PlanningValuePicker accessibilityLabel="Интервал уведомления" onChange={(notificationLeadMinutes) => onChange((current) => ({ ...current, notificationLeadMinutes: Number(notificationLeadMinutes) }))} options={notificationLeadOptions} title="Интервал уведомления" value={String(settings.notificationLeadMinutes)} />
+    </> : null}
     <View style={styles.buttonRow}>
       <View style={styles.actionWrap}><ActionButton label="Отмена" onPress={onCancel} tone="secondary" /></View>
-      <View style={styles.actionWrap}><ActionButton disabled={isSaving} label={includePlanFields ? 'Сохранить параметры плана' : 'Сохранить интервал'} onPress={onSave} tone="primary" /></View>
+      <View style={styles.actionWrap}><ActionButton disabled={isSaving} label={section === 'plan' ? 'Сохранить параметры плана' : 'Сохранить интервал'} onPress={onSave} tone="primary" /></View>
     </View>
   </View>;
 }

@@ -25,8 +25,9 @@ describe('SettingsStatePanel', () => {
     const onPlanningSettingsChange = jest.fn().mockResolvedValue(undefined);
     const view = await render(<SettingsStatePanel onPlanningSettingsChange={onPlanningSettingsChange} settings={getDefaultSettings()} />);
 
-    await fireEvent.press(view.getByRole('button', { name: 'Изменить' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Рабочий диапазон' }));
     await waitFor(() => expect(view.getByLabelText('Начало рабочего дня')).toBeOnTheScreen());
+    expect(view.queryByLabelText('Интервал уведомления')).toBeNull();
     await fireEvent.press(view.getByLabelText('Начало рабочего дня'));
     await waitFor(() => expect(view.getByRole('button', { name: '07:00' })).toBeOnTheScreen());
     await fireEvent.press(view.getByRole('button', { name: '07:00' }));
@@ -79,7 +80,10 @@ describe('SettingsStatePanel', () => {
     expect(view.getByText('Рабочий диапазон')).toBeOnTheScreen();
     expect(view.getByText('Уведомления')).toBeOnTheScreen();
     expect(view.getByText('Данные аккаунта и устройства')).toBeOnTheScreen();
-    expect(view.getByText(/При удалении приложения или переходе на другое устройство эти данные не восстанавливаются/)).toBeOnTheScreen();
+    expect(view.getByText(/Планы доступны без сети благодаря локальной копии на этом устройстве/)).toBeOnTheScreen();
+    expect(view.queryByText(/При удалении приложения или переходе на другое устройство эти данные не восстанавливаются/)).toBeNull();
+    expect(view.queryByText(/Анонимная учётная запись/)).toBeNull();
+    expect(view.queryByRole('button', { name: 'Изменить' })).toBeNull();
     expect(view.getByText(/Версия/)).toBeOnTheScreen();
   });
 

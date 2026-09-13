@@ -63,6 +63,7 @@ interface ItemFormSheetProps {
     onSave: (input: { title: string; description: string; estimatedDurationMinutes: number | null; projectId: string | null; planning: TaskPlanningDraft }) => Promise<void>;
   };
   planningContext?: {
+    createDefaultTimeBlock?: boolean;
     defaultDate: string;
     onPlanningDraftChange?: (draft: TaskPlanningDraft) => void;
   };
@@ -173,6 +174,7 @@ export function ItemFormSheet({
   const [isNoFreeSlotDialogVisible, setIsNoFreeSlotDialogVisible] = useState(false);
   const [isAlternativeDatePickerVisible, setIsAlternativeDatePickerVisible] = useState(false);
   const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
+  const shouldCreateDefaultTimeBlock = isPlanTaskForm && mode === 'create' && planningContext?.createDefaultTimeBlock === true;
   const planningDate = planningDateOverride ?? planningContext?.defaultDate;
   const defaultBlock = useMemo(
     () => {
@@ -194,7 +196,8 @@ export function ItemFormSheet({
     void planningActions.getPlanScheduleBlocks(planningDate).then((nextBlocks) => {
       if (!isCurrent) return;
       setPlanBlocks(nextBlocks);
-      if (pendingAlternativeDate !== planningDate) return;
+      const shouldAddBlock = pendingAlternativeDate === planningDate || shouldCreateDefaultTimeBlock;
+      if (!shouldAddBlock) return;
       const startsAt = findFirstAvailablePlanTime({ blocks: nextBlocks, date: planningDate, durationMinutes: 60, now: new Date(), settings });
       if (startsAt === null) {
         setIsNoFreeSlotDialogVisible(true);
@@ -202,11 +205,15 @@ export function ItemFormSheet({
         return;
       }
       const block = { ...createDefaultBlock(planningDate, new Date(), settings.timeZoneId), date: planningDate, startsAt };
-      setPlanningDraft((draft) => ({ ...draft, blocks: [...draft.blocks, block], scheduleMode: 'date', scheduledOn: planningDate }));
+      setPlanningDraft((draft) => (
+        draft.blocks.length > 0 && pendingAlternativeDate !== planningDate
+          ? draft
+          : { ...draft, blocks: [...draft.blocks, block], scheduleMode: 'date', scheduledOn: planningDate }
+      ));
       setPendingAlternativeDate(null);
     });
     return () => { isCurrent = false; };
-  }, [isPlanTaskForm, pendingAlternativeDate, planningActions, planningDate, settings, visible]);
+  }, [isPlanTaskForm, pendingAlternativeDate, planningActions, planningDate, settings, shouldCreateDefaultTimeBlock, visible]);
   useEffect(() => {
     if (!visible || !isPlanTaskForm || item === undefined || !('kind' in item)) return;
     if (occurrenceEdit !== undefined) {

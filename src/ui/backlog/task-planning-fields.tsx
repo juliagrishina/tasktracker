@@ -150,28 +150,6 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
           <Field label="Конец периода"><PlanningDatePicker accessibilityLabel="Конец периода задачи" onChange={(periodEndOn) => update({ periodEndOn })} value={value.periodEndOn} /></Field>
         </View>
       ) : null}
-      {showRepeat ? <>
-        <Text style={styles.label}>Повторение</Text>
-        <View style={styles.chips}>
-          {repeatOptions.map((option) => {
-            const selected = value.repeatFrequency === option.value;
-            return (
-              <Pressable
-                accessibilityLabel={option.label}
-                accessibilityRole="button"
-                key={option.value}
-                onPress={() => update({ repeatFrequency: option.value })}
-                style={[styles.chip, selected && styles.chipSelected]}>
-                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        {value.repeatFrequency !== 'none' ? (
-          <PlanningInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" label="Интервал" onChangeText={(repeatInterval) => update({ repeatInterval })} value={value.repeatInterval} />
-        ) : null}
-        {value.repeatFrequency === 'weekly' ? <View><Text style={styles.label}>Дни недели</Text><View style={styles.chips}>{[['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]].map(([label, day]) => { const selected = value.repeatWeekdays.includes(day as number); return <Pressable accessibilityLabel={String(label)} key={String(label)} onPress={() => update({ repeatWeekdays: selected ? value.repeatWeekdays.filter((entry) => entry !== day) : [...value.repeatWeekdays, day as number] })} style={[styles.chip, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></Pressable>; })}</View></View> : null}
-      </> : null}
       <View style={styles.blockHeader}>
         <Text style={styles.label}>Временные блоки</Text>
         <Pressable
@@ -197,6 +175,28 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
           <PlanningValuePicker accessibilityLabel={`Длительность блока ${index + 1}`} onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} options={durationOptions} title="Длительность блока" value={block.durationMinutes} />
         </View>
       ))}
+      {showRepeat ? <>
+        <Text style={styles.label}>Повторение</Text>
+        <View style={styles.chips}>
+          {repeatOptions.map((option) => {
+            const selected = value.repeatFrequency === option.value;
+            return (
+              <Pressable
+                accessibilityLabel={option.label}
+                accessibilityRole="button"
+                key={option.value}
+                onPress={() => update({ repeatFrequency: option.value })}
+                style={[styles.chip, selected && styles.chipSelected]}>
+                <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {value.repeatFrequency !== 'none' ? (
+          <PlanningInput accessibilityLabel="Интервал повторения" keyboardType="number-pad" label="Интервал" onChangeText={(repeatInterval) => update({ repeatInterval })} value={value.repeatInterval} />
+        ) : null}
+        {value.repeatFrequency === 'weekly' ? <View><Text style={styles.label}>Дни недели</Text><View style={styles.chips}>{[['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]].map(([label, day]) => { const selected = value.repeatWeekdays.includes(day as number); return <Pressable accessibilityLabel={String(label)} key={String(label)} onPress={() => update({ repeatWeekdays: selected ? value.repeatWeekdays.filter((entry) => entry !== day) : [...value.repeatWeekdays, day as number] })} style={[styles.chip, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></Pressable>; })}</View></View> : null}
+      </> : null}
     </View>
   );
 }

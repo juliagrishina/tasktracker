@@ -6,6 +6,7 @@ import { DayDashboard } from '../../src/ui/plan/day-dashboard';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { ProgressRing } from '../../src/ui/plan/progress-ring';
+import { designTokens } from '../../src/ui/design/tokens';
 import type { PlanDayReadModel } from '../../src/application/plan-read-model';
 
 describe('ProgressRing', () => {
@@ -25,6 +26,13 @@ describe('ProgressRing', () => {
 describe('DayDashboard', () => {
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  test('colours a high-load active arc with the shared danger tone', async () => {
+    const view = await render(<ProgressRing label="83%" tone="high" value={83} />);
+
+    const nativeColorPayload = Number.parseInt(`FF${designTokens.color.feedback.danger.foreground.slice(1)}`, 16);
+    expect(JSON.stringify(view.toJSON())).toContain(`\"payload\":${nativeColorPayload}`);
   });
 
   test('keeps a completed block in the plan and marks it as completed', async () => {
@@ -74,7 +82,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-10T21:30:00.000Z')} /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Сегодня')).toBeOnTheScreen());
-    expect(view.getByText('2026-08-11')).toBeOnTheScreen();
+    expect(view.getByText('11.08.2026')).toBeOnTheScreen();
     expect(view.getByText('Задача локального дня')).toBeOnTheScreen();
   });
 

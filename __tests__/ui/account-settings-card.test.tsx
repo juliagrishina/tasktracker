@@ -24,6 +24,8 @@ describe('AccountSettingsCard', () => {
     expect(view.getByText('Почта подтверждена')).toBeOnTheScreen();
 
     await fireEvent.press(view.getByRole('button', { name: 'Редактировать аккаунт' }));
+    expect(view.getByText('Текущий пароль')).toBeOnTheScreen();
+    expect(view.getByText('Новый email')).toBeOnTheScreen();
     await fireEvent.changeText(view.getByLabelText('Имя аккаунта'), 'Мария Петрова');
     await fireEvent.press(view.getByRole('button', { name: 'Сохранить имя' }));
     await waitFor(() => expect(onUpdateDisplayName).toHaveBeenCalledWith('Мария Петрова'));
@@ -88,9 +90,12 @@ describe('AccountSettingsCard', () => {
 
     await fireEvent.press(view.getByRole('button', { name: 'Изменить пароль' }));
     await fireEvent.changeText(view.getByLabelText('Текущий пароль'), 'Current!123');
+    expect(view.queryByLabelText('Код для смены пароля')).toBeNull();
+    expect(view.queryByLabelText('Новый пароль')).toBeNull();
     await fireEvent.press(view.getByRole('button', { name: 'Отправить код для смены пароля' }));
     await waitFor(() => expect(onRequestPasswordChangeCode).toHaveBeenCalledWith());
     expect(view.getByRole('button', { name: 'Отправить новый код' })).toBeOnTheScreen();
+    expect(view.getByLabelText('Код для смены пароля')).toBeOnTheScreen();
     await fireEvent.changeText(view.getByLabelText('Код для смены пароля'), '123456');
     await fireEvent.changeText(view.getByLabelText('Новый пароль'), 'NewPassword!42');
     await fireEvent.changeText(view.getByLabelText('Повторите новый пароль'), 'NewPassword!42');
@@ -102,5 +107,17 @@ describe('AccountSettingsCard', () => {
       password: 'NewPassword!42',
       passwordConfirmation: 'NewPassword!42',
     }));
+  });
+
+  test('cancels unsaved account edits without calling an account operation', async () => {
+    const onStartEmailChange = jest.fn<Promise<AccountProfileResult>, [{ currentPassword: string; email: string }]>();
+    const view = await render(<AccountSettingsCard account={authenticatedAccount} onStartEmailChange={onStartEmailChange} />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Редактировать аккаунт' }));
+    await fireEvent.changeText(view.getByLabelText('Новый email'), 'draft@example.com');
+    await fireEvent.press(view.getByRole('button', { name: 'Отмена редактирования' }));
+
+    expect(view.queryByLabelText('Новый email')).toBeNull();
+    expect(onStartEmailChange).not.toHaveBeenCalled();
   });
 });

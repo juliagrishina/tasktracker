@@ -2,9 +2,12 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import { designTokens } from '../design/tokens';
+import type { PlanLoadTone } from './plan-period-model';
+import { getPlanLoadAppearance } from './plan-load-appearance';
 
 interface ProgressRingProps {
   label: string;
+  tone?: PlanLoadTone;
   value: number;
 }
 
@@ -13,9 +16,10 @@ const ringStroke = designTokens.size.progressRingStroke;
 const ringRadius = (ringSize - ringStroke) / 2;
 const ringCircumference = 2 * Math.PI * ringRadius;
 
-export function ProgressRing({ label, value }: ProgressRingProps) {
+export function ProgressRing({ label, tone = 'low', value }: ProgressRingProps) {
   const normalizedValue = Math.min(Math.max(value, 0), 100);
   const dashOffset = ringCircumference * (1 - normalizedValue / 100);
+  const appearance = getPlanLoadAppearance(tone);
 
   return (
     <View
@@ -38,7 +42,7 @@ export function ProgressRing({ label, value }: ProgressRingProps) {
           fill="none"
           r={ringRadius}
           rotation="-90"
-          stroke={designTokens.color.primary}
+          stroke={appearance.foreground}
           strokeDasharray={`${ringCircumference} ${ringCircumference}`}
           strokeDashoffset={dashOffset}
           strokeLinecap="round"

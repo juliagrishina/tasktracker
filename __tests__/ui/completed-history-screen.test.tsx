@@ -13,6 +13,7 @@ describe('CompletedHistoryScreen', () => {
     expect(view.getByPlaceholderText('Поиск по названию')).toBeOnTheScreen();
     expect(view.getByRole('button', { name: 'Неделя' }).props.accessibilityState.selected).toBe(true);
     await waitFor(() => expect(view.getByText('Собрать обратную связь')).toBeOnTheScreen());
+    expect(view.queryByText('Удалить окончательно доступно только с подтверждением.')).toBeNull();
   });
 
   test('filters real archive entries and opens long-press actions', async () => {

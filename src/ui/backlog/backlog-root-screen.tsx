@@ -3,7 +3,6 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAppServices } from '../../application/app-services-provider';
 import { designTokens } from '../design/tokens';
-import { SurfaceCard } from '../primitives/surface-card';
 import { ScreenShell } from '../screen-shell';
 
 import { CategoryCard } from './category-card';
@@ -45,9 +44,6 @@ export function BacklogRootScreen({ onOpenCategory }: BacklogRootScreenProps) {
           <Text style={styles.addButtonText}>+</Text>
         </Pressable>
       )}>
-      <SurfaceCard style={styles.demoHint} tone="info">
-        <Text style={styles.demoHintText}>Демо-планирование: задача откроет форму с параметрами дня.</Text>
-      </SurfaceCard>
       <View style={styles.cards}>
         <CategoryCard
           count={backlog.reminders.length}
@@ -139,14 +135,6 @@ const styles = StyleSheet.create({
     lineHeight: designTokens.typography.lineHeight.display,
   },
   cards: { gap: designTokens.space[10] },
-  demoHint: {
-    marginBottom: designTokens.space[10],
-  },
-  demoHintText: {
-    color: designTokens.color.primaryStrong,
-    fontSize: designTokens.typography.size.meta,
-    lineHeight: designTokens.typography.lineHeight.meta,
-  },
   menuOverlay: {
     flex: 1,
     justifyContent: 'flex-end',

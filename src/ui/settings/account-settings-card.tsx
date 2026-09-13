@@ -46,6 +46,27 @@ export function AccountSettingsCard({
   const [passwordChangeConfirmation, setPasswordChangeConfirmation] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
 
+  const resetEmailDraft = () => {
+    setCurrentPassword('');
+    setNewEmail('');
+    setCode('');
+  };
+  const closeAccountEditor = () => {
+    setDisplayName(account.kind === 'authenticated' ? account.displayName : '');
+    resetEmailDraft();
+    setFeedback(null);
+    setIsEditing(false);
+  };
+  const closePasswordEditor = () => {
+    setPasswordChangeCurrentPassword('');
+    setPasswordChangeCode('');
+    setPasswordChangePassword('');
+    setPasswordChangeConfirmation('');
+    setPasswordChangeCodeRequested(false);
+    setFeedback(null);
+    setIsChangingPassword(false);
+  };
+
   const handleResult = (result: AccountProfileResult): void => {
     if (result.kind === 'requestFailed' || result.kind === 'validationError') {
       setFeedback(result.message);
@@ -130,7 +151,7 @@ export function AccountSettingsCard({
         <ActionButton label="Редактировать аккаунт" onPress={() => {
           setDisplayName(account.displayName);
           setFeedback(null);
-          setIsEditing((value) => !value);
+          setIsEditing(true);
         }} tone="soft" />
       </View>
       <Text style={styles.primaryValue}>{account.displayName}</Text>
@@ -138,10 +159,7 @@ export function AccountSettingsCard({
       <Text style={styles.confirmed}>{account.emailConfirmed ? 'Почта подтверждена' : 'Почта ожидает подтверждения'}</Text>
       <ActionButton label="Изменить пароль" onPress={() => {
         setFeedback(null);
-        setIsChangingPassword((value) => {
-          if (value) setPasswordChangeCodeRequested(false);
-          return !value;
-        });
+        setIsChangingPassword(true);
       }} tone="soft" />
       {onSignOut === undefined ? null : <ActionButton label="Выйти" onPress={onSignOut} tone="secondary" />}
 
@@ -152,12 +170,15 @@ export function AccountSettingsCard({
           if (onUpdateDisplayName !== undefined) void onUpdateDisplayName(displayName).then(handleResult).catch(handleActionFailure);
         }} tone="secondary" />
 
-        <Text style={styles.fieldLabel}>Новый email</Text>
+        <Text style={styles.fieldLabel}>Смена email</Text>
+        <Text style={styles.fieldLabel}>Текущий пароль</Text>
         <PasswordInput accessibilityLabel="Текущий пароль для смены email" autoComplete="current-password" onChangeText={setCurrentPassword} style={styles.input} textContentType="password" value={currentPassword} visibilityLabel="текущий пароль для смены email" />
+        <Text style={styles.fieldLabel}>Новый email</Text>
         <TextInput accessibilityLabel="Новый email" autoCapitalize="none" autoComplete="email" keyboardType="email-address" onChangeText={setNewEmail} style={styles.input} textContentType="emailAddress" value={newEmail} />
         <ActionButton label="Отправить код на новый email" onPress={() => {
           if (onStartEmailChange !== undefined) void onStartEmailChange({ currentPassword, email: newEmail }).then(handleResult).catch(handleActionFailure);
         }} tone="primary" />
+        <ActionButton label="Отмена редактирования" onPress={closeAccountEditor} tone="secondary" />
       </View> : null}
 
       {account.pendingEmail !== null ? <View style={styles.pending}>
@@ -172,21 +193,28 @@ export function AccountSettingsCard({
       </View> : null}
       {isChangingPassword ? <View style={styles.editor}>
         <Text style={styles.fieldLabel}>Смена пароля</Text>
+        <Text style={styles.fieldLabel}>Текущий пароль</Text>
         <PasswordInput accessibilityLabel="Текущий пароль" autoComplete="current-password" onChangeText={setPasswordChangeCurrentPassword} style={styles.input} textContentType="password" value={passwordChangeCurrentPassword} visibilityLabel="текущий пароль" />
         <ActionButton label={passwordChangeCodeRequested ? 'Отправить новый код' : 'Отправить код для смены пароля'} onPress={() => {
           if (onRequestPasswordChangeCode !== undefined) void onRequestPasswordChangeCode().then(handlePasswordResult).catch(handleActionFailure);
         }} tone="secondary" />
-        <TextInput accessibilityLabel="Код для смены пароля" autoComplete="one-time-code" keyboardType="number-pad" maxLength={6} onChangeText={setPasswordChangeCode} style={styles.input} textContentType="oneTimeCode" value={passwordChangeCode} />
-        <PasswordInput accessibilityLabel="Новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordChangePassword} style={styles.input} textContentType="newPassword" value={passwordChangePassword} visibilityLabel="новый пароль" />
-        <PasswordInput accessibilityLabel="Повторите новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordChangeConfirmation} style={styles.input} textContentType="newPassword" value={passwordChangeConfirmation} visibilityLabel="повтор нового пароля" />
-        <ActionButton label="Сохранить новый пароль" onPress={() => {
-          if (onChangePassword !== undefined) void onChangePassword({
-            currentPassword: passwordChangeCurrentPassword,
-            code: passwordChangeCode,
-            password: passwordChangePassword,
-            passwordConfirmation: passwordChangeConfirmation,
-          }).then(handlePasswordResult).catch(handleActionFailure);
-        }} tone="primary" />
+        {passwordChangeCodeRequested ? <>
+          <Text style={styles.fieldLabel}>Код из письма</Text>
+          <TextInput accessibilityLabel="Код для смены пароля" autoComplete="one-time-code" keyboardType="number-pad" maxLength={6} onChangeText={setPasswordChangeCode} style={styles.input} textContentType="oneTimeCode" value={passwordChangeCode} />
+          <Text style={styles.fieldLabel}>Новый пароль</Text>
+          <PasswordInput accessibilityLabel="Новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordChangePassword} style={styles.input} textContentType="newPassword" value={passwordChangePassword} visibilityLabel="новый пароль" />
+          <Text style={styles.fieldLabel}>Повторите новый пароль</Text>
+          <PasswordInput accessibilityLabel="Повторите новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordChangeConfirmation} style={styles.input} textContentType="newPassword" value={passwordChangeConfirmation} visibilityLabel="повтор нового пароля" />
+          <ActionButton label="Сохранить новый пароль" onPress={() => {
+            if (onChangePassword !== undefined) void onChangePassword({
+              currentPassword: passwordChangeCurrentPassword,
+              code: passwordChangeCode,
+              password: passwordChangePassword,
+              passwordConfirmation: passwordChangeConfirmation,
+            }).then(handlePasswordResult).catch(handleActionFailure);
+          }} tone="primary" />
+        </> : null}
+        <ActionButton label="Отмена смены пароля" onPress={closePasswordEditor} tone="secondary" />
       </View> : null}
       {feedback === null ? null : <Text accessibilityLiveRegion="polite" style={styles.feedback}>{feedback}</Text>}
     </SurfaceCard>

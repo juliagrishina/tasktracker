@@ -22,7 +22,8 @@ import { DeletePlanTaskDialog, PlanTaskActionsDialog, type PlanTaskAction } from
 import { ProgressRing } from './progress-ring';
 import { getPlanViewModeLabel, PlanViewControl } from './plan-view-menu';
 import { PlanPeriodNavigator } from './plan-period-navigator';
-import type { PlanViewMode } from './plan-period-model';
+import { formatPlanDayHeaderDate, type PlanViewMode } from './plan-period-model';
+import { getPlanLoadAppearance } from './plan-load-appearance';
 import { DayTimeline } from './day-timeline';
 import type { Reminder, ScheduleBlock, TaskItem } from '../../domain/entities';
 import type { PlanDayReadModel } from '../../application/plan-read-model';
@@ -155,6 +156,7 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
   const calculatedLoadPercent = useMemo(() => getDayLoadPercent(settings, currentBlocks, selectedDate, estimatedMinutes), [currentBlocks, estimatedMinutes, selectedDate, settings]);
   const loadPercent = dayPlan?.loadPercent ?? calculatedLoadPercent;
   const tone = getPlanLoadTone(loadPercent);
+  const loadAppearance = getPlanLoadAppearance(tone);
   const timelineBlocks = services === null ? [createDemoTimelineBlock(selectedDate)] : currentBlocks;
   const timelineTitles = services === null
     ? new Map([['demo-plan-task', 'Планёрка команды']])
@@ -348,7 +350,7 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
         <View style={[styles.headerContent, temporaryWebContentStyle()]}>
           <View>
             <Text style={styles.screenTitle}>{title}</Text>
-            <Text style={styles.date}>{selectedDate}</Text>
+            <Text style={styles.date}>{formatPlanDayHeaderDate(selectedDate)}</Text>
           </View>
           <View style={styles.headerActions}>
             <PlanViewControl
@@ -381,7 +383,7 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
 
       <ScrollView contentContainerStyle={[styles.scrollContent, temporaryWebContentStyle()]}>
         {onChangeDate === undefined || onSelectToday === undefined ? null : <PlanPeriodNavigator
-          label={selectedDate}
+          label={formatPlanDayHeaderDate(selectedDate)}
           nextAccessibilityLabel="Следующий день"
           onNext={() => onChangeDate(1)}
           onPrevious={() => onChangeDate(-1)}
@@ -390,12 +392,12 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
         />}
         <SurfaceCard style={styles.hero} tone="info">
           <View style={styles.heroRow}>
-            <ProgressRing label={`${Math.round(loadPercent)}%`} value={Math.min(100, loadPercent)} />
+            <ProgressRing label={`${Math.round(loadPercent)}%`} tone={tone} value={Math.min(100, loadPercent)} />
             <View style={styles.heroCopy}>
               <Text style={styles.heroTitle}>{tone === 'high' ? 'Высокая загрузка' : tone === 'medium' ? 'Средняя загрузка' : 'План в норме'}</Text>
               <Text style={styles.heroDetail}>{Math.round(loadPercent)}% · {currentBlocks.length} {currentBlocks.length === 1 ? 'блок' : 'блоков'}</Text>
               <View style={styles.loadTrack}>
-                <View style={[styles.loadValue, { width: `${Math.min(100, loadPercent)}%` }]} />
+                <View style={[styles.loadValue, { backgroundColor: loadAppearance.foreground, width: `${Math.min(100, loadPercent)}%` }]} />
               </View>
             </View>
           </View>
@@ -597,7 +599,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   loadValue: {
-    backgroundColor: designTokens.color.feedback.warning.border,
     borderRadius: designTokens.radius.pill,
     height: '100%',
     width: '63%',

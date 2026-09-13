@@ -201,7 +201,7 @@ export function PlanScreen({ initialDate }: PlanScreenProps) {
         <ItemFormSheet
           mode="create"
           onClose={() => setIsTaskSheetVisible(false)}
-          planningContext={{ defaultDate: selectedDate }}
+          planningContext={{ createDefaultTimeBlock: true, defaultDate: selectedDate }}
           onSaved={() => setRefreshToken((value) => value + 1)}
           type="task"
           visible

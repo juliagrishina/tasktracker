@@ -1,10 +1,15 @@
 import {
+  formatPlanDayHeaderDate,
   getPlanLoadTone,
   getWeekLoadDays,
   shiftPlanAnchor,
 } from '../../src/ui/plan/plan-period-model';
 
 describe('plan period load model', () => {
+  test('formats a Day header date in the compact Russian numeric form', () => {
+    expect(formatPlanDayHeaderDate('2026-09-13')).toBe('13.09.2026');
+  });
+
   test('maps all approved load thresholds without capping overload', () => {
     expect(getPlanLoadTone(0)).toBe('low');
     expect(getPlanLoadTone(50)).toBe('low');

@@ -73,7 +73,7 @@ describe('BacklogRootScreen', () => {
     expect(view.getByText('Перейти к проектам')).toBeOnTheScreen();
   });
 
-  test('shows the approved Backlog 2 summary and demo planning callout', async () => {
+  test('shows the Backlog summary without an obsolete demo callout', async () => {
     const view = await render(
       <AppServicesProvider source={createInMemoryDataSource()} seedDevelopmentData={false}>
         <BacklogRootScreen />
@@ -84,8 +84,6 @@ describe('BacklogRootScreen', () => {
       expect(view.getByText('0 дел ждут планирования')).toBeOnTheScreen();
     });
 
-    expect(
-      view.getByText('Демо-планирование: задача откроет форму с параметрами дня.'),
-    ).toBeOnTheScreen();
+    expect(view.queryByText('Демо-планирование: задача откроет форму с параметрами дня.')).toBeNull();
   });
 });
