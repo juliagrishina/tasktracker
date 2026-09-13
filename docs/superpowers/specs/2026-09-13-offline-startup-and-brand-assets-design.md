@@ -1,6 +1,6 @@
 # Epic 11 — надёжный offline-start и брендовые assets
 
-**Статус:** согласовано для детализации 2026-09-13  
+**Статус:** согласовано для детализации 2026-09-13
 **Связанные документы:** `docs/tz/account-authentication-and-cloud-sync.md`, `docs/tz/epic-09-quality-accessibility-and-release.md`, `docs/superpowers/specs/2026-09-10-e11-t29-offline-pwa-shell-design.md`
 
 ## Цель
