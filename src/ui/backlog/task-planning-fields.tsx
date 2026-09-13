@@ -122,6 +122,10 @@ export function validateTaskPlanningDraft(value: TaskPlanningDraft): string | nu
 
 export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showRepeat = true, value }: TaskPlanningFieldsProps) {
   const update = (patch: Partial<TaskPlanningDraft>) => onChange({ ...value, ...patch });
+  const updateScheduledDate = (scheduledOn: string) => update({
+    scheduledOn,
+    blocks: value.blocks.map((block, index) => index === 0 ? { ...block, date: scheduledOn } : block),
+  });
 
   return (
     <View style={styles.section}>
@@ -142,7 +146,7 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
         })}
       </View>
       {value.scheduleMode === 'date' ? (
-        <Field label="Дата задачи"><PlanningDatePicker accessibilityLabel="Дата задачи" onChange={(scheduledOn) => update({ scheduledOn })} value={value.scheduledOn} /></Field>
+        <Field label="Дата задачи"><PlanningDatePicker accessibilityLabel="Дата задачи" onChange={updateScheduledDate} value={value.scheduledOn} /></Field>
       ) : null}
       {value.scheduleMode === 'period' ? (
         <View>
@@ -160,21 +164,22 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
           <Text style={styles.addBlockText}>Добавить блок времени</Text>
         </Pressable>
       </View>
-      {value.blocks.map((block, index) => (
-        <View key={block.id} style={styles.block}>
+      {value.blocks.map((block, index) => {
+        const derivesDateFromTask = value.scheduleMode === 'date' && index === 0;
+        return <View key={block.id} style={styles.block}>
           <View style={styles.blockTitleRow}>
             <Text style={styles.blockTitle}>Блок {index + 1}</Text>
             <Pressable accessibilityLabel={`Удалить блок ${index + 1}`} onPress={() => update({ blocks: value.blocks.filter((entry) => entry.id !== block.id) })}>
               <Text style={styles.removeBlockText}>Удалить</Text>
             </Pressable>
           </View>
-          <Field label="Дата"><PlanningDatePicker accessibilityLabel={`Дата блока ${index + 1}`} onChange={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} /></Field>
+          {derivesDateFromTask ? <Text style={styles.derivedDate}>{`На дату задачи: ${formatPlanningDate(value.scheduledOn)}`}</Text> : <Field label="Дата"><PlanningDatePicker accessibilityLabel={`Дата блока ${index + 1}`} onChange={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} /></Field>}
           <Text style={styles.label}>Начало</Text>
           <PlanningValuePicker accessibilityLabel={`Начало блока ${index + 1}`} onChange={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} options={timeOptions} title="Начало блока" value={block.startsAt} />
           <Text style={styles.label}>Длительность</Text>
           <PlanningValuePicker accessibilityLabel={`Длительность блока ${index + 1}`} onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} options={durationOptions} title="Длительность блока" value={block.durationMinutes} />
-        </View>
-      ))}
+        </View>;
+      })}
       {showRepeat ? <>
         <Text style={styles.label}>Повторение</Text>
         <View style={styles.chips}>
@@ -199,6 +204,11 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
       </> : null}
     </View>
   );
+}
+
+function formatPlanningDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
+  return match === null ? 'не указана' : `${match[3]}.${match[2]}.${match[1]}`;
 }
 
 function updateBlock(value: TaskPlanningDraft, id: string, patch: Partial<TaskPlanningBlock>, onChange: (value: TaskPlanningDraft) => void) {
@@ -327,6 +337,12 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.label,
     fontWeight: designTokens.typography.weight.bold,
     lineHeight: designTokens.typography.lineHeight.label,
+  },
+  derivedDate: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta,
+    marginTop: designTokens.space[8],
   },
   removeBlockText: {
     color: designTokens.color.feedback.danger.foreground,

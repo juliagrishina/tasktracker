@@ -29,10 +29,13 @@ describe('DayDashboard', () => {
   });
 
   test('colours a high-load active arc with the shared danger tone', async () => {
-    const view = await render(<ProgressRing label="83%" tone="high" value={83} />);
+    const view = await render(<ProgressRing label="92%" tone="high" value={92} />);
 
-    const nativeColorPayload = Number.parseInt(`FF${designTokens.color.feedback.danger.foreground.slice(1)}`, 16);
-    expect(JSON.stringify(view.toJSON())).toContain(`\"payload\":${nativeColorPayload}`);
+    const activeCircle = view.getByTestId('plan-load-ring-active');
+    expect(activeCircle.props.strokeDasharray).toEqual([expect.any(Number), expect.any(Number)]);
+    expect(activeCircle.props.strokeDashoffset).toBeGreaterThan(0);
+    const nativeDangerColor = Number.parseInt(`FF${designTokens.color.feedback.danger.foreground.slice(1)}`, 16);
+    expect(JSON.stringify(activeCircle.props.stroke)).toContain(`\"payload\":${nativeDangerColor}`);
   });
 
   test('keeps a completed block in the plan and marks it as completed', async () => {

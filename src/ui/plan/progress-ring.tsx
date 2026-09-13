@@ -37,13 +37,13 @@ export function ProgressRing({ label, tone = 'low', value }: ProgressRingProps) 
           strokeWidth={ringStroke}
         />
         <Circle
+          testID="plan-load-ring-active"
           cx={ringSize / 2}
           cy={ringSize / 2}
           fill="none"
           r={ringRadius}
-          rotation="-90"
           stroke={appearance.foreground}
-          strokeDasharray={`${ringCircumference} ${ringCircumference}`}
+          strokeDasharray={[ringCircumference, ringCircumference]}
           strokeDashoffset={dashOffset}
           strokeLinecap="round"
           strokeWidth={ringStroke}
