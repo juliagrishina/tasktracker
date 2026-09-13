@@ -31,6 +31,28 @@ describe('AuthGate', () => {
     await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'autonomous' });
   });
 
+  test('opens the persisted account replica when remote session restoration is unavailable', async () => {
+    const storage = createMemoryStorage();
+    const scopes = createDataScopeRegistry(storage);
+    await scopes.openAccountScope('account-17');
+    const view = await render(
+      <AuthGate
+        authGateway={{
+          restoreSession: async () => new Promise(() => {}),
+          startAutonomousSession: async () => ({ kind: 'autonomous', userId: null }),
+        }}
+        entryState={createAuthEntryState(storage)}
+        scopeRegistry={scopes}
+        sessionRestoreTimeoutMs={0}>
+        <Text>Основной экран</Text>
+      </AuthGate>,
+    );
+
+    await waitFor(() => expect(view.getByText('Основной экран')).toBeOnTheScreen());
+    expect(view.queryByText('Создать аккаунт')).toBeNull();
+    await expect(scopes.getActiveScope()).resolves.toEqual({ kind: 'account', accountId: 'account-17' });
+  });
+
   test('keeps first launch on Auth and opens only the autonomous area after an explicit choice', async () => {
     const storage = createMemoryStorage();
     const scopes = createDataScopeRegistry(storage);

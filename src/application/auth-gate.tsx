@@ -30,6 +30,7 @@ import {
   type WorkspaceTransferService,
 } from './workspace-import';
 import { productAccessPolicy } from './product-access-policy';
+import { recoverOfflineAccountScope } from './offline-account-recovery';
 
 interface AutonomousAuthGateway extends AuthGateway {
   startAutonomousSession(): Promise<AuthSessionState>;
@@ -48,6 +49,7 @@ interface AuthGateProps {
   workspaceTransfer?: WorkspaceTransferService;
   clearAccountWorkspace?: (scope: LocalDataScope) => Promise<void>;
   guestAccessEnabled?: boolean;
+  sessionRestoreTimeoutMs?: number;
 }
 
 type GateState = 'loading' | 'auth' | 'verification' | 'passwordRecovery' | 'workspaceTransfer' | 'app';
@@ -96,6 +98,7 @@ export function AuthGate({
   workspaceTransfer = createWorkspaceTransferService({ sourceForScope: createDataSource }),
   clearAccountWorkspace = clearAccountWorkspaceForScope,
   guestAccessEnabled = productAccessPolicy.guestAccessEnabled,
+  sessionRestoreTimeoutMs = 1_500,
 }: AuthGateProps) {
   const [gateState, setGateState] = useState<GateState>('loading');
   const [authScreenMode, setAuthScreenMode] = useState<AuthScreenMode>('registration');
@@ -120,12 +123,22 @@ export function AuthGate({
 
     void (async () => {
       try {
-        const session = await gateway.restoreSession();
-        const shouldOpenApp = session.kind === 'autonomous' && !guestAccessEnabled
-          ? false
-          : await entryState.shouldOpenApp(session);
+        const session = await restoreSessionWithin(gateway, sessionRestoreTimeoutMs);
+        const offlineScope = session === null || session.kind === 'signedOut'
+          ? await recoverOfflineAccountScope(scopeRegistry)
+          : null;
+        const shouldOpenApp = session === null
+          ? offlineScope !== null
+          : session.kind === 'autonomous' && !guestAccessEnabled
+            ? false
+            : await entryState.shouldOpenApp(session);
         if (isMounted) {
-          if (shouldOpenApp) {
+          if (offlineScope !== null) {
+            setActiveScope(offlineScope);
+            setGateState('app');
+            return;
+          }
+          if (shouldOpenApp && session !== null) {
             if (session.kind === 'authenticated') {
               await scopeRegistry.openAccountScope(session.userId);
               setActiveScope({ kind: 'account', accountId: session.userId });
@@ -136,7 +149,7 @@ export function AuthGate({
             setGateState('app');
             return;
           }
-          if (session.kind === 'pendingVerification') {
+          if (session?.kind === 'pendingVerification') {
             const pending = await registration.getPending();
             if (pending !== null) {
               setPendingEmail(pending.email);
@@ -157,7 +170,7 @@ export function AuthGate({
     return () => {
       isMounted = false;
     };
-  }, [entryState, gateway, guestAccessEnabled, registration, scopeRegistry]);
+  }, [entryState, gateway, guestAccessEnabled, registration, scopeRegistry, sessionRestoreTimeoutMs]);
 
   useEffect(() => {
     if (activeScope.kind !== 'account' || gateway.subscribe === undefined) return;
@@ -478,6 +491,27 @@ export function AuthGate({
   return <AuthGateNavigationContext.Provider value={{ openAuth, signOut }}>
     <AuthGateWorkspaceContext.Provider value={activeScope}>{children}</AuthGateWorkspaceContext.Provider>
   </AuthGateNavigationContext.Provider>;
+}
+
+async function restoreSessionWithin(
+  gateway: Pick<AuthGateway, 'restoreSession'>,
+  timeoutMs: number,
+): Promise<AuthSessionState | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const complete = (session: AuthSessionState | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(session);
+    };
+    const timeout = setTimeout(() => complete(null), timeoutMs);
+
+    void gateway.restoreSession().then(
+      (session) => complete(session),
+      () => complete(null),
+    );
+  });
 }
 
 function messageForPasswordResult(result: PasswordManagementResult): string {
