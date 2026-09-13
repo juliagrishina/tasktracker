@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import {
   authGateway,
@@ -13,8 +12,8 @@ import { authEntryState } from '../data/auth-entry-state-provider';
 import { localDataScopeRegistry } from '../data/local-data-scope-registry';
 import type { DataScopeRegistry, LocalDataScope } from '../data/local-data-scopes';
 import { createDataSource } from '../data/data-source';
-import { designTokens } from '../ui/design/tokens';
 import { AuthScreen } from '../ui/auth/auth-screen';
+import { AppBootScreen } from '../ui/primitives/app-boot-screen';
 import { EmailVerificationScreen } from '../ui/auth/email-verification-screen';
 import { PasswordRecoveryScreen } from '../ui/auth/password-recovery-screen';
 import { WorkspaceTransferChoice } from '../ui/auth/workspace-transfer-choice';
@@ -137,6 +136,7 @@ export function AuthGate({
           if (offlineScope !== null) {
             setActiveScope(offlineScope);
             setGateState('app');
+            void refreshRecoveredAccountSession(gateway, offlineScope.accountId);
             return;
           }
           if (shouldOpenApp && session !== null) {
@@ -397,11 +397,7 @@ export function AuthGate({
   };
 
   if (gateState === 'loading') {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={designTokens.color.primary} />
-      </View>
-    );
+    return <AppBootScreen progress={15} message="Восстанавливаем доступ" />;
   }
 
   if (gateState === 'auth') {
@@ -518,6 +514,20 @@ async function restoreSessionWithin(
   });
 }
 
+async function refreshRecoveredAccountSession(
+  gateway: Pick<AuthGateway, 'restoreSession'>,
+  accountId: string,
+): Promise<void> {
+  try {
+    const session = await gateway.restoreSession();
+    if (session.kind === 'authenticated' && session.userId === accountId) {
+      await refreshAccountProfileCacheForUser(accountId);
+    }
+  } catch {
+    // A reconnect retry must never hide the locally confirmed account scope.
+  }
+}
+
 function messageForPasswordResult(result: PasswordManagementResult): string {
   switch (result.kind) {
     case 'codeSent':
@@ -560,12 +570,3 @@ function messageForConfirmationResult(
       return 'Регистрация не найдена. Укажите email ещё раз.';
   }
 }
-
-const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: designTokens.color.surface.canvas,
-  },
-});

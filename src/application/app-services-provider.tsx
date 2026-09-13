@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { AppState, Platform, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { AppSettings, DailyEnergyEntry, Project, RecurrenceOccurrence, RecurrenceRevision, RecurrenceSeries, Reminder, TaskItem } from '../domain/entities';
 import type { AppDataSource } from '../data/contracts';
@@ -20,6 +20,7 @@ import {
   emptyDemoTaskGroups,
   type DemoTaskGroups,
 } from '../ui/demo-tasks';
+import { designTokens } from '../ui/design/tokens';
 
 import { createAppRepositories } from './app-services';
 import type {
@@ -127,6 +128,7 @@ interface EnergyActions {
 
 interface AppServicesContextValue {
   isReady: boolean;
+  bootStatus: AppBootStatus;
   projects: ProjectRepository;
   settings: AppSettings;
   settingsActions: SettingsActions;
@@ -159,6 +161,7 @@ interface AppServicesProviderProps {
   scope?: LocalDataScope;
   seedDevelopmentData?: boolean;
   notificationScheduler?: LocalNotificationScheduler;
+  syncEngineOverride?: SyncEngine | null;
 }
 
 const AppServicesContext = createContext<AppServicesContextValue | null>(null);
@@ -182,6 +185,11 @@ export interface AccountSyncStatus {
   kind: SyncActivityState['kind'];
   pendingCount: number;
   lastSuccessAt: string | null;
+}
+
+export interface AppBootStatus {
+  progress: 45 | 75 | 100;
+  message: 'Открываем локальную копию' | 'Загружаем ваши планы' | 'Готово';
 }
 
 function isSyncConflictStore(source: AppDataSource): source is AppDataSource & SyncEngineStore & {
@@ -216,15 +224,18 @@ export function AppServicesProvider({
   scope,
   seedDevelopmentData = __DEV__,
   notificationScheduler = localNotificationScheduler,
+  syncEngineOverride,
 }: AppServicesProviderProps) {
   const [appSource] = useState<AppDataSource>(() => source ?? createDataSource(scope));
   const [syncStatus, setSyncStatus] = useState<AccountSyncStatus>({ kind: 'synchronized', pendingCount: 0, lastSuccessAt: null });
-  const syncEngine = useMemo<SyncEngine | null>(() => {
+  const createdSyncEngine = useMemo<SyncEngine | null>(() => {
     if (scope?.kind !== 'account' || !isSyncEngineStore(appSource)) return null;
     return createSyncEngine({ gateway: createSupabaseSyncGateway(supabase), store: appSource, onStateChange: ({ kind }) => setSyncStatus((current) => ({ ...current, kind })) });
   }, [appSource, scope]);
+  const syncEngine = syncEngineOverride === undefined ? createdSyncEngine : syncEngineOverride;
   const repositories = useMemo(() => createAppRepositories(appSource), [appSource]);
   const [isReady, setIsReady] = useState(false);
+  const [bootStatus, setBootStatus] = useState<AppBootStatus>({ progress: 45, message: 'Открываем локальную копию' });
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);
   const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyEntry | null>(null);
   const [isDailyEnergyLoaded, setIsDailyEnergyLoaded] = useState(false);
@@ -233,6 +244,7 @@ export function AppServicesProvider({
   const [completedItems, setCompletedItems] = useState<readonly CompletedItem[]>([]);
   const [syncConflicts, setSyncConflicts] = useState<readonly SyncConflict[]>([]);
   const [initializationError, setInitializationError] = useState<string | null>(null);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const runStorageDiagnostic = useCallback(
     () => runPersistenceDiagnostic(appSource),
     [appSource],
@@ -405,13 +417,13 @@ export function AppServicesProvider({
 
     void (async () => {
       try {
+        setInitializationError(null);
+        setBootStatus({ progress: 45, message: 'Открываем локальную копию' });
         await appSource.initialize();
         if (seedDevelopmentData) {
           await seedDemoData(appSource);
         }
-        await syncEngine?.syncNow().catch(() => {});
-        await refreshSyncConflicts();
-        await refreshSyncStatus();
+        setBootStatus({ progress: 75, message: 'Загружаем ваши планы' });
         const loadedSettings = await repositories.settings.get();
         const loadedDemoTasks = seedDevelopmentData
           ? await loadDemoTaskGroups(appSource)
@@ -429,6 +441,7 @@ export function AppServicesProvider({
           setCompletedItems(loadedCompletedItems);
           setDailyEnergy(loadedDailyEnergy);
           setIsDailyEnergyLoaded(true);
+          setBootStatus({ progress: 100, message: 'Готово' });
           setIsReady(true);
         }
       } catch {
@@ -441,21 +454,40 @@ export function AppServicesProvider({
     return () => {
       isMounted = false;
     };
-  }, [appSource, notificationScheduler, refreshSyncConflicts, refreshSyncStatus, repositories, seedDevelopmentData, syncEngine]);
+  }, [appSource, bootstrapAttempt, notificationScheduler, repositories, seedDevelopmentData]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    let isMounted = true;
+
+    void (async () => {
+      try {
+        await syncEngine?.syncNow();
+      } catch {
+        // Local UI is already ready. The sync engine publishes its offline state.
+      } finally {
+        if (isMounted) await Promise.all([refreshSyncConflicts(), refreshSyncStatus()]);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isReady, refreshSyncConflicts, refreshSyncStatus, syncEngine]);
 
   useEffect(() => {
     if (syncEngine === null) return;
     const appStateSubscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') syncEngine.onForeground();
+      if (state === 'active' && isReady) syncEngine.onForeground();
     });
-    const handleOnline = (): void => syncEngine.onNetworkReconnect();
+    const handleOnline = (): void => { if (isReady) syncEngine.onNetworkReconnect(); };
     if (Platform.OS === 'web') window.addEventListener('online', handleOnline);
     return () => {
       appStateSubscription.remove();
       if (Platform.OS === 'web') window.removeEventListener('online', handleOnline);
       syncEngine.dispose();
     };
-  }, [syncEngine]);
+  }, [isReady, syncEngine]);
 
   useEffect(() => {
     const realtimeClient = supabase;
@@ -476,6 +508,9 @@ export function AppServicesProvider({
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{initializationError}</Text>
+        <Pressable accessibilityRole="button" onPress={() => setBootstrapAttempt((attempt) => attempt + 1)} style={styles.retryButton}>
+          <Text style={styles.retryButtonText}>Повторить</Text>
+        </Pressable>
       </View>
     );
   }
@@ -484,6 +519,7 @@ export function AppServicesProvider({
     <AppServicesContext.Provider
       value={{
         isReady,
+        bootStatus,
         projects: repositories.projects,
         settings,
         settingsActions,
@@ -553,5 +589,19 @@ const styles = StyleSheet.create({
     color: '#B42318',
     fontSize: 16,
     textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: designTokens.color.primary,
+    borderRadius: designTokens.radius.control,
+    marginTop: designTokens.space[16],
+    minHeight: designTokens.size.touchTargetMin,
+    paddingHorizontal: designTokens.space[20],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryButtonText: {
+    color: designTokens.color.text.inverse,
+    fontSize: designTokens.typography.size.body,
+    fontWeight: designTokens.typography.weight.semibold,
   },
 });

@@ -1,5 +1,6 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Pressable, Text, View } from 'react-native';
+import { useEffect } from 'react';
 
 import {
   AppServicesProvider,
@@ -8,6 +9,7 @@ import {
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { createTask } from '../../src/application/backlog-use-cases';
+import type { SyncEngine } from '../../src/application/sync-engine';
 
 function ServicesProbe() {
   const { demoTasks, isReady, settings } = useAppServices();
@@ -81,6 +83,16 @@ function AccountClearProbe() {
   const { clearAccountData, isReady } = useAppServices();
   if (!isReady) return <Text>loading account clear</Text>;
   return <Pressable onPress={() => void clearAccountData(2)}><Text>Очистить облачную реплику</Text></Pressable>;
+}
+
+function BootReadinessProbe({ events }: { events: string[] }) {
+  const { isReady } = useAppServices();
+
+  useEffect(() => {
+    if (isReady) events.push('provider.ready');
+  }, [events, isReady]);
+
+  return <Text>{isReady ? 'локальная копия готова' : 'локальная копия загружается'}</Text>;
 }
 
 describe('AppServicesProvider', () => {
@@ -197,6 +209,71 @@ describe('AppServicesProvider', () => {
     await waitFor(async () => {
       await expect(source.getProject('project-a')).resolves.toBeNull();
       await expect(source.getLocalDataGeneration()).resolves.toBe(2);
+    });
+  });
+
+  test('opens the local replica before an initial account sync resolves', async () => {
+    const events: string[] = [];
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-17' });
+    const initialize = source.initialize.bind(source);
+    const getSettings = source.getSettings.bind(source);
+    const listTaskItems = source.listTaskItems.bind(source);
+    let recordedInitialize = false;
+    let recordedSettingsRead = false;
+    let recordedBacklogRead = false;
+    source.initialize = async () => {
+      if (!recordedInitialize) {
+        recordedInitialize = true;
+        events.push('source.initialize');
+      }
+      await initialize();
+    };
+    source.getSettings = async () => {
+      if (!recordedSettingsRead) {
+        recordedSettingsRead = true;
+        events.push('settings.get');
+      }
+      return getSettings();
+    };
+    source.listTaskItems = async () => {
+      if (!recordedBacklogRead) {
+        recordedBacklogRead = true;
+        events.push('backlog.read');
+      }
+      return listTaskItems();
+    };
+
+    let releaseSync: (() => void) | null = null;
+    const syncEngine: SyncEngine = {
+      syncNow: jest.fn(() => new Promise((resolve) => {
+        events.push('sync.syncNow');
+        releaseSync = () => resolve({ pushed: 0, pulled: 0 });
+      })),
+      notifyLocalMutation: jest.fn(),
+      onForeground: jest.fn(),
+      onNetworkReconnect: jest.fn(),
+      onRealtimeSignal: jest.fn(),
+      dispose: jest.fn(),
+    };
+
+    const view = await render(
+      <AppServicesProvider scope={{ kind: 'account', accountId: 'account-17' }} seedDevelopmentData={false} source={source} syncEngineOverride={syncEngine}>
+        <BootReadinessProbe events={events} />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => expect(view.getByText('локальная копия готова')).toBeOnTheScreen());
+    await waitFor(() => expect(events).toEqual([
+      'source.initialize',
+      'settings.get',
+      'backlog.read',
+      'provider.ready',
+      'sync.syncNow',
+    ]));
+
+    await act(async () => {
+      releaseSync?.();
+      await Promise.resolve();
     });
   });
 });
