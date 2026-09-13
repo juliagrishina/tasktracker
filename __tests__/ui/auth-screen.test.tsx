@@ -19,6 +19,13 @@ describe('AuthScreen', () => {
     expect(view.getByLabelText('Забыли пароль?')).toBeOnTheScreen();
   });
 
+  test('uses the Plan My Plan artwork instead of a text brand mark', async () => {
+    const view = await render(<AuthScreen />);
+
+    expect(view.getByLabelText('Логотип Plan My Plan')).toBeOnTheScreen();
+    expect(view.queryByText('P')).toBeNull();
+  });
+
   test('does not expose the guest entry action in the default product mode', async () => {
     const view = await render(<AuthScreen onContinueWithoutAccount={jest.fn()} />);
 

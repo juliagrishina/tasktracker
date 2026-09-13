@@ -10,8 +10,8 @@ describe('PWA installation assets', () => {
       web?: { favicon?: string; output?: string };
     };
 
-    expect(expo.icon).toBe('./assets/plan-my-plan-512.png');
-    expect(expo.ios?.icon).toBe('./assets/plan-my-plan-512.png');
+    expect(expo.icon).toBe('./assets/plan-my-plan-app-icon.png');
+    expect(expo.ios?.icon).toBe('./assets/plan-my-plan-app-icon.png');
     expect(expo.web?.favicon).toBe('./public/favicon.png');
     expect(expo.web?.output).toBe('static');
 

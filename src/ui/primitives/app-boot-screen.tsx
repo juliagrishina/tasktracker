@@ -18,7 +18,7 @@ export function AppBootScreen({ message, progress }: AppBootScreenProps) {
     <View style={styles.screen}>
       <Image
         accessibilityLabel="Логотип Plan My Plan"
-        source={require('../../../assets/plan-my-plan-512.png')}
+        source={require('../../../assets/plan-my-plan-auth-logo.png')}
         style={styles.logo}
       />
       <Text style={styles.message}>{message}</Text>

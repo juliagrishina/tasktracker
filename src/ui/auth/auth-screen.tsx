@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -57,9 +58,12 @@ export function AuthScreen({
           keyboardShouldPersistTaps="handled"
           contentInsetAdjustmentBehavior="automatic">
           <View style={styles.card}>
-            <View style={styles.brandMark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <Text style={styles.brandMarkText}>P</Text>
-            </View>
+            <Image
+              accessibilityLabel="Логотип Plan My Plan"
+              resizeMode="contain"
+              source={require('../../../assets/plan-my-plan-auth-logo.png')}
+              style={styles.brandLogo}
+            />
             <Text accessibilityRole="header" style={styles.title}>Plan My Plan</Text>
             <Text style={styles.subtitle}>
               {isRegistration
@@ -199,20 +203,10 @@ const styles = StyleSheet.create({
     maxWidth: 440,
     gap: designTokens.space[12],
   },
-  brandMark: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 52,
-    height: 52,
-    borderRadius: designTokens.radius.card,
-    backgroundColor: designTokens.color.primary,
+  brandLogo: {
+    height: 88,
     marginBottom: designTokens.space[8],
-  },
-  brandMarkText: {
-    color: designTokens.color.text.inverse,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: designTokens.typography.weight.bold,
+    width: 88,
   },
   title: {
     color: designTokens.color.text.primary,
