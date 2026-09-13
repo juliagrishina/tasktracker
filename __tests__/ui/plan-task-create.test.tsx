@@ -45,7 +45,8 @@ describe('Plan task creation sheet', () => {
     await waitFor(() => {
       expect(view.getByText('Новая задача')).toBeOnTheScreen();
       expect(view.getByText('Блок 1')).toBeOnTheScreen();
-      expect(view.getByLabelText('Дата блока 1')).toHaveTextContent(/05\.08\.2026/);
+      expect(view.queryByLabelText('Дата блока 1')).toBeNull();
+      expect(view.getByText('На дату задачи: 05.08.2026')).toBeOnTheScreen();
       expect(view.getByText('Повторение')).toBeOnTheScreen();
     });
 

@@ -231,7 +231,8 @@ describe('PlanScreen period views', () => {
     await waitFor(() => expect(view.getByDisplayValue('Повторяющаяся задача')).toBeOnTheScreen());
     expect(view.getByLabelText('Выбрать проект')).toBeOnTheScreen();
     expect(view.getByLabelText('Дата задачи')).toBeOnTheScreen();
-    expect(view.getByLabelText('Дата блока 1')).toBeOnTheScreen();
+    expect(view.queryByLabelText('Дата блока 1')).toBeNull();
+    expect(view.getByText('На дату задачи: 05.08.2026')).toBeOnTheScreen();
     await fireEvent.changeText(view.getByDisplayValue('Повторяющаяся задача'), 'Изменённый экземпляр');
     await waitFor(() => expect(view.getByDisplayValue('Изменённый экземпляр')).toBeOnTheScreen());
     await fireEvent.press(view.getByText('Сохранить'));
