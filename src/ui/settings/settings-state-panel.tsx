@@ -288,12 +288,12 @@ function SyncConflictCard({ conflict, onResolve }: { conflict: SyncConflict; onR
     <Text style={styles.warningText}>Требуется разрешить конфликт синхронизации: {localTitle ?? serverTitle ?? conflict.local.entityType}</Text>
     <Text style={styles.settingDescription}>Это устройство · {formatConflictTime(conflict.local.createdAt)}</Text>
     <Text style={styles.settingDescription}>{localTitle ?? 'Изменённая версия'}</Text>
-    <Text style={styles.settingDescription}>Другое устройство · {formatConflictTime(conflict.server.changedAt)}</Text>
-    <Text style={styles.settingDescription}>{remoteDelete ? 'Запись удалена' : (serverTitle ?? 'Версия с другого устройства')}</Text>
+    <Text style={styles.settingDescription}>Версия в аккаунте · {formatConflictTime(conflict.server.changedAt)}</Text>
+    <Text style={styles.settingDescription}>{remoteDelete ? 'Запись удалена' : (serverTitle ?? 'Версия из аккаунта')}</Text>
     <Text style={styles.settingDescription}>Различия: {formatConflictDifferences(conflict)}</Text>
     {onResolve === undefined ? null : <View style={styles.buttonRow}>
       <View style={styles.actionWrap}><ActionButton label={remoteDelete ? 'Восстановить изменённую запись' : 'Оставить эту версию'} onPress={() => { void onResolve(conflict, 'keep_local'); }} tone="primary" /></View>
-      <View style={styles.actionWrap}><ActionButton label={remoteDelete ? 'Подтвердить удаление' : 'Оставить версию с другого устройства'} onPress={() => { void onResolve(conflict, 'keep_remote'); }} tone="secondary" /></View>
+      <View style={styles.actionWrap}><ActionButton label={remoteDelete ? 'Подтвердить удаление' : 'Оставить версию из аккаунта'} onPress={() => { void onResolve(conflict, 'keep_remote'); }} tone="secondary" /></View>
     </View>}
   </View>;
 }

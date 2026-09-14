@@ -70,7 +70,7 @@ export function createPasswordManagement({
     try {
       await gateway.sendRecoveryCode({ email });
     } catch {
-      return { kind: 'requestFailed', message: 'Не удалось отправить код. Проверьте подключение к интернету.' };
+      return { kind: 'requestFailed', message: 'Не удалось отправить код. Проверьте email и повторите попытку через минуту.' };
     }
 
     const pending: PendingCode = {

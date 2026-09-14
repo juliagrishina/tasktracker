@@ -67,6 +67,15 @@ describe('local sync outbox', () => {
     await expect(source.listSyncOutbox()).resolves.toEqual([]);
   });
 
+  test('does not queue a settings mutation when only a device notification identifier changes', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' });
+    const settings = await source.getSettings();
+
+    await source.saveSettings({ ...settings, eveningReviewNotificationId: 'evening-review-notification' });
+
+    await expect(source.listSyncOutbox()).resolves.toEqual([]);
+  });
+
   test('discards an old local outbox when the account starts a new data generation', async () => {
     const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' }) as unknown as {
       getLocalDataGeneration(): Promise<number>;

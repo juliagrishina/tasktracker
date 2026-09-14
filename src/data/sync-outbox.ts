@@ -135,17 +135,22 @@ export function createSyncTrackingDataSource(source: AppDataSource, scope: Local
 
       return async (...args: unknown[]) => {
         const execute = async () => {
+          const previousSettingsPayload = property === 'saveSettings'
+            ? definition.payload(await (target as AppDataSource).getSettings())
+            : null;
           const before = definition.operation === 'delete'
             ? await captureLiveEntities(target as AppDataSource)
             : null;
           const result = await value.apply(target, args);
           if (before === null) {
             const item = args[0];
+            const payload = definition.payload(item);
+            if (previousSettingsPayload !== null && JSON.stringify(previousSettingsPayload) === JSON.stringify(payload)) return result;
             await metadata.enqueueSyncMutation({
               entityType: definition.entityType,
               entityId: definition.entityId(item),
               operation: definition.operation,
-              payload: definition.payload(item),
+              payload,
             });
           } else {
             const after = new Map((await captureLiveEntities(target as AppDataSource))

@@ -87,6 +87,17 @@ describe('password management', () => {
     expect(gateway.verifyRecoveryCode).toHaveBeenCalledWith({ email: 'maria@example.com', code: '123456' });
     expect(gateway.setRecoveredPassword).toHaveBeenCalledWith({ password: 'Recovered!42' });
   });
+
+  test('tells a person to check the email when a recovery code cannot be requested', async () => {
+    const gateway = createGateway();
+    gateway.sendRecoveryCode.mockRejectedValue(new PasswordManagementGatewayError('requestFailed'));
+    const service = createPasswordManagement({ gateway, now: () => 1_000 });
+
+    await expect(service.requestPasswordRecovery('maria@example.com')).resolves.toEqual({
+      kind: 'requestFailed',
+      message: 'Не удалось отправить код. Проверьте email и повторите попытку через минуту.',
+    });
+  });
 });
 
 function createGateway() {
