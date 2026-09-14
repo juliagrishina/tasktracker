@@ -1,5 +1,26 @@
 # E11 T31 staging web PWA desktop report
 
+## Дополнение: 2026-09-14 — offline startup и новые бренд-ассеты
+
+**Контур:** EAS Hosting preview, alias
+`https://plan-my-plan--staging.expo.app`
+
+**Immutable deployment:** `vj0jwbwpbp`
+**Проверочная ветка:** `codex/epic-11-auth`
+**Commit публикации:** `2ba6272`
+
+Публикация прошла `npm run qa:staging:deploy`: QA configuration guard,
+TypeScript typecheck, web/PWA export и финальная проверка `dist` успешны. Jest
+— **104 suites / 456 tests**; ESLint — 0 errors и 13 warnings только в тестовых
+файлах. HTTPS smoke для staging alias и `manifest.json` вернул `200`.
+
+Чтобы статическая конфигурация service worker не удерживала Node/Jest, Workbox
+теперь загружается только при фактической генерации `sw.js`; это защищено
+отдельным регрессионным тестом. Среда `jest-expo` по-прежнему удерживает
+асинхронные ресурсы после успешно завершённых тестов, поэтому QA-команда
+использует `--forceExit` **после** полного результата тестов; это не отключает
+и не пропускает тесты.
+
 **Дата:** 2026-09-11
 
 **Контур:** EAS Hosting preview, alias `staging`
