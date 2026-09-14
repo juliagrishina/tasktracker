@@ -218,6 +218,10 @@ function isSyncResetStore(source: AppDataSource): source is AppDataSource & Sync
   return isSyncEngineStore(source) && typeof candidate.resetForFullResync === 'function';
 }
 
+function isBrowserOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
 export function AppServicesProvider({
   children,
   source,
@@ -257,6 +261,21 @@ export function AppServicesProvider({
   const refreshCompletedItems = useCallback(async () => {
     setCompletedItems(await getCompletedItems(appSource));
   }, [appSource]);
+  const refreshWorkspaceState = useCallback(async () => {
+    const [loadedSettings, loadedDemoTasks, loadedBacklog, loadedCompletedItems, loadedDailyEnergy] = await Promise.all([
+      repositories.settings.get(),
+      seedDevelopmentData ? loadDemoTaskGroups(appSource) : Promise.resolve(emptyDemoTaskGroups),
+      getBacklogView(appSource),
+      getCompletedItems(appSource),
+      getDailyEnergyForCurrentDay(appSource),
+    ]);
+    setSettings(loadedSettings);
+    setDemoTasks(loadedDemoTasks);
+    setBacklog(loadedBacklog);
+    setCompletedItems(loadedCompletedItems);
+    setDailyEnergy(loadedDailyEnergy);
+    setIsDailyEnergyLoaded(true);
+  }, [appSource, repositories, seedDevelopmentData]);
   const refreshSyncConflicts = useCallback(async () => {
     if (isSyncConflictStore(appSource)) setSyncConflicts(await appSource.listSyncConflicts());
   }, [appSource]);
@@ -272,10 +291,11 @@ export function AppServicesProvider({
       store: appSource,
       onStateChange: ({ kind }) => {
         setSyncStatus((current) => ({ ...current, kind }));
+        if (kind === 'synchronized') void refreshWorkspaceState();
         if (kind !== 'syncing') void Promise.all([refreshSyncConflicts(), refreshSyncStatus()]);
       },
     });
-  }, [appSource, refreshSyncConflicts, refreshSyncStatus, scope]);
+  }, [appSource, refreshSyncConflicts, refreshSyncStatus, refreshWorkspaceState, scope]);
   const syncEngine = syncEngineOverride === undefined ? createdSyncEngine : syncEngineOverride;
   const runBacklogAction = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T> => {
@@ -424,6 +444,8 @@ export function AppServicesProvider({
 
     void (async () => {
       try {
+        setIsReady(false);
+        setIsDailyEnergyLoaded(false);
         setInitializationError(null);
         setBootStatus({ progress: 45, message: 'Открываем локальную копию' });
         await appSource.initialize();
@@ -431,13 +453,22 @@ export function AppServicesProvider({
           await seedDemoData(appSource);
         }
         setBootStatus({ progress: 75, message: 'Загружаем ваши планы' });
-        const loadedSettings = await repositories.settings.get();
-        const loadedDemoTasks = seedDevelopmentData
-          ? await loadDemoTaskGroups(appSource)
-          : emptyDemoTaskGroups;
-        const loadedBacklog = await getBacklogView(appSource);
-        const loadedCompletedItems = await getCompletedItems(appSource);
-        const loadedDailyEnergy = await getDailyEnergyForCurrentDay(appSource);
+        if (scope?.kind === 'account' && syncEngine !== null) {
+          try {
+            await syncEngine.syncNow();
+          } catch {
+            if (!isBrowserOffline()) {
+              throw new Error('Не удалось синхронизировать данные аккаунта');
+            }
+          }
+        }
+        const [loadedSettings, loadedDemoTasks, loadedBacklog, loadedCompletedItems, loadedDailyEnergy] = await Promise.all([
+          repositories.settings.get(),
+          seedDevelopmentData ? loadDemoTaskGroups(appSource) : Promise.resolve(emptyDemoTaskGroups),
+          getBacklogView(appSource),
+          getCompletedItems(appSource),
+          getDailyEnergyForCurrentDay(appSource),
+        ]);
         void synchronizeRecurrenceNotifications(appSource, notificationScheduler, new Date()).catch(() => {});
         void synchronizeEveningReviewNotification({ now: new Date(), scheduler: notificationScheduler, source: appSource }).catch(() => {});
 
@@ -451,9 +482,11 @@ export function AppServicesProvider({
           setBootStatus({ progress: 100, message: 'Готово' });
           setIsReady(true);
         }
-      } catch {
+      } catch (error) {
         if (isMounted) {
-          setInitializationError('Не удалось инициализировать локальное хранилище');
+          setInitializationError(error instanceof Error && error.message === 'Не удалось синхронизировать данные аккаунта'
+            ? error.message
+            : 'Не удалось инициализировать локальное хранилище');
         }
       }
     })();
@@ -461,26 +494,7 @@ export function AppServicesProvider({
     return () => {
       isMounted = false;
     };
-  }, [appSource, bootstrapAttempt, notificationScheduler, repositories, seedDevelopmentData]);
-
-  useEffect(() => {
-    if (!isReady) return;
-    let isMounted = true;
-
-    void (async () => {
-      try {
-        await syncEngine?.syncNow();
-      } catch {
-        // Local UI is already ready. The sync engine publishes its offline state.
-      } finally {
-        if (isMounted) await Promise.all([refreshSyncConflicts(), refreshSyncStatus()]);
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isReady, refreshSyncConflicts, refreshSyncStatus, syncEngine]);
+  }, [appSource, bootstrapAttempt, notificationScheduler, repositories, scope, seedDevelopmentData, syncEngine]);
 
   useEffect(() => {
     if (!isReady || syncEngine === null) return;
@@ -545,7 +559,10 @@ export function AppServicesProvider({
         refreshCompletedItems,
         runBacklogAction,
         runStorageDiagnostic,
-        syncAccountData: async () => { if (syncEngine !== null) await syncEngine.syncNow(); await Promise.all([refreshSyncConflicts(), refreshSyncStatus()]); },
+        syncAccountData: async () => {
+          if (syncEngine !== null) await syncEngine.syncNow();
+          await Promise.all([refreshWorkspaceState(), refreshSyncConflicts(), refreshSyncStatus()]);
+        },
         syncStatus,
         syncConflicts,
         resolveAccountSyncConflict: async (conflict, decision) => {

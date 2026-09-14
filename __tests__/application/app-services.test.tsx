@@ -96,13 +96,13 @@ function AccountClearProbe() {
 }
 
 function BootReadinessProbe({ events }: { events: string[] }) {
-  const { isReady } = useAppServices();
+  const { isReady, settings } = useAppServices();
 
   useEffect(() => {
     if (isReady) events.push('provider.ready');
   }, [events, isReady]);
 
-  return <Text>{isReady ? 'локальная копия готова' : 'локальная копия загружается'}</Text>;
+  return <Text>{isReady ? `локальная копия готова:${settings.notificationLeadMinutes}` : 'локальная копия загружается'}</Text>;
 }
 
 function AutomaticSyncStatusProbe({ onCreate }: { onCreate: () => Promise<void> }) {
@@ -231,7 +231,7 @@ describe('AppServicesProvider', () => {
     });
   });
 
-  test('opens the local replica before an initial account sync resolves', async () => {
+  test('waits for initial account sync before exposing an account replica', async () => {
     const events: string[] = [];
     const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-17' });
     const initialize = source.initialize.bind(source);
@@ -262,11 +262,14 @@ describe('AppServicesProvider', () => {
       return listTaskItems();
     };
 
-    let releaseSync: (() => void) | null = null;
+    let releaseSync: (() => Promise<void>) | null = null;
     const syncEngine: SyncEngine = {
-      syncNow: jest.fn(() => new Promise((resolve) => {
+      syncNow: jest.fn(() => new Promise<{ pushed: number; pulled: number }>((resolve) => {
         events.push('sync.syncNow');
-        releaseSync = () => resolve({ pushed: 0, pulled: 0 });
+        releaseSync = async () => {
+          await source.saveSettings({ ...getDefaultSettings(), notificationLeadMinutes: 37 });
+          resolve({ pushed: 0, pulled: 1 });
+        };
       })),
       notifyLocalMutation: jest.fn(),
       onForeground: jest.fn(),
@@ -281,19 +284,55 @@ describe('AppServicesProvider', () => {
       </AppServicesProvider>,
     );
 
-    await waitFor(() => expect(view.getByText('локальная копия готова')).toBeOnTheScreen());
+    await waitFor(() => expect(syncEngine.syncNow).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(events).toEqual([
       'source.initialize',
+      'sync.syncNow',
+    ]));
+    expect(view.getByText('локальная копия загружается')).toBeOnTheScreen();
+
+    await act(async () => {
+      await releaseSync?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(view.getByText('локальная копия готова:37')).toBeOnTheScreen());
+    expect(events).toEqual([
+      'source.initialize',
+      'sync.syncNow',
       'settings.get',
       'backlog.read',
       'provider.ready',
-      'sync.syncNow',
-    ]));
+    ]);
+  });
 
-    await act(async () => {
-      releaseSync?.();
-      await Promise.resolve();
-    });
+  test('opens an existing account replica when the browser is offline', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-offline' });
+    await source.saveSettings({ ...getDefaultSettings(), notificationLeadMinutes: 37 });
+    const originalOnlineDescriptor = Object.getOwnPropertyDescriptor(navigator, 'onLine');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const syncEngine: SyncEngine = {
+      syncNow: jest.fn().mockRejectedValue(new Error('offline')),
+      notifyLocalMutation: jest.fn(),
+      onForeground: jest.fn(),
+      onNetworkReconnect: jest.fn(),
+      onRealtimeSignal: jest.fn(),
+      dispose: jest.fn(),
+    };
+
+    try {
+      const view = await render(
+        <AppServicesProvider scope={{ kind: 'account', accountId: 'account-offline' }} seedDevelopmentData={false} source={source} syncEngineOverride={syncEngine}>
+          <ServicesProbe />
+        </AppServicesProvider>,
+      );
+
+      await waitFor(() => expect(view.getByText('37:нет данных')).toBeOnTheScreen());
+      expect(syncEngine.syncNow).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalOnlineDescriptor === undefined) delete (navigator as { onLine?: boolean }).onLine;
+      else Object.defineProperty(navigator, 'onLine', originalOnlineDescriptor);
+    }
   });
 
   test('refreshes the visible sync status after a debounced local account change is synchronized', async () => {
