@@ -1,5 +1,25 @@
 # E11 T31 staging web PWA desktop report
 
+## Дополнение: 2026-09-14 — иконки и восстановление пароля
+
+**Контур:** EAS Hosting preview, alias
+`https://plan-my-plan--staging.expo.app`
+
+**Immutable deployment:** `xrcpozaelm`
+**Проверочная ветка:** `codex/epic-11-auth`
+**Commit публикации:** `7dfa350f3624d4373eb200cf40f7cd118239c935`
+
+Новая PWA-версия содержит отдельный прозрачный логотип для Auth-экрана и
+непрозрачные иконки для iOS/PWA: система iOS больше не должна подставлять
+белую подложку по углам. Восстановление пароля использует тот же OTP-канал,
+что и подтверждение email; повторная отправка заблокирована на 60 секунд и
+показывает обратный отсчёт.
+
+Публикация прошла `npm run qa:staging:deploy`: QA staging guard, TypeScript
+typecheck, ESLint без ошибок (13 существующих warnings только в тестах),
+полный Jest — **104 suites / 457 tests**, static web/PWA export и проверку
+`dist`. Post-deploy HTTPS smoke staging alias вернул `200`.
+
 ## Дополнение: 2026-09-14 — offline startup и новые бренд-ассеты
 
 **Контур:** EAS Hosting preview, alias
