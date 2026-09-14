@@ -36,6 +36,7 @@ export function createSupabasePasswordManagementGateway(
   passwordVerifier: SupabasePasswordVerifier | null = null,
 ): PasswordManagementGateway {
   let changeEmail: string | null = null;
+  let recoveredEmail: string | null = null;
 
   return {
     sendChangeCode: async () => {
@@ -69,16 +70,29 @@ export function createSupabasePasswordManagementGateway(
       changeEmail = null;
     },
     sendRecoveryCode: async ({ email }) => {
-      const { error } = await requireClient(client).auth.resetPasswordForEmail(email);
+      const verifier = requirePasswordVerifier(passwordVerifier);
+      const { error } = await verifier.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
       if (error !== null) throw mapError(error, 'requestFailed');
     },
     verifyRecoveryCode: async ({ email, code }) => {
-      const { error } = await requireClient(client).auth.verifyOtp({ email, token: code, type: 'recovery' });
+      const verifier = requirePasswordVerifier(passwordVerifier);
+      const { error } = await verifier.auth.verifyOtp({ email, token: code, type: 'email' });
       if (error !== null) throw mapError(error, 'invalidCode');
+      recoveredEmail = email;
     },
     setRecoveredPassword: async ({ password }) => {
-      const { error } = await requireClient(client).auth.updateUser({ password });
-      if (error !== null) throw mapError(error, 'requestFailed');
+      const email = recoveredEmail;
+      if (email === null) throw new PasswordManagementGatewayError('requestFailed');
+      const verifier = requirePasswordVerifier(passwordVerifier);
+      const passwordUpdate = await verifier.auth.updateUser({ password });
+      if (passwordUpdate.error !== null) throw mapError(passwordUpdate.error, 'requestFailed');
+
+      const activeClient = requireClient(client);
+      const activeSession = await activeClient.auth.signInWithPassword({ email, password });
+      if (activeSession.error !== null) throw mapError(activeSession.error, 'requestFailed');
+      const revokeOtherSessions = await activeClient.auth.signOut({ scope: 'others' });
+      if (revokeOtherSessions.error !== null) throw mapError(revokeOtherSessions.error, 'requestFailed');
+      recoveredEmail = null;
     },
   };
 }

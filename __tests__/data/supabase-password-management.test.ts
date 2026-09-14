@@ -27,17 +27,20 @@ describe('Supabase password management gateway', () => {
     expect(client.auth.signOut).toHaveBeenCalledWith({ scope: 'others' });
   });
 
-  test('uses Supabase recovery OTP to establish the recovery session before setting the new password', async () => {
+  test('uses the established email OTP channel to recover a password and opens the new session', async () => {
     const client = createFakeClient();
-    const gateway = createSupabasePasswordManagementGateway(client, createPasswordVerifier());
+    const passwordVerifier = createPasswordVerifier();
+    const gateway = createSupabasePasswordManagementGateway(client, passwordVerifier);
 
     await gateway.sendRecoveryCode({ email: 'maria@example.com' });
     await gateway.verifyRecoveryCode({ email: 'maria@example.com', code: '123456' });
     await gateway.setRecoveredPassword({ password: 'Recovered!42' });
 
-    expect(client.auth.resetPasswordForEmail).toHaveBeenCalledWith('maria@example.com');
-    expect(client.auth.verifyOtp).toHaveBeenCalledWith({ email: 'maria@example.com', token: '123456', type: 'recovery' });
-    expect(client.auth.updateUser).toHaveBeenCalledWith({ password: 'Recovered!42' });
+    expect(passwordVerifier.auth.signInWithOtp).toHaveBeenCalledWith({ email: 'maria@example.com', options: { shouldCreateUser: false } });
+    expect(passwordVerifier.auth.verifyOtp).toHaveBeenCalledWith({ email: 'maria@example.com', token: '123456', type: 'email' });
+    expect(passwordVerifier.auth.updateUser).toHaveBeenCalledWith({ password: 'Recovered!42' });
+    expect(client.auth.signInWithPassword).toHaveBeenCalledWith({ email: 'maria@example.com', password: 'Recovered!42' });
+    expect(client.auth.signOut).toHaveBeenCalledWith({ scope: 'others' });
   });
 });
 

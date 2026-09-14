@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import { PasswordInput } from '../primitives/password-input';
 
 export interface PasswordRecoveryScreenProps {
   email: string | null;
+  resendAvailableAtMs?: number;
   errorMessage?: string | null;
   infoMessage?: string | null;
   onRequest: (input: { email: string }) => void;
@@ -19,6 +20,7 @@ export interface PasswordRecoveryScreenProps {
 
 export function PasswordRecoveryScreen({
   email,
+  resendAvailableAtMs = 0,
   errorMessage = null,
   infoMessage = null,
   onRequest,
@@ -30,8 +32,16 @@ export function PasswordRecoveryScreen({
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [now, setNow] = useState(() => Date.now());
 
   const isConfirming = email !== null;
+  const secondsUntilResend = Math.max(0, Math.ceil((resendAvailableAtMs - now) / 1_000));
+
+  useEffect(() => {
+    if (secondsUntilResend === 0) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [secondsUntilResend]);
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboardAvoidingView}>
@@ -50,7 +60,12 @@ export function PasswordRecoveryScreen({
               <PasswordInput accessibilityLabel="Новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPassword} placeholder="Новый пароль" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} textContentType="newPassword" value={password} visibilityLabel="новый пароль" />
               <PasswordInput accessibilityLabel="Повторите новый пароль" autoCapitalize="none" autoComplete="new-password" onChangeText={setPasswordConfirmation} placeholder="Повторите новый пароль" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} textContentType="newPassword" value={passwordConfirmation} visibilityLabel="повтор нового пароля" />
               <ActionButton label="Сохранить новый пароль" onPress={() => onConfirm({ email, code, password, passwordConfirmation })} tone="primary" />
-              <ActionButton label="Отправить код повторно" onPress={onResend} tone="soft" />
+              <ActionButton
+                disabled={secondsUntilResend > 0}
+                label={secondsUntilResend > 0 ? `Отправить код повторно (${secondsUntilResend})` : 'Отправить код повторно'}
+                onPress={onResend}
+                tone="soft"
+              />
             </> : <>
               <TextInput accessibilityLabel="Email для восстановления" autoCapitalize="none" autoComplete="email" keyboardType="email-address" onChangeText={setRequestEmail} placeholder="Email" placeholderTextColor={designTokens.color.text.tertiary} style={styles.input} textContentType="emailAddress" value={requestEmail} />
               <ActionButton label="Отправить код" onPress={() => onRequest({ email: requestEmail })} tone="primary" />

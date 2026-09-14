@@ -31,7 +31,7 @@ export interface PasswordManagementGateway {
 export type PasswordManagementResult =
   | { kind: 'codeSent' }
   | { kind: 'passwordChanged' }
-  | { kind: 'recoveryRequested' }
+  | { kind: 'recoveryRequested'; availableAtMs: number }
   | { kind: 'passwordRecovered' }
   | { kind: 'validationError'; message: string }
   | { kind: 'missingCodeRequest' }
@@ -82,7 +82,7 @@ export function createPasswordManagement({
       verified: false,
     };
     recoveryCode = pending;
-    return { kind: 'recoveryRequested' };
+    return { kind: 'recoveryRequested', availableAtMs: pending.resendAvailableAtMs };
   };
 
   const requestChangeCode = async (): Promise<PasswordManagementResult> => {

@@ -112,6 +112,7 @@ export function AuthGate({
   const [signedInAccountId, setSignedInAccountId] = useState<string | null>(null);
   const [workspaceTransferError, setWorkspaceTransferError] = useState<string | null>(null);
   const [passwordRecoveryEmail, setPasswordRecoveryEmail] = useState<string | null>(null);
+  const [passwordRecoveryResendAvailableAtMs, setPasswordRecoveryResendAvailableAtMs] = useState(0);
   const [passwordRecoveryError, setPasswordRecoveryError] = useState<string | null>(null);
   const [passwordRecoveryInfo, setPasswordRecoveryInfo] = useState<string | null>(null);
   const [activeScope, setActiveScope] = useState<LocalDataScope>({ kind: 'autonomous' });
@@ -363,7 +364,12 @@ export function AuthGate({
     const result = await passwordManagement.requestPasswordRecovery(email);
     if (result.kind === 'recoveryRequested') {
       setPasswordRecoveryEmail(email.trim());
+      setPasswordRecoveryResendAvailableAtMs(result.availableAtMs);
       setPasswordRecoveryInfo('Если такой аккаунт существует, код отправлен.');
+      return;
+    }
+    if (result.kind === 'resendCooldown') {
+      setPasswordRecoveryResendAvailableAtMs(result.availableAtMs);
       return;
     }
     setPasswordRecoveryError(messageForPasswordResult(result));
@@ -374,7 +380,12 @@ export function AuthGate({
     setPasswordRecoveryInfo(null);
     const result = await passwordManagement.resendPasswordRecoveryCode();
     if (result.kind === 'recoveryRequested') {
+      setPasswordRecoveryResendAvailableAtMs(result.availableAtMs);
       setPasswordRecoveryInfo('Если такой аккаунт существует, новый код отправлен.');
+      return;
+    }
+    if (result.kind === 'resendCooldown') {
+      setPasswordRecoveryResendAvailableAtMs(result.availableAtMs);
       return;
     }
     setPasswordRecoveryError(messageForPasswordResult(result));
@@ -416,6 +427,7 @@ export function AuthGate({
         }}
         onForgotPassword={() => {
           setPasswordRecoveryEmail(null);
+          setPasswordRecoveryResendAvailableAtMs(0);
           setPasswordRecoveryError(null);
           setPasswordRecoveryInfo(null);
           setGateState('passwordRecovery');
@@ -442,7 +454,9 @@ export function AuthGate({
 
   if (gateState === 'passwordRecovery') {
     return <PasswordRecoveryScreen
+      key={passwordRecoveryResendAvailableAtMs}
       email={passwordRecoveryEmail}
+      resendAvailableAtMs={passwordRecoveryResendAvailableAtMs}
       errorMessage={passwordRecoveryError}
       infoMessage={passwordRecoveryInfo}
       onBack={() => {

@@ -72,7 +72,10 @@ describe('password management', () => {
     const gateway = createGateway();
     const service = createPasswordManagement({ gateway, now: () => 1_000 });
 
-    await expect(service.requestPasswordRecovery('maria@example.com')).resolves.toEqual({ kind: 'recoveryRequested' });
+    await expect(service.requestPasswordRecovery('maria@example.com')).resolves.toEqual({
+      kind: 'recoveryRequested',
+      availableAtMs: 61_000,
+    });
     await expect(service.completePasswordRecovery({
       email: 'maria@example.com',
       code: '123456',

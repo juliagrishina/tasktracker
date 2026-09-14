@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 
 import { PasswordRecoveryScreen } from '../../src/ui/auth/password-recovery-screen';
 
@@ -20,5 +20,30 @@ describe('PasswordRecoveryScreen', () => {
     await fireEvent.press(confirmView.getByRole('button', { name: 'Сохранить новый пароль' }));
 
     expect(onConfirm).toHaveBeenCalledWith({ code: '123456', email: 'maria@example.com', password: 'Recovered!42', passwordConfirmation: 'Recovered!42' });
+  });
+
+  test('locks resending until the displayed cooldown ends', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-14T09:00:00.000Z'));
+    try {
+      const view = await render(
+        <PasswordRecoveryScreen
+          email="maria@example.com"
+          onBack={jest.fn()}
+          onConfirm={jest.fn()}
+          onRequest={jest.fn()}
+          onResend={jest.fn()}
+          resendAvailableAtMs={Date.now() + 60_000}
+        />,
+      );
+
+      expect(view.getByRole('button', { name: 'Отправить код повторно (60)' })).toBeDisabled();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(60_000);
+      });
+      expect(view.getByRole('button', { name: 'Отправить код повторно' })).not.toBeDisabled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
