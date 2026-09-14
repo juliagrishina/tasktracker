@@ -9,4 +9,12 @@ describe('plan load appearance', () => {
       surface: designTokens.color.calendar.load.high.surface,
     });
   });
+
+  test('uses a distinct orange tone for a medium load', () => {
+    expect(getPlanLoadAppearance('medium')).toEqual({
+      border: '#F5B27B',
+      foreground: '#E05A00',
+      surface: '#FFF0E8',
+    });
+  });
 });

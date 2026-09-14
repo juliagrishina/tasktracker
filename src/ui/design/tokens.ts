@@ -45,6 +45,11 @@ export const designTokens = {
     calendar: {
       progressTrack: '#DCE8F4',
       load: {
+        medium: {
+          surface: '#FFF0E8',
+          border: '#F5B27B',
+          foreground: '#E05A00',
+        },
         high: {
           surface: '#FFF0EF',
           border: '#FAC6C3',
@@ -109,7 +114,7 @@ export const designTokens = {
   },
   size: {
     touchTargetMin: 44,
-    tabBar: 60,
+    tabBar: 64,
     floatingAction: 48,
     progressRing: 58,
     progressRingStroke: 7,

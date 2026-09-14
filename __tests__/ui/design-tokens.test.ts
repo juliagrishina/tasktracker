@@ -22,4 +22,8 @@ describe('designTokens', () => {
     expect(designTokens.color.feedback.success.surface).toBe('#D9F7E2');
     expect(designTokens.color.feedback.warning.surface).toBe('#FFF3CF');
   });
+
+  test('keeps the bottom navigation comfortably tappable in the PWA', () => {
+    expect(designTokens.size.tabBar).toBe(64);
+  });
 });

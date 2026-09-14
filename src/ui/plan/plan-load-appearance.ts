@@ -19,9 +19,9 @@ export function getPlanLoadAppearance(tone: PlanLoadTone): PlanLoadAppearance {
 
   if (tone === 'medium') {
     return {
-      border: designTokens.color.feedback.warning.border,
-      foreground: designTokens.color.feedback.warning.foreground,
-      surface: designTokens.color.feedback.warning.surface,
+      border: designTokens.color.calendar.load.medium.border,
+      foreground: designTokens.color.calendar.load.medium.foreground,
+      surface: designTokens.color.calendar.load.medium.surface,
     };
   }
 
