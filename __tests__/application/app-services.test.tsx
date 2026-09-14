@@ -11,6 +11,16 @@ import { getDefaultSettings } from '../../src/data/default-settings';
 import { createTask } from '../../src/application/backlog-use-cases';
 import type { SyncEngine } from '../../src/application/sync-engine';
 
+const mockSyncGateway = {
+  push: jest.fn(),
+  pull: jest.fn(),
+  getDataGeneration: jest.fn(),
+};
+
+jest.mock('../../src/data/supabase-sync-gateway', () => ({
+  createSupabaseSyncGateway: jest.fn(() => mockSyncGateway),
+}));
+
 function ServicesProbe() {
   const { demoTasks, isReady, settings } = useAppServices();
 
@@ -93,6 +103,15 @@ function BootReadinessProbe({ events }: { events: string[] }) {
   }, [events, isReady]);
 
   return <Text>{isReady ? 'локальная копия готова' : 'локальная копия загружается'}</Text>;
+}
+
+function AutomaticSyncStatusProbe({ onCreate }: { onCreate: () => Promise<void> }) {
+  const { isReady, runBacklogAction, syncStatus } = useAppServices();
+  if (!isReady) return <Text>загрузка статуса</Text>;
+  return <View>
+    <Text>{`${syncStatus.pendingCount}:${syncStatus.lastSuccessAt === null ? 'нет' : 'есть'}`}</Text>
+    <Pressable onPress={() => void runBacklogAction(onCreate)}><Text>Создать проект для автоматической синхронизации</Text></Pressable>
+  </View>;
 }
 
 describe('AppServicesProvider', () => {
@@ -275,5 +294,40 @@ describe('AppServicesProvider', () => {
       releaseSync?.();
       await Promise.resolve();
     });
+  });
+
+  test('refreshes the visible sync status after a debounced local account change is synchronized', async () => {
+    jest.useFakeTimers();
+    try {
+      const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' });
+      mockSyncGateway.push.mockImplementation(async (mutations) => ({
+        mutations: mutations.map((mutation: { mutationId: string; entityType: string; entityId: string; operation: 'upsert' | 'delete' }) => ({ ...mutation, version: 1 })),
+        conflicts: [],
+      }));
+      mockSyncGateway.pull.mockResolvedValue([]);
+
+      const view = await render(
+        <AppServicesProvider scope={{ kind: 'account', accountId: 'account-a' }} seedDevelopmentData={false} source={source}>
+          <AutomaticSyncStatusProbe onCreate={() => source.saveProject({
+            id: 'project-a', title: 'Проект для синхронизации', description: null, completedAt: null,
+            createdAt: '2026-09-14T10:00:00.000Z', updatedAt: '2026-09-14T10:00:00.000Z', deletedAt: null,
+          })} />
+        </AppServicesProvider>,
+      );
+
+      await waitFor(() => expect(view.getByText('0:есть')).toBeOnTheScreen());
+      await fireEvent.press(view.getByText('Создать проект для автоматической синхронизации'));
+      await waitFor(() => expect(view.getByText('1:есть')).toBeOnTheScreen());
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+        await Promise.resolve();
+      });
+      await waitFor(async () => {
+        await expect(source.listSyncOutbox()).resolves.toEqual([]);
+      });
+      await waitFor(() => expect(view.getByText('0:есть')).toBeOnTheScreen());
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

@@ -228,11 +228,6 @@ export function AppServicesProvider({
 }: AppServicesProviderProps) {
   const [appSource] = useState<AppDataSource>(() => source ?? createDataSource(scope));
   const [syncStatus, setSyncStatus] = useState<AccountSyncStatus>({ kind: 'synchronized', pendingCount: 0, lastSuccessAt: null });
-  const createdSyncEngine = useMemo<SyncEngine | null>(() => {
-    if (scope?.kind !== 'account' || !isSyncEngineStore(appSource)) return null;
-    return createSyncEngine({ gateway: createSupabaseSyncGateway(supabase), store: appSource, onStateChange: ({ kind }) => setSyncStatus((current) => ({ ...current, kind })) });
-  }, [appSource, scope]);
-  const syncEngine = syncEngineOverride === undefined ? createdSyncEngine : syncEngineOverride;
   const repositories = useMemo(() => createAppRepositories(appSource), [appSource]);
   const [isReady, setIsReady] = useState(false);
   const [bootStatus, setBootStatus] = useState<AppBootStatus>({ progress: 45, message: 'Открываем локальную копию' });
@@ -270,6 +265,18 @@ export function AppServicesProvider({
     const [outbox, lastSuccessAt] = await Promise.all([appSource.listSyncOutbox(), appSource.getLastSyncSuccessAt()]);
     setSyncStatus((current) => ({ ...current, pendingCount: outbox.length, lastSuccessAt }));
   }, [appSource]);
+  const createdSyncEngine = useMemo<SyncEngine | null>(() => {
+    if (scope?.kind !== 'account' || !isSyncEngineStore(appSource)) return null;
+    return createSyncEngine({
+      gateway: createSupabaseSyncGateway(supabase),
+      store: appSource,
+      onStateChange: ({ kind }) => {
+        setSyncStatus((current) => ({ ...current, kind }));
+        if (kind !== 'syncing') void Promise.all([refreshSyncConflicts(), refreshSyncStatus()]);
+      },
+    });
+  }, [appSource, refreshSyncConflicts, refreshSyncStatus, scope]);
+  const syncEngine = syncEngineOverride === undefined ? createdSyncEngine : syncEngineOverride;
   const runBacklogAction = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T> => {
       const result = await action();
@@ -476,7 +483,7 @@ export function AppServicesProvider({
   }, [isReady, refreshSyncConflicts, refreshSyncStatus, syncEngine]);
 
   useEffect(() => {
-    if (syncEngine === null) return;
+    if (!isReady || syncEngine === null) return;
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active' && isReady) syncEngine.onForeground();
     });
