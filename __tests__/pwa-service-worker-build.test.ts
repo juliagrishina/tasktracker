@@ -33,6 +33,21 @@ function runNode(args: string[]): Promise<string> {
 }
 
 describe('PWA service worker build', () => {
+  test('reads static configuration without loading Workbox', () => {
+    jest.isolateModules(() => {
+      jest.doMock('workbox-build', () => {
+        throw new Error('Workbox must stay lazy while reading static configuration.');
+      });
+
+      expect(() => {
+        const generator = require('../scripts/generate-pwa-service-worker.cjs') as {
+          createPwaServiceWorkerConfig(directory: string): Record<string, unknown>;
+        };
+        expect(generator.createPwaServiceWorkerConfig('C:/tmp/dist')).toHaveProperty('globDirectory', 'C:/tmp/dist');
+      }).not.toThrow();
+    });
+  });
+
   test('creates a non-claiming static-only Workbox configuration', () => {
     const config = createPwaServiceWorkerConfig('C:/tmp/dist');
 

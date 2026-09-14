@@ -1,5 +1,4 @@
 const path = require('node:path');
-const { generateSW } = require('workbox-build');
 
 const defaultDistDirectory = path.resolve(__dirname, '..', 'dist');
 
@@ -18,6 +17,7 @@ function createPwaServiceWorkerConfig(distDirectory = defaultDistDirectory) {
 }
 
 async function generatePwaServiceWorker(distDirectory = defaultDistDirectory) {
+  const { generateSW } = require('workbox-build');
   const result = await generateSW(createPwaServiceWorkerConfig(distDirectory));
 
   if (result.count === 0) {

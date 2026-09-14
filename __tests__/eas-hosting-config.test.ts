@@ -13,7 +13,7 @@ describe('EAS Hosting staging configuration', () => {
 
     expect(packageConfig.scripts).toMatchObject({
       'qa:config': 'node scripts/verify-qa-staging-config.cjs --env-file .env.local',
-      'qa:verify': 'npm run qa:config && npm run typecheck && npm run lint && npm test',
+      'qa:verify': 'npm run qa:config && npm run typecheck && npm run lint && npm test -- --forceExit',
       'qa:staging:export': 'npm run qa:verify && npm run web:export && node scripts/verify-qa-staging-config.cjs --env-file .env.local --dist dist',
       'qa:staging:deploy': 'npm run qa:staging:export && npx --yes eas-cli@23.2.0 deploy --environment preview --alias staging --export-dir dist',
     });
