@@ -256,6 +256,10 @@ export function ItemFormSheet({
     return mode === 'create' ? createTitle[type] : 'Редактировать';
   }, [mode, type]);
 
+  const reportPlanningSuccess = (plannedOn: string, plannedType: PlanningSuccessResult['type']) => {
+    if (plannedOn !== '') onPlanned?.({ plannedOn, title, type: plannedType });
+  };
+
   const submit = async (afterSave?: () => Promise<void>) => {
     setError(null);
     setIsSaving(true);
@@ -271,9 +275,9 @@ export function ItemFormSheet({
       const now = new Date().toISOString();
       if (occurrenceEdit !== undefined) {
         await occurrenceEdit.onSave({ title, description, estimatedDurationMinutes, projectId: selectedProjectId, planning: planningDraft });
-        await afterSave?.();
         const plannedOn = planningDraft.blocks[0]?.date ?? (planningDraft.scheduleMode === 'date' ? planningDraft.scheduledOn : '');
-        if (plannedOn !== '') onPlanned?.({ plannedOn, title, type: type === 'subtask' ? 'subtask' : 'task' });
+        reportPlanningSuccess(plannedOn, type === 'subtask' ? 'subtask' : 'task');
+        await afterSave?.();
         onSaved?.();
         onClose();
         return;
@@ -333,6 +337,8 @@ export function ItemFormSheet({
           setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
           return;
         }
+        const plannedOn = planningDraft.blocks[0]?.date ?? (planningDraft.scheduleMode === 'date' ? planningDraft.scheduledOn : '');
+        reportPlanningSuccess(plannedOn, type === 'subtask' ? 'subtask' : 'task');
         await afterSave?.();
         onSaved?.();
         onClose();
@@ -438,8 +444,8 @@ export function ItemFormSheet({
               setError('Выбранное время пересекается с другим блоком. Сохранить с пересечением?');
               return;
             }
+            if (planningContext !== undefined) reportPlanningSuccess(reminderDate, 'reminder');
             await afterSave?.();
-            if (planningContext !== undefined) onPlanned?.({ plannedOn: reminderDate, title, type: 'reminder' });
             onSaved?.();
             onClose();
             return;
@@ -458,11 +464,11 @@ export function ItemFormSheet({
         }
       }
 
-      await afterSave?.();
       if (type === 'reminder' && planningContext !== undefined) {
         const plannedOn = emptyToNull(remindsOn);
-        if (plannedOn !== null) onPlanned?.({ plannedOn, title, type: 'reminder' });
+        if (plannedOn !== null) reportPlanningSuccess(plannedOn, 'reminder');
       }
+      await afterSave?.();
       onSaved?.();
       onClose();
     } catch (caughtError) {
