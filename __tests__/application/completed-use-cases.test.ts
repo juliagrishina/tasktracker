@@ -38,6 +38,35 @@ describe('completed use cases', () => {
     await expect(source.getScheduleBlock('block-1')).resolves.toMatchObject({ taskItemId: task.id });
   });
 
+  test('uses a one-time task planned date for its archive display date', async () => {
+    const source = createInMemoryDataSource();
+    const planned = await createTask(source, { id: 'sync-task', title: 'Синк Вася Ваганов', createdAt });
+    const unplanned = await createTask(source, { id: 'backlog-task', title: 'Разобрать почту', createdAt });
+    await source.saveScheduleBlock({
+      id: 'sync-block',
+      taskItemId: planned.id,
+      occurrenceId: null,
+      timeZoneId: 'Europe/Moscow',
+      startsAt: '2026-09-15T17:00:00+03:00',
+      endsAt: '2026-09-15T18:00:00+03:00',
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    });
+    await completeBacklogItem(source, { kind: 'task', id: planned.id, completedAt: '2026-09-21T14:34:00.000Z' });
+    await completeBacklogItem(source, { kind: 'task', id: unplanned.id, completedAt: '2026-09-21T14:34:00.000Z' });
+
+    const completed = await getCompletedItems(source);
+
+    expect(completed.find((item) => item.id === planned.id)).toMatchObject({
+      completedAt: '2026-09-21T14:34:00.000Z',
+      displayDate: '2026-09-15',
+    });
+    expect(completed.find((item) => item.id === unplanned.id)).toMatchObject({
+      displayDate: '2026-09-21',
+    });
+  });
+
   test('lists completed standalone and recurring reminders', async () => {
     const source = createInMemoryDataSource();
     const standalone = await createReminder(source, { id: 'reminder-1', title: 'Отправить документы', createdAt });

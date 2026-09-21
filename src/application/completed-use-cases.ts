@@ -1,5 +1,5 @@
 import type { AppDataSource } from '../data/contracts';
-import type { EntityId } from '../domain/entities';
+import type { EntityId, ScheduleBlock } from '../domain/entities';
 import { getDateInTimeZone } from '../domain/planning';
 import type { LocalNotificationScheduler } from './notification-scheduling';
 import { deleteBacklogItem } from './backlog-use-cases';
@@ -13,6 +13,7 @@ export interface CompletedItem {
   kind: CompletedItemKind;
   title: string;
   completedAt: string;
+  displayDate: string;
   occurrence: { seriesId: EntityId; occursOn: string } | null;
   taskId?: EntityId;
 }
@@ -42,8 +43,7 @@ async function getTaskRevisionPatch(source: AppDataSource, seriesId: EntityId, o
     .at(-1)?.taskPatch ?? {};
 }
 
-function isInCompletedPeriod(completedAt: string, period: CompletedPeriod, now: Date, timeZoneId: string): boolean {
-  const completedOn = getDateInTimeZone(completedAt, timeZoneId);
+function isInCompletedPeriod(completedOn: string, period: CompletedPeriod, now: Date, timeZoneId: string): boolean {
   const today = getDateInTimeZone(now.toISOString(), timeZoneId);
   if (period === 'today') return completedOn === today;
   if (period === 'month') return completedOn.slice(0, 7) === today.slice(0, 7);
@@ -55,17 +55,26 @@ function isInCompletedPeriod(completedAt: string, period: CompletedPeriod, now: 
   return completedOn >= weekStartsOn && completedOn <= weekEndsOn;
 }
 
+function getTaskDisplayDate(taskId: EntityId, completedAt: string, blocks: readonly ScheduleBlock[], timeZoneId: string): string {
+  return blocks
+    .filter((block) => block.taskItemId === taskId && block.occurrenceId === null)
+    .map((block) => getDateInTimeZone(block.startsAt, block.timeZoneId))
+    .sort()[0] ?? getDateInTimeZone(completedAt, timeZoneId);
+}
+
 export async function getCompletedItems(source: AppDataSource, options: GetCompletedItemsOptions = {}): Promise<readonly CompletedItem[]> {
-  const [projects, reminders, tasks, series] = await Promise.all([
+  const [projects, reminders, tasks, series, blocks, settings] = await Promise.all([
     source.listProjects(),
     source.listReminders(),
     source.listTaskItems(),
     source.listRecurrenceSeries(),
+    source.listScheduleBlocks(),
+    source.getSettings(),
   ]);
   const result: CompletedItem[] = [
-    ...projects.filter((item) => item.completedAt !== null).map((item) => ({ id: item.id, kind: 'project' as const, title: item.title, completedAt: item.completedAt!, occurrence: null })),
-    ...reminders.filter((item) => item.completedAt !== null).map((item) => ({ id: item.id, kind: 'reminder' as const, title: item.title, completedAt: item.completedAt!, occurrence: null })),
-    ...tasks.filter((item) => item.completedAt !== null).map((item) => ({ id: item.id, kind: item.kind, title: item.title, completedAt: item.completedAt!, occurrence: null })),
+    ...projects.filter((item) => item.completedAt !== null).map((item) => ({ id: item.id, kind: 'project' as const, title: item.title, completedAt: item.completedAt!, displayDate: getDateInTimeZone(item.completedAt!, settings.timeZoneId), occurrence: null })),
+    ...reminders.filter((item) => item.completedAt !== null).map((item) => ({ id: item.id, kind: 'reminder' as const, title: item.title, completedAt: item.completedAt!, displayDate: getDateInTimeZone(item.completedAt!, settings.timeZoneId), occurrence: null })),
+    ...tasks.filter((item) => item.completedAt !== null).map((item) => ({ id: item.id, kind: item.kind, title: item.title, completedAt: item.completedAt!, displayDate: getTaskDisplayDate(item.id, item.completedAt!, blocks, settings.timeZoneId), occurrence: null })),
   ];
   for (const recurrence of series) {
     const task = recurrence.itemKind === 'task'
@@ -85,17 +94,17 @@ export async function getCompletedItems(source: AppDataSource, options: GetCompl
           ? occurrence.reminderPatch?.title ?? reminder!.title
           : occurrence.taskPatch?.title ?? revisionPatch.title ?? task.title,
         completedAt: occurrence.completedAt,
+        displayDate: occurrence.occursOn,
         occurrence: { seriesId: recurrence.id, occursOn: occurrence.occursOn },
         ...(task === undefined ? {} : { taskId: recurrence.itemId }),
       });
     }
   }
   if (options.period === undefined) {
-    return result.sort((left, right) => right.completedAt.localeCompare(left.completedAt) || left.title.localeCompare(right.title, 'ru'));
+    return result.sort((left, right) => right.displayDate.localeCompare(left.displayDate) || right.completedAt.localeCompare(left.completedAt) || left.title.localeCompare(right.title, 'ru'));
   }
-  const settings = await source.getSettings();
-  const filtered = result.filter((item) => isInCompletedPeriod(item.completedAt, options.period!, options.now ?? new Date(), settings.timeZoneId));
-  return filtered.sort((left, right) => right.completedAt.localeCompare(left.completedAt) || left.title.localeCompare(right.title, 'ru'));
+  const filtered = result.filter((item) => isInCompletedPeriod(item.displayDate, options.period!, options.now ?? new Date(), settings.timeZoneId));
+  return filtered.sort((left, right) => right.displayDate.localeCompare(left.displayDate) || right.completedAt.localeCompare(left.completedAt) || left.title.localeCompare(right.title, 'ru'));
 }
 
 export async function getCompletedItemDetails(source: AppDataSource, item: CompletedItem): Promise<CompletedItemDetails | null> {

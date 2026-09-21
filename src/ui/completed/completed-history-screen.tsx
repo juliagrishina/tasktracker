@@ -161,7 +161,7 @@ function CompletedRow({ item, onPressDetails, onPressMore, showDivider }: {
         <Text numberOfLines={1} style={styles.itemDetail}>{item.occurrence === null ? 'Выполнено' : `Экземпляр от ${formatDate(item.occurrence.occursOn)}`}</Text>
       </View>
       <View style={styles.trailing}>
-        <Text style={styles.time}>{formatDate(item.completedAt)}</Text>
+        <Text style={styles.time}>{formatDate(item.displayDate)}</Text>
         <Pressable accessibilityLabel={`Открыть действия: ${item.title}`} accessibilityRole="button" onPress={onPressMore} style={styles.moreButton}>
           <Ionicons color={designTokens.color.text.tertiary} name="ellipsis-horizontal" size={18} />
         </Pressable>
@@ -175,8 +175,8 @@ function filterGroups(items: readonly CompletedItem[], query: string, period: Co
   const earliest = Date.now() - ({ Сегодня: 1, Неделя: 7, Месяц: 31, Год: 366 }[period] * 24 * 60 * 60_000);
   const groups = new Map<string, CompletedItem[]>();
   for (const item of items) {
-    if (new Date(item.completedAt).getTime() < earliest || normalizedQuery.length > 0 && !item.title.toLocaleLowerCase('ru-RU').includes(normalizedQuery)) continue;
-    const key = item.completedAt.slice(0, 10);
+    if (new Date(`${item.displayDate}T12:00:00Z`).getTime() < earliest || normalizedQuery.length > 0 && !item.title.toLocaleLowerCase('ru-RU').includes(normalizedQuery)) continue;
+    const key = item.displayDate;
     groups.set(key, [...(groups.get(key) ?? []), item]);
   }
   return [...groups.entries()].sort(([left], [right]) => right.localeCompare(left)).map(([id, groupItems]) => ({ id, title: formatDate(id), items: groupItems }));

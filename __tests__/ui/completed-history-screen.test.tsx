@@ -33,6 +33,23 @@ describe('CompletedHistoryScreen', () => {
     await waitFor(() => expect(view.getByLabelText('Возобновить задачу')).toBeOnTheScreen());
   });
 
+  test('groups a completed planned task by its planned date instead of its completion date', async () => {
+    const completedAt = new Date().toISOString();
+    const planned = new Date();
+    planned.setUTCDate(planned.getUTCDate() - 3);
+    const plannedOn = planned.toISOString().slice(0, 10);
+    const plannedDateLabel = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(`${plannedOn}T12:00:00Z`));
+    const completionDateLabel = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(new Date(`${completedAt.slice(0, 10)}T12:00:00Z`));
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem({ id: 'sync-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Синк Вася Ваганов', description: null, estimatedDurationMinutes: null, completedAt, createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
+    await source.saveScheduleBlock({ id: 'sync-block', taskItemId: 'sync-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: `${plannedOn}T17:00:00+03:00`, endsAt: `${plannedOn}T18:00:00+03:00`, createdAt: completedAt, updatedAt: completedAt, deletedAt: null });
+    const view = await render(<AppServicesProvider seedDevelopmentData={false} source={source}><CompletedHistoryScreen /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Синк Вася Ваганов')).toBeOnTheScreen());
+    expect(view.getAllByText(plannedDateLabel)).toHaveLength(2);
+    expect(view.queryByText(completionDateLabel)).toBeNull();
+  });
+
   test('opens actions for a completed item on a browser context-menu click', async () => {
     const source = createInMemoryDataSource();
     const completedAt = new Date().toISOString();
