@@ -1,6 +1,6 @@
 function readRepositoryFile(...segments: string[]): string {
   const fileSystem = jest.requireActual<{ readFileSync(path: string, encoding: string): string }>('node:fs');
-  return fileSystem.readFileSync(`${process.cwd()}/${segments.join('/')}`, 'utf8');
+  return fileSystem.readFileSync(`${process.cwd()}/${segments.join('/')}`, 'utf8').replace(/\r\n/g, '\n');
 }
 
 describe('cloud sync protocol contract', () => {
