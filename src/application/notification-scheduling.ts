@@ -8,6 +8,7 @@ export interface LocalNotificationScheduler {
 
 export async function synchronizeScheduleBlockNotification(input: {
   block: ScheduleBlock;
+  displayTimeZoneId?: string;
   notificationLeadMinutes: number;
   now: Date;
   scheduler: LocalNotificationScheduler;
@@ -18,7 +19,7 @@ export async function synchronizeScheduleBlockNotification(input: {
   if (scheduledAt <= input.now) return { ...input.block, notificationId: null };
   const notificationId = await input.scheduler.schedule({
     title: 'Скоро начнётся дело',
-    body: `${input.taskTitle} начнётся в ${getTimeInTimeZone(input.block.startsAt, input.block.timeZoneId)}`,
+    body: `${input.taskTitle} начнётся в ${getTimeInTimeZone(input.block.startsAt, input.displayTimeZoneId ?? input.block.timeZoneId)}`,
     scheduledAt: scheduledAt.toISOString(),
   });
   return { ...input.block, notificationId };

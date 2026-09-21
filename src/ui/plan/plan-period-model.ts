@@ -105,6 +105,11 @@ export function formatPlanDate(isoDate: string): string {
   return `${date.getDate()} ${monthLabels[date.getMonth()]}`;
 }
 
+export function formatPlanDayHeaderDate(isoDate: string): string {
+  const date = parseLocalDate(isoDate);
+  return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+}
+
 export function formatPlanMonth(isoDate: string): string {
   const date = parseLocalDate(isoDate);
   return `${monthTitleLabels[date.getMonth()]} ${date.getFullYear()}`;

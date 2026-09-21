@@ -7,9 +7,11 @@ import type {
 } from '../domain/entities';
 import type { AppDataSource } from '../data/contracts';
 import { getDateInTimeZone } from '../domain/planning';
+import { stableLegacyUuid } from '../domain/uuid';
 import type { DemoTask, DemoTaskGroups } from '../ui/demo-tasks';
 
 const createdAt = '2026-08-02T09:00:00.000Z';
+const demoId = (entityType: string, legacyId: string): string => stableLegacyUuid(entityType, legacyId);
 
 const projectDefaults = {
   description: null,
@@ -39,13 +41,13 @@ const reminderDefaults = {
 
 const projects: readonly Project[] = [
   {
-    id: 'demo-project-personal',
+    id: demoId('projects', 'demo-project-personal'),
     title: 'Личное',
     ...projectDefaults,
     createdAt,
   },
   {
-    id: 'demo-project-work',
+    id: demoId('projects', 'demo-project-work'),
     title: 'Работа',
     ...projectDefaults,
     createdAt,
@@ -54,52 +56,52 @@ const projects: readonly Project[] = [
 
 const taskItems: readonly TaskItem[] = [
   {
-    id: 'demo-plan-week-draft',
+    id: demoId('task_items', 'demo-plan-week-draft'),
     kind: 'task',
-    projectId: 'demo-project-personal',
+    projectId: demoId('projects', 'demo-project-personal'),
     parentTaskId: null,
     title: 'Подготовить черновик недели',
     ...taskDefaults,
     createdAt,
   },
   {
-    id: 'demo-plan-week-draft-outline',
+    id: demoId('task_items', 'demo-plan-week-draft-outline'),
     kind: 'subtask',
-    projectId: 'demo-project-personal',
-    parentTaskId: 'demo-plan-week-draft',
+    projectId: demoId('projects', 'demo-project-personal'),
+    parentTaskId: demoId('task_items', 'demo-plan-week-draft'),
     title: 'Собрать пункты для черновика',
     ...taskDefaults,
     createdAt,
   },
   {
-    id: 'demo-plan-team-call',
+    id: demoId('task_items', 'demo-plan-team-call'),
     kind: 'task',
-    projectId: 'demo-project-work',
+    projectId: demoId('projects', 'demo-project-work'),
     parentTaskId: null,
     title: 'Созвон с командой',
     ...taskDefaults,
     createdAt,
   },
   {
-    id: 'demo-backlog-inbox',
+    id: demoId('task_items', 'demo-backlog-inbox'),
     kind: 'task',
-    projectId: 'demo-project-personal',
+    projectId: demoId('projects', 'demo-project-personal'),
     parentTaskId: null,
     title: 'Разобрать входящие заметки',
     ...taskDefaults,
     createdAt,
   },
   {
-    id: 'demo-backlog-gift',
+    id: demoId('task_items', 'demo-backlog-gift'),
     kind: 'task',
-    projectId: 'demo-project-personal',
+    projectId: demoId('projects', 'demo-project-personal'),
     parentTaskId: null,
     title: 'Выбрать подарок маме',
     ...taskDefaults,
     createdAt,
   },
   {
-    id: 'demo-backlog-reading',
+    id: demoId('task_items', 'demo-backlog-reading'),
     kind: 'task',
     projectId: null,
     parentTaskId: null,
@@ -108,9 +110,9 @@ const taskItems: readonly TaskItem[] = [
     createdAt,
   },
   {
-    id: 'demo-completed-review',
+    id: demoId('task_items', 'demo-completed-review'),
     kind: 'task',
-    projectId: 'demo-project-personal',
+    projectId: demoId('projects', 'demo-project-personal'),
     parentTaskId: null,
     title: 'Заполнить итоги дня',
     ...taskDefaults,
@@ -118,9 +120,9 @@ const taskItems: readonly TaskItem[] = [
     createdAt,
   },
   {
-    id: 'demo-completed-brief',
+    id: demoId('task_items', 'demo-completed-brief'),
     kind: 'task',
-    projectId: 'demo-project-work',
+    projectId: demoId('projects', 'demo-project-work'),
     parentTaskId: null,
     title: 'Отправить краткий статус',
     ...taskDefaults,
@@ -131,7 +133,7 @@ const taskItems: readonly TaskItem[] = [
 
 const reminders: readonly Reminder[] = [
   {
-    id: 'demo-reminder-insurance',
+    id: demoId('reminders', 'demo-reminder-insurance'),
     title: 'Позвонить в страховую',
     ...reminderDefaults,
     createdAt,
@@ -141,9 +143,9 @@ const reminders: readonly Reminder[] = [
 function createAcceptanceTasks(isoDate: string): readonly TaskItem[] {
   return [
     {
-      id: 'demo-evening-review-task',
+      id: demoId('task_items', 'demo-evening-review-task'),
       kind: 'task',
-      projectId: 'demo-project-personal',
+      projectId: demoId('projects', 'demo-project-personal'),
       parentTaskId: null,
       title: 'Подвести итоги дня',
       ...taskDefaults,
@@ -156,7 +158,7 @@ function createAcceptanceTasks(isoDate: string): readonly TaskItem[] {
 function createAcceptanceReminders(isoDate: string): readonly Reminder[] {
   return [
     {
-      id: 'demo-reminder-evening-review',
+      id: demoId('reminders', 'demo-reminder-evening-review'),
       title: 'Подтвердить бронирование',
       ...reminderDefaults,
       remindsOn: isoDate,
@@ -176,8 +178,8 @@ function createScheduleBlocks(now: Date, timeZoneId: string): readonly ScheduleB
 
   return [
     {
-      id: 'demo-plan-week-draft-block',
-      taskItemId: 'demo-plan-week-draft',
+      id: demoId('schedule_blocks', 'demo-plan-week-draft-block'),
+      taskItemId: demoId('task_items', 'demo-plan-week-draft'),
       occurrenceId: null,
       timeZoneId,
       startsAt: completedScenarioStartsAt.toISOString(),
@@ -187,8 +189,8 @@ function createScheduleBlocks(now: Date, timeZoneId: string): readonly ScheduleB
       deletedAt: null,
     },
     {
-      id: 'demo-plan-team-call-block',
-      taskItemId: 'demo-plan-team-call',
+      id: demoId('schedule_blocks', 'demo-plan-team-call-block'),
+      taskItemId: demoId('task_items', 'demo-plan-team-call'),
       occurrenceId: null,
       timeZoneId,
       startsAt: upcomingScenarioStartsAt.toISOString(),
@@ -203,9 +205,9 @@ function createScheduleBlocks(now: Date, timeZoneId: string): readonly ScheduleB
 function createRecurrenceSeries(isoDate: string): readonly RecurrenceSeries[] {
   return [
     {
-      id: 'demo-plan-week-draft-recurrence',
+      id: demoId('recurrence_series', 'demo-plan-week-draft-recurrence'),
       itemKind: 'task',
-      itemId: 'demo-plan-week-draft',
+      itemId: demoId('task_items', 'demo-plan-week-draft'),
       frequency: 'weekly',
       interval: 1,
       startsOn: isoDate,
@@ -222,19 +224,19 @@ interface DemoTaskDefinition {
 }
 
 const planDefinitions: readonly DemoTaskDefinition[] = [
-  { id: 'demo-plan-week-draft', detail: '09:00–09:30 · Личное' },
-  { id: 'demo-plan-team-call', detail: '11:00–11:45 · Работа' },
+  { id: demoId('task_items', 'demo-plan-week-draft'), detail: '09:00–09:30 · Личное' },
+  { id: demoId('task_items', 'demo-plan-team-call'), detail: '11:00–11:45 · Работа' },
 ];
 
 const backlogDefinitions: readonly DemoTaskDefinition[] = [
-  { id: 'demo-backlog-inbox', detail: 'Без даты · Личное' },
-  { id: 'demo-backlog-gift', detail: 'До конца недели · Личное' },
-  { id: 'demo-backlog-reading', detail: 'Без даты · Саморазвитие' },
+  { id: demoId('task_items', 'demo-backlog-inbox'), detail: 'Без даты · Личное' },
+  { id: demoId('task_items', 'demo-backlog-gift'), detail: 'До конца недели · Личное' },
+  { id: demoId('task_items', 'demo-backlog-reading'), detail: 'Без даты · Саморазвитие' },
 ];
 
 const completedDefinitions: readonly DemoTaskDefinition[] = [
-  { id: 'demo-completed-review', detail: 'Завершено сегодня · Личное' },
-  { id: 'demo-completed-brief', detail: 'Завершено сегодня · Работа' },
+  { id: demoId('task_items', 'demo-completed-review'), detail: 'Завершено сегодня · Личное' },
+  { id: demoId('task_items', 'demo-completed-brief'), detail: 'Завершено сегодня · Работа' },
 ];
 
 export async function seedDemoData(source: AppDataSource): Promise<void> {

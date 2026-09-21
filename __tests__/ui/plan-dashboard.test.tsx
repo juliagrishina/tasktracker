@@ -6,6 +6,7 @@ import { DayDashboard } from '../../src/ui/plan/day-dashboard';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { ProgressRing } from '../../src/ui/plan/progress-ring';
+import { designTokens } from '../../src/ui/design/tokens';
 import type { PlanDayReadModel } from '../../src/application/plan-read-model';
 
 describe('ProgressRing', () => {
@@ -23,6 +24,20 @@ describe('ProgressRing', () => {
 });
 
 describe('DayDashboard', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('colours a high-load active arc with the shared danger tone', async () => {
+    const view = await render(<ProgressRing label="92%" tone="high" value={92} />);
+
+    const activeCircle = view.getByTestId('plan-load-ring-active');
+    expect(activeCircle.props.strokeDasharray).toEqual([expect.any(Number), expect.any(Number)]);
+    expect(activeCircle.props.strokeDashoffset).toBeGreaterThan(0);
+    const nativeDangerColor = Number.parseInt(`FF${designTokens.color.feedback.danger.foreground.slice(1)}`, 16);
+    expect(JSON.stringify(activeCircle.props.stroke)).toContain(`\"payload\":${nativeDangerColor}`);
+  });
+
   test('keeps a completed block in the plan and marks it as completed', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
@@ -70,7 +85,7 @@ describe('DayDashboard', () => {
     const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false}><DayDashboard now={new Date('2026-08-10T21:30:00.000Z')} /></AppServicesProvider>);
 
     await waitFor(() => expect(view.getByText('Сегодня')).toBeOnTheScreen());
-    expect(view.getByText('2026-08-11')).toBeOnTheScreen();
+    expect(view.getByText('11.08.2026')).toBeOnTheScreen();
     expect(view.getByText('Задача локального дня')).toBeOnTheScreen();
   });
 
@@ -245,6 +260,8 @@ describe('DayDashboard', () => {
   });
 
   test('completes a recurring plan instance without asking for a series scope', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    jest.setSystemTime(new Date('2026-08-28T07:00:00.000Z'));
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
@@ -337,6 +354,8 @@ describe('DayDashboard', () => {
   });
 
   test('completes only the prompted recurring occurrence', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+    jest.setSystemTime(new Date('2026-08-28T07:00:00.000Z'));
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });

@@ -18,11 +18,43 @@ import {
 } from '../domain/invariants';
 
 import type { AppDataSource } from './contracts';
+import {
+  createIndexedDbBrowserSnapshotStore,
+  type BrowserSnapshotStore,
+  type IndexedDbFactory,
+} from './browser-indexeddb-storage';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
+import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
+import { migrateLegacyEntityIds } from './legacy-id-migration';
+import { createLocalSyncId, createSyncTrackingDataSource, type IncomingSyncConflict, type RemoteSyncChange, type SyncConflict, type SyncMetadataDataSource, type SyncMutationResult, type SyncOutboxMutation, type SyncTrackingDataSource } from './sync-outbox';
+import { createStoredSyncConflict } from '../application/sync-conflicts';
 
-export interface InMemoryDataSource extends AppDataSource {
+export interface InMemoryDataSource extends SyncTrackingDataSource {
   debugSettingsRowCount(): number;
   debugRowExists(id: EntityId): boolean;
+}
+
+export interface BrowserScopeStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+export interface BrowserDataSnapshot {
+  settings: AppSettings | null;
+  dailyEnergyEntries: DailyEnergyEntry[];
+  projects: Project[];
+  taskItems: TaskItem[];
+  reminders: Reminder[];
+  scheduleBlocks: ScheduleBlock[];
+  recurrenceSeries: RecurrenceSeries[];
+  recurrenceOccurrences: RecurrenceOccurrence[];
+  recurrenceRevisions: RecurrenceRevision[];
+  transferHistories: TransferHistory[];
+  syncState: { deviceId: string; dataGeneration: number; lastSuccessAt: string | null } | null;
+  syncCursor: number | null;
+  syncEntityVersions: readonly [string, number][];
+  syncOutbox: SyncOutboxMutation[];
+  syncConflicts: SyncConflict[];
 }
 
 function compareByCreatedAt<T extends { id: EntityId; createdAt: string }>(
@@ -39,7 +71,7 @@ function replaceMap<T>(target: Map<EntityId, T>, source: Map<EntityId, T>): void
   }
 }
 
-class BrowserInMemoryDataSource implements InMemoryDataSource {
+class BrowserInMemoryDataSource implements AppDataSource, SyncMetadataDataSource {
   private settings: AppSettings | null = null;
   private readonly dailyEnergyEntries = new Map<string, DailyEnergyEntry>();
   private readonly projects = new Map<EntityId, Project>();
@@ -50,6 +82,17 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   private readonly recurrenceOccurrences = new Map<EntityId, RecurrenceOccurrence>();
   private readonly recurrenceRevisions = new Map<EntityId, RecurrenceRevision>();
   private readonly transferHistories = new Map<EntityId, TransferHistory>();
+  private syncState: { deviceId: string; dataGeneration: number; lastSuccessAt: string | null } | null = null;
+  private syncCursor: number | null = null;
+  private readonly syncEntityVersions = new Map<string, number>();
+  private readonly syncOutbox = new Map<string, SyncOutboxMutation>();
+  private readonly syncConflicts = new Map<string, SyncConflict>();
+
+  constructor(snapshot?: BrowserDataSnapshot) {
+    if (snapshot !== undefined) {
+      this.restoreSnapshot(snapshot);
+    }
+  }
 
   async initialize(): Promise<void> {
     if (this.settings === null) {
@@ -71,6 +114,107 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   async getDailyEnergyEntry(recordedOn: string): Promise<DailyEnergyEntry | null> {
     await this.initialize();
     return this.dailyEnergyEntries.get(recordedOn) ?? null;
+  }
+
+  async enqueueSyncMutation(input: Omit<SyncOutboxMutation, 'mutationId' | 'deviceId' | 'expectedVersion' | 'dataGeneration' | 'createdAt'>): Promise<SyncOutboxMutation> {
+    await this.initialize();
+    if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1, lastSuccessAt: null };
+    const versionKey = `${input.entityType}:${input.entityId}`;
+    const expectedVersion = this.syncEntityVersions.get(versionKey) ?? 0;
+    this.syncEntityVersions.set(versionKey, expectedVersion + 1);
+    const mutation: SyncOutboxMutation = { ...input, mutationId: createLocalSyncId(), deviceId: this.syncState.deviceId, expectedVersion, dataGeneration: this.syncState.dataGeneration, createdAt: new Date().toISOString() };
+    this.syncOutbox.set(mutation.mutationId, mutation);
+    return mutation;
+  }
+
+  async listSyncOutbox(): Promise<readonly SyncOutboxMutation[]> {
+    await this.initialize();
+    return [...this.syncOutbox.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.mutationId.localeCompare(right.mutationId));
+  }
+
+  async acknowledgeSyncMutations(results: readonly SyncMutationResult[]): Promise<void> {
+    await this.initialize();
+    for (const result of results) {
+      this.syncOutbox.delete(result.mutationId);
+      this.syncEntityVersions.set(`${result.entityType}:${result.entityId}`, result.version);
+    }
+  }
+
+  async recordSyncConflicts(conflicts: readonly IncomingSyncConflict[]): Promise<readonly SyncConflict[]> {
+    await this.initialize();
+    const now = new Date().toISOString();
+    const stored = conflicts.map((conflict) => createStoredSyncConflict(conflict, createLocalSyncId(), now));
+    for (const conflict of stored) this.syncConflicts.set(conflict.id, conflict);
+    return stored;
+  }
+
+  async listSyncConflicts(): Promise<readonly SyncConflict[]> {
+    await this.initialize();
+    return [...this.syncConflicts.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
+  async removeSyncConflict(id: string): Promise<void> {
+    await this.initialize();
+    this.syncConflicts.delete(id);
+  }
+
+  async getLastSyncSuccessAt(): Promise<string | null> {
+    await this.initialize();
+    return this.syncState?.lastSuccessAt ?? null;
+  }
+
+  async recordSyncSuccess(at: string): Promise<void> {
+    await this.initialize();
+    if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1, lastSuccessAt: at };
+    else this.syncState = { ...this.syncState, lastSuccessAt: at };
+  }
+
+  async getSyncCursor(): Promise<number> {
+    await this.initialize();
+    return this.syncCursor ?? 0;
+  }
+
+  async getLocalDataGeneration(): Promise<number> {
+    await this.initialize();
+    return this.syncState?.dataGeneration ?? 1;
+  }
+
+  async applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void> {
+    await this.transaction(async () => {
+      for (const change of changes) this.applyRemoteSyncChange(change);
+      if (this.syncState === null) this.syncState = { deviceId: createLocalSyncId(), dataGeneration: 1, lastSuccessAt: null };
+      this.syncCursor = cursor;
+    });
+  }
+
+  async resetForFullResync(dataGeneration: number): Promise<void> {
+    await this.transaction(async () => {
+      const deviceId = this.syncState?.deviceId ?? createLocalSyncId();
+      this.settings = getDefaultSettings();
+      this.dailyEnergyEntries.clear(); this.projects.clear(); this.taskItems.clear(); this.reminders.clear();
+      this.scheduleBlocks.clear(); this.recurrenceSeries.clear(); this.recurrenceOccurrences.clear();
+      this.recurrenceRevisions.clear(); this.transferHistories.clear();
+      this.syncOutbox.clear(); this.syncEntityVersions.clear(); this.syncConflicts.clear();
+      this.syncCursor = 0;
+      this.syncState = { deviceId, dataGeneration, lastSuccessAt: null };
+    });
+  }
+
+  async clearAll(): Promise<void> {
+    this.settings = getDefaultSettings();
+    this.dailyEnergyEntries.clear(); this.projects.clear(); this.taskItems.clear(); this.reminders.clear();
+    this.scheduleBlocks.clear(); this.recurrenceSeries.clear(); this.recurrenceOccurrences.clear();
+    this.recurrenceRevisions.clear(); this.transferHistories.clear();
+    this.syncOutbox.clear(); this.syncEntityVersions.clear(); this.syncConflicts.clear();
+    this.syncCursor = null;
+    this.syncState = null;
+  }
+
+  async listDailyEnergyEntries(): Promise<readonly DailyEnergyEntry[]> {
+    await this.initialize();
+    return [...this.dailyEnergyEntries.values()].sort((left, right) =>
+      left.recordedOn.localeCompare(right.recordedOn),
+    );
   }
 
   async saveDailyEnergyEntry(entry: DailyEnergyEntry): Promise<void> {
@@ -358,6 +502,11 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       recurrenceOccurrences: new Map(this.recurrenceOccurrences),
       recurrenceRevisions: new Map(this.recurrenceRevisions),
       transferHistories: new Map(this.transferHistories),
+      syncState: this.syncState === null ? null : { ...this.syncState },
+      syncCursor: this.syncCursor,
+      syncEntityVersions: new Map(this.syncEntityVersions),
+      syncOutbox: new Map(this.syncOutbox),
+      syncConflicts: new Map(this.syncConflicts),
     };
 
     try {
@@ -373,6 +522,11 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       replaceMap(this.recurrenceOccurrences, snapshot.recurrenceOccurrences);
       replaceMap(this.recurrenceRevisions, snapshot.recurrenceRevisions);
       replaceMap(this.transferHistories, snapshot.transferHistories);
+      this.syncState = snapshot.syncState;
+      this.syncCursor = snapshot.syncCursor;
+      replaceMap(this.syncEntityVersions, snapshot.syncEntityVersions);
+      replaceMap(this.syncOutbox, snapshot.syncOutbox);
+      replaceMap(this.syncConflicts, snapshot.syncConflicts);
       throw error;
     }
   }
@@ -391,6 +545,64 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
       || this.recurrenceOccurrences.has(id)
       || this.recurrenceRevisions.has(id)
     );
+  }
+
+  exportSnapshot(): BrowserDataSnapshot {
+    return {
+      settings: this.settings,
+      dailyEnergyEntries: [...this.dailyEnergyEntries.values()],
+      projects: [...this.projects.values()],
+      taskItems: [...this.taskItems.values()],
+      reminders: [...this.reminders.values()],
+      scheduleBlocks: [...this.scheduleBlocks.values()],
+      recurrenceSeries: [...this.recurrenceSeries.values()],
+      recurrenceOccurrences: [...this.recurrenceOccurrences.values()],
+      recurrenceRevisions: [...this.recurrenceRevisions.values()],
+      transferHistories: [...this.transferHistories.values()],
+      syncState: this.syncState,
+      syncCursor: this.syncCursor,
+      syncEntityVersions: [...this.syncEntityVersions.entries()],
+      syncOutbox: [...this.syncOutbox.values()],
+      syncConflicts: [...this.syncConflicts.values()],
+    };
+  }
+
+  restoreSnapshot(snapshot: BrowserDataSnapshot): void {
+    const migrated = migrateLegacyEntityIds(snapshot);
+    this.settings = migrated.settings;
+    replaceMap(this.dailyEnergyEntries, new Map(migrated.dailyEnergyEntries.map((entry) => [entry.recordedOn, entry])));
+    replaceMap(this.projects, new Map(migrated.projects.map((project) => [project.id, project])));
+    replaceMap(this.taskItems, new Map(migrated.taskItems.map((task) => [task.id, task])));
+    replaceMap(this.reminders, new Map(migrated.reminders.map((reminder) => [reminder.id, reminder])));
+    replaceMap(this.scheduleBlocks, new Map(migrated.scheduleBlocks.map((block) => [block.id, block])));
+    replaceMap(this.recurrenceSeries, new Map(migrated.recurrenceSeries.map((series) => [series.id, series])));
+    replaceMap(this.recurrenceOccurrences, new Map(migrated.recurrenceOccurrences.map((occurrence) => [occurrence.id, occurrence])));
+    replaceMap(this.recurrenceRevisions, new Map(migrated.recurrenceRevisions.map((revision) => [revision.id, revision])));
+    replaceMap(this.transferHistories, new Map(migrated.transferHistories.map((history) => [history.id, history])));
+    this.syncState = migrated.syncState === null ? null : { ...migrated.syncState, lastSuccessAt: migrated.syncState.lastSuccessAt ?? null };
+    this.syncCursor = migrated.syncCursor;
+    replaceMap(this.syncEntityVersions, new Map(migrated.syncEntityVersions));
+    replaceMap(this.syncOutbox, new Map(migrated.syncOutbox.map((mutation) => [mutation.mutationId, mutation])));
+    replaceMap(this.syncConflicts, new Map((migrated.syncConflicts ?? []).map((conflict) => [conflict.id, conflict])));
+  }
+
+  private applyRemoteSyncChange(change: RemoteSyncChange): void {
+    const payload = change.payload as Record<string, unknown>;
+    const deletedAt = change.operation === 'delete' ? new Date().toISOString() : null;
+    if (change.entityType === 'projects') this.projects.set(change.entityId, { ...(payload as unknown as Project), id: change.entityId, deletedAt });
+    else if (change.entityType === 'task_items') this.taskItems.set(change.entityId, { ...(payload as TaskItem), id: change.entityId, deletedAt });
+    else if (change.entityType === 'reminders') this.reminders.set(change.entityId, { ...(payload as unknown as Reminder), id: change.entityId, deletedAt });
+    else if (change.entityType === 'schedule_blocks') this.scheduleBlocks.set(change.entityId, { ...(payload as unknown as ScheduleBlock), id: change.entityId, deletedAt });
+    else if (change.entityType === 'recurrence_series') this.recurrenceSeries.set(change.entityId, { ...(payload as unknown as RecurrenceSeries), id: change.entityId, deletedAt });
+    else if (change.entityType === 'recurrence_occurrences') this.recurrenceOccurrences.set(change.entityId, { ...(payload as unknown as RecurrenceOccurrence), id: change.entityId, deletedAt });
+    else if (change.entityType === 'recurrence_revisions') this.recurrenceRevisions.set(change.entityId, { ...(payload as unknown as RecurrenceRevision), id: change.entityId, deletedAt });
+    else if (change.entityType === 'transfer_history') this.transferHistories.set(change.entityId, { ...(payload as unknown as TransferHistory), id: change.entityId });
+    else if (change.entityType === 'daily_energy_entries' && change.operation === 'upsert') this.dailyEnergyEntries.set(change.entityId, payload as unknown as DailyEnergyEntry);
+    else if (change.entityType === 'user_settings' && change.operation === 'upsert') {
+      const current = this.settings ?? getDefaultSettings();
+      this.settings = { ...current, ...pickSharedSettings(payload) };
+    }
+    this.syncEntityVersions.set(`${change.entityType}:${change.entityId}`, change.version);
   }
 
   private deleteTaskRelatedRows(taskItemId: EntityId, deletedAt: string): void {
@@ -438,10 +650,227 @@ class BrowserInMemoryDataSource implements InMemoryDataSource {
   }
 }
 
-export function createInMemoryDataSource(): InMemoryDataSource {
-  return new BrowserInMemoryDataSource();
+export function createInMemoryDataSource(
+  scope: LocalDataScope = { kind: 'autonomous' },
+): InMemoryDataSource {
+  return createSyncTrackingDataSource(new BrowserInMemoryDataSource(), scope) as InMemoryDataSource;
 }
 
-export function createDataSource(): AppDataSource {
-  return createInMemoryDataSource();
+const scopedDataSources = new Map<string, AppDataSource>();
+
+export function createDataSource(scope: LocalDataScope = { kind: 'autonomous' }): AppDataSource {
+  const scopeKey = databaseNameForScope(scope);
+  const existing = scopedDataSources.get(scopeKey);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const browserStorage = getBrowserStorage();
+  const indexedDb = getBrowserIndexedDb();
+  const source = browserStorage === null
+    ? createInMemoryDataSource(scope)
+    : indexedDb === null
+      ? createLegacyPersistentBrowserDataSource(scope, browserStorage)
+      : createPersistentBrowserDataSource(scope, {
+        legacyStorage: browserStorage,
+        snapshotStore: createIndexedDbBrowserSnapshotStore<BrowserDataSnapshot>(indexedDb),
+      });
+  scopedDataSources.set(scopeKey, source);
+  return source;
+}
+
+export interface BrowserPersistentDataSourceOptions {
+  legacyStorage: BrowserScopeStorage;
+  snapshotStore: BrowserSnapshotStore<BrowserDataSnapshot>;
+}
+
+export function createPersistentBrowserDataSource(
+  scope: LocalDataScope,
+  options: BrowserPersistentDataSourceOptions,
+): AppDataSource {
+  const storageKey = `tasktracker.browser-data.${databaseNameForScope(scope)}.v1`;
+  const source = new BrowserInMemoryDataSource();
+  let migratedFromLegacy = false;
+  const ready = hydrateFromIndexedDbOrLegacy(source, databaseNameForScope(scope), storageKey, options)
+    .then((didMigrateFromLegacy) => { migratedFromLegacy = didMigrateFromLegacy; });
+  const persisted = createPersistedDataSource(source, ready, async () => {
+    await options.snapshotStore.write(databaseNameForScope(scope), {
+      schemaVersion: 1,
+      migratedFromLegacy,
+      snapshot: source.exportSnapshot(),
+    });
+  });
+  return createSyncTrackingDataSource(persisted, scope);
+}
+
+function createLegacyPersistentBrowserDataSource(
+  scope: LocalDataScope,
+  storage: BrowserScopeStorage,
+): AppDataSource {
+  const storageKey = `tasktracker.browser-data.${databaseNameForScope(scope)}.v1`;
+  const source = new BrowserInMemoryDataSource(parseSnapshot(storage.getItem(storageKey)));
+  const persisted = createPersistedDataSource(source, Promise.resolve(), async () => {
+    storage.setItem(storageKey, JSON.stringify(source.exportSnapshot()));
+  });
+  return createSyncTrackingDataSource(persisted, scope);
+}
+
+async function hydrateFromIndexedDbOrLegacy(
+  source: BrowserInMemoryDataSource,
+  scopeKey: string,
+  storageKey: string,
+  options: BrowserPersistentDataSourceOptions,
+): Promise<boolean> {
+  try {
+    const stored = await options.snapshotStore.read(scopeKey);
+    if (stored !== null) {
+      const snapshot = stored.schemaVersion === 1 ? parseSnapshotValue(stored.snapshot) : undefined;
+      if (snapshot !== undefined) source.restoreSnapshot(snapshot);
+      return snapshot === undefined ? false : stored.migratedFromLegacy;
+    }
+
+    const legacySnapshot = parseSnapshot(options.legacyStorage.getItem(storageKey));
+    if (legacySnapshot === undefined) return false;
+
+    await options.snapshotStore.write(scopeKey, {
+      schemaVersion: 1,
+      migratedFromLegacy: true,
+      snapshot: legacySnapshot,
+    });
+    const readBack = await options.snapshotStore.read(scopeKey);
+    const migratedSnapshot = readBack?.schemaVersion === 1
+      ? parseSnapshotValue(readBack.snapshot)
+      : undefined;
+    if (migratedSnapshot === undefined) return false;
+    source.restoreSnapshot(migratedSnapshot);
+    return true;
+  } catch {
+    // Legacy storage is intentionally left untouched: it is the recovery copy.
+    return false;
+  }
+}
+
+function createPersistedDataSource(
+  source: BrowserInMemoryDataSource,
+  ready: Promise<void>,
+  persist: () => Promise<void>,
+): AppDataSource {
+  let transactionDepth = 0;
+  let changedDuringTransaction = false;
+  let transactionSnapshot: BrowserDataSnapshot | null = null;
+
+  return new Proxy(source, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') {
+        return value;
+      }
+
+      if (property === 'transaction') {
+        return async (operation: () => Promise<unknown>) => {
+          await ready;
+          const isOuterTransaction = transactionDepth === 0;
+          if (isOuterTransaction) transactionSnapshot = target.exportSnapshot();
+          transactionDepth += 1;
+          try {
+            const result = await value.call(target, operation);
+            if (isOuterTransaction && changedDuringTransaction) {
+              await persist();
+            }
+            return result;
+          } catch (error) {
+            if (isOuterTransaction && transactionSnapshot !== null) {
+              target.restoreSnapshot(transactionSnapshot);
+            }
+            throw error;
+          } finally {
+            transactionDepth -= 1;
+            if (isOuterTransaction) {
+              changedDuringTransaction = false;
+              transactionSnapshot = null;
+            }
+          }
+        };
+      }
+
+      return async (...args: unknown[]) => {
+        await ready;
+        const snapshot = isMutation(property) && transactionDepth === 0
+          ? target.exportSnapshot()
+          : null;
+        const result = await value.apply(target, args);
+        if (isMutation(property)) {
+          if (transactionDepth > 0) {
+            changedDuringTransaction = true;
+          } else {
+            try {
+              await persist();
+            } catch (error) {
+              if (snapshot !== null) target.restoreSnapshot(snapshot);
+              throw error;
+            }
+          }
+        }
+        return result;
+      };
+    },
+  }) as AppDataSource;
+}
+
+function isMutation(property: PropertyKey): boolean {
+  return typeof property === 'string' && (property.startsWith('save') || property.startsWith('delete') || property === 'clearAll' || property === 'enqueueSyncMutation' || property === 'acknowledgeSyncMutations' || property === 'recordSyncConflicts' || property === 'removeSyncConflict' || property === 'recordSyncSuccess' || property === 'applyRemoteSyncChanges' || property === 'resetForFullResync');
+}
+
+function parseSnapshot(value: string | null): BrowserDataSnapshot | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  try {
+    return parseSnapshotValue(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function parseSnapshotValue(value: unknown): BrowserDataSnapshot | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const snapshot = value as Partial<BrowserDataSnapshot>;
+  if (!Array.isArray(snapshot.projects) || !Array.isArray(snapshot.taskItems)) return undefined;
+
+  return {
+    settings: snapshot.settings ?? null,
+    dailyEnergyEntries: Array.isArray(snapshot.dailyEnergyEntries) ? snapshot.dailyEnergyEntries : [],
+    projects: snapshot.projects,
+    taskItems: snapshot.taskItems,
+    reminders: Array.isArray(snapshot.reminders) ? snapshot.reminders : [],
+    scheduleBlocks: Array.isArray(snapshot.scheduleBlocks) ? snapshot.scheduleBlocks : [],
+    recurrenceSeries: Array.isArray(snapshot.recurrenceSeries) ? snapshot.recurrenceSeries : [],
+    recurrenceOccurrences: Array.isArray(snapshot.recurrenceOccurrences) ? snapshot.recurrenceOccurrences : [],
+    recurrenceRevisions: Array.isArray(snapshot.recurrenceRevisions) ? snapshot.recurrenceRevisions : [],
+    transferHistories: Array.isArray(snapshot.transferHistories) ? snapshot.transferHistories : [],
+    syncState: snapshot.syncState ?? null,
+    syncCursor: snapshot.syncCursor ?? null,
+    syncEntityVersions: Array.isArray(snapshot.syncEntityVersions) ? snapshot.syncEntityVersions : [],
+    syncOutbox: Array.isArray(snapshot.syncOutbox) ? snapshot.syncOutbox : [],
+    syncConflicts: Array.isArray(snapshot.syncConflicts) ? snapshot.syncConflicts : [],
+  };
+}
+
+function getBrowserStorage(): BrowserScopeStorage | null {
+  return (globalThis as { localStorage?: BrowserScopeStorage }).localStorage ?? null;
+}
+
+function getBrowserIndexedDb(): IndexedDbFactory | null {
+  return (globalThis as { indexedDB?: IndexedDbFactory }).indexedDB ?? null;
+}
+
+function pickSharedSettings(payload: Record<string, unknown>): Partial<AppSettings> {
+  const result: Partial<AppSettings> = {};
+  if (typeof payload.workdayStartsAt === 'string') result.workdayStartsAt = payload.workdayStartsAt;
+  if (typeof payload.workdayEndsAt === 'string') result.workdayEndsAt = payload.workdayEndsAt;
+  if (typeof payload.eveningReviewAt === 'string') result.eveningReviewAt = payload.eveningReviewAt;
+  if (typeof payload.notificationLeadMinutes === 'number') result.notificationLeadMinutes = payload.notificationLeadMinutes;
+  if (typeof payload.completionPromptDeferredOn === 'string' || payload.completionPromptDeferredOn === null) result.completionPromptDeferredOn = payload.completionPromptDeferredOn;
+  return result;
 }

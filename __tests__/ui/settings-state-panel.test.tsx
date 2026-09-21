@@ -25,8 +25,9 @@ describe('SettingsStatePanel', () => {
     const onPlanningSettingsChange = jest.fn().mockResolvedValue(undefined);
     const view = await render(<SettingsStatePanel onPlanningSettingsChange={onPlanningSettingsChange} settings={getDefaultSettings()} />);
 
-    await fireEvent.press(view.getByRole('button', { name: 'Изменить' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Рабочий диапазон' }));
     await waitFor(() => expect(view.getByLabelText('Начало рабочего дня')).toBeOnTheScreen());
+    expect(view.queryByLabelText('Интервал уведомления')).toBeNull();
     await fireEvent.press(view.getByLabelText('Начало рабочего дня'));
     await waitFor(() => expect(view.getByRole('button', { name: '07:00' })).toBeOnTheScreen());
     await fireEvent.press(view.getByRole('button', { name: '07:00' }));
@@ -78,9 +79,45 @@ describe('SettingsStatePanel', () => {
     expect(view.getByRole('button', { name: 'Управление' })).toBeOnTheScreen();
     expect(view.getByText('Рабочий диапазон')).toBeOnTheScreen();
     expect(view.getByText('Уведомления')).toBeOnTheScreen();
-    expect(view.getByText('Данные на этом устройстве')).toBeOnTheScreen();
-    expect(view.getByText(/При удалении приложения или переходе на другое устройство эти данные не восстанавливаются/)).toBeOnTheScreen();
+    expect(view.getByText('Данные аккаунта и устройства')).toBeOnTheScreen();
+    expect(view.getByText(/Планы доступны без сети благодаря локальной копии на этом устройстве/)).toBeOnTheScreen();
+    expect(view.queryByText(/При удалении приложения или переходе на другое устройство эти данные не восстанавливаются/)).toBeNull();
+    expect(view.queryByText(/Анонимная учётная запись/)).toBeNull();
+    expect(view.queryByRole('button', { name: 'Изменить' })).toBeNull();
     expect(view.getByText(/Версия/)).toBeOnTheScreen();
+  });
+
+  test('requires explicit confirmation before clearing only autonomous data', async () => {
+    const onClearAutonomousData = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel account={{ kind: 'withoutAccount' }} onClearAutonomousData={onClearAutonomousData} settings={getDefaultSettings()} />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Очистить все данные' }));
+    expect(view.getByText('Вы действительно хотите удалить все локальные данные на этом устройстве?')).toBeOnTheScreen();
+    expect(onClearAutonomousData).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByRole('button', { name: 'Удалить все данные' }));
+
+    await waitFor(() => expect(onClearAutonomousData).toHaveBeenCalledTimes(1));
+  });
+
+  test('requires password and a six-digit email code before deleting an authenticated account', async () => {
+    const onAccountDataAction = jest.fn().mockResolvedValue(true);
+    const onRequestAccountDataCode = jest.fn().mockResolvedValue({ kind: 'codeSent' });
+    const view = await render(<SettingsStatePanel
+      account={{ kind: 'authenticated', displayName: 'Юлия', email: 'julia@example.com', emailConfirmed: true, pendingEmail: null }}
+      onAccountDataAction={onAccountDataAction}
+      onRequestAccountDataCode={onRequestAccountDataCode}
+      settings={getDefaultSettings()}
+    />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Удалить аккаунт' }));
+    expect(view.getByText(/будут безвозвратно удалены аккаунт/u)).toBeOnTheScreen();
+    await fireEvent.changeText(view.getByLabelText('Текущий пароль для удаления'), 'Current!Pass1');
+    await fireEvent.press(view.getByRole('button', { name: 'Отправить код подтверждения' }));
+    await fireEvent.changeText(view.getByLabelText('Код подтверждения удаления'), '123456');
+    await fireEvent.press(view.getByRole('button', { name: 'Удалить аккаунт безвозвратно' }));
+
+    await waitFor(() => expect(onRequestAccountDataCode).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onAccountDataAction).toHaveBeenCalledWith({ operation: 'delete_account', password: 'Current!Pass1', code: '123456' }));
   });
 
   test('keeps the Microsoft 365 refresh action inside local demo state', async () => {
@@ -91,6 +128,54 @@ describe('SettingsStatePanel', () => {
     await waitFor(() => {
       expect(view.getByText('Статус обновлён в демо-режиме')).toBeOnTheScreen();
     });
+  });
+
+  test('offers explicit choices for an edit-versus-delete sync conflict', async () => {
+    const onResolveSyncConflict = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel
+      onResolveSyncConflict={onResolveSyncConflict}
+      settings={getDefaultSettings()}
+      syncConflicts={[{
+        id: 'conflict-1',
+        local: { mutationId: 'm-1', deviceId: 'device-1', entityType: 'task_items', entityId: 'task-1', operation: 'upsert', expectedVersion: 1, dataGeneration: 1, payload: { id: 'task-1', title: 'Черновик' }, createdAt: '2026-09-04T08:00:00.000Z' },
+        server: { operation: 'delete', version: 2, payload: { id: 'task-1' }, changedAt: '2026-09-04T08:01:00.000Z', deviceId: null },
+        createdAt: '2026-09-04T08:02:00.000Z',
+      }]}
+    />);
+
+    expect(view.getByText(/Требуется разрешить конфликт синхронизации/)).toBeOnTheScreen();
+    await fireEvent.press(view.getByRole('button', { name: 'Восстановить изменённую запись' }));
+    await waitFor(() => expect(onResolveSyncConflict).toHaveBeenCalledWith(expect.objectContaining({ id: 'conflict-1' }), 'keep_local'));
+  });
+
+  test('shows a safe failed sync status, pending changes and a retry action', async () => {
+    const onSyncAccountData = jest.fn().mockResolvedValue(undefined);
+    const view = await render(<SettingsStatePanel
+      account={{ kind: 'authenticated', displayName: 'Юлия', email: 'julia@example.com', emailConfirmed: true, pendingEmail: null }}
+      onSyncAccountData={onSyncAccountData}
+      settings={getDefaultSettings()}
+      syncStatus={{ kind: 'failed', pendingCount: 3, lastSuccessAt: '2026-09-04T10:00:00.000Z' }}
+    />);
+
+    expect(view.getByText('Не удалось синхронизировать')).toBeOnTheScreen();
+    expect(view.getByText('Ожидают отправки: 3')).toBeOnTheScreen();
+    expect(view.queryByText(/SQL|JWT|stack trace/u)).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Повторить' }));
+    await waitFor(() => expect(onSyncAccountData).toHaveBeenCalledTimes(1));
+  });
+
+  test.each([
+    ['syncing', 'Синхронизация…'],
+    ['synchronized', 'Синхронизировано'],
+    ['offline', 'Нет сети — изменения сохранены на устройстве'],
+  ] as const)('shows the %s account synchronization state', async (kind, label) => {
+    const view = await render(<SettingsStatePanel
+      account={{ kind: 'authenticated', displayName: 'Юлия', email: 'julia@example.com', emailConfirmed: true, pendingEmail: null }}
+      settings={getDefaultSettings()}
+      syncStatus={{ kind, pendingCount: 0, lastSuccessAt: null }}
+    />);
+
+    expect(view.getByText(label)).toBeOnTheScreen();
   });
 
   test('keeps the planner usable when local notification permission is declined', async () => {

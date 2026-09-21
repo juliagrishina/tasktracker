@@ -38,6 +38,35 @@ describe('completed use cases', () => {
     await expect(source.getScheduleBlock('block-1')).resolves.toMatchObject({ taskItemId: task.id });
   });
 
+  test('uses a one-time task planned date for its archive display date', async () => {
+    const source = createInMemoryDataSource();
+    const planned = await createTask(source, { id: 'sync-task', title: 'Синк Вася Ваганов', createdAt });
+    const unplanned = await createTask(source, { id: 'backlog-task', title: 'Разобрать почту', createdAt });
+    await source.saveScheduleBlock({
+      id: 'sync-block',
+      taskItemId: planned.id,
+      occurrenceId: null,
+      timeZoneId: 'Europe/Moscow',
+      startsAt: '2026-09-15T17:00:00+03:00',
+      endsAt: '2026-09-15T18:00:00+03:00',
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    });
+    await completeBacklogItem(source, { kind: 'task', id: planned.id, completedAt: '2026-09-21T14:34:00.000Z' });
+    await completeBacklogItem(source, { kind: 'task', id: unplanned.id, completedAt: '2026-09-21T14:34:00.000Z' });
+
+    const completed = await getCompletedItems(source);
+
+    expect(completed.find((item) => item.id === planned.id)).toMatchObject({
+      completedAt: '2026-09-21T14:34:00.000Z',
+      displayDate: '2026-09-15',
+    });
+    expect(completed.find((item) => item.id === unplanned.id)).toMatchObject({
+      displayDate: '2026-09-21',
+    });
+  });
+
   test('lists completed standalone and recurring reminders', async () => {
     const source = createInMemoryDataSource();
     const standalone = await createReminder(source, { id: 'reminder-1', title: 'Отправить документы', createdAt });
@@ -86,16 +115,16 @@ describe('completed use cases', () => {
     await source.saveTaskItem({ id: 'subtask-1', kind: 'subtask', projectId: 'project-1', parentTaskId: 'parent-task', title: 'Проверить сборку', description: 'Описание подзадачи', estimatedDurationMinutes: null, completedAt, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveReminder({ id: 'reminder-1', title: 'Напомнить о релизе', linkedTaskItemId: 'parent-task', linkedOccurrenceOn: null, remindsOn: null, periodStartOn: null, periodEndOn: null, repeatRule: null, estimatedDurationMinutes: null, completedAt, createdAt, updatedAt: createdAt, deletedAt: null });
 
-    await expect(getCompletedItemDetails(source, { id: 'project-1', kind: 'project', title: 'Запуск приложения', completedAt, occurrence: null })).resolves.toMatchObject({
+    await expect(getCompletedItemDetails(source, { id: 'project-1', kind: 'project', title: 'Запуск приложения', completedAt, displayDate: '2026-08-20', occurrence: null })).resolves.toMatchObject({
       typeLabel: 'Проект', description: 'Описание проекта', relation: null,
     });
-    await expect(getCompletedItemDetails(source, { id: 'parent-task', kind: 'task', title: 'Подготовить релиз', completedAt, occurrence: null })).resolves.toMatchObject({
+    await expect(getCompletedItemDetails(source, { id: 'parent-task', kind: 'task', title: 'Подготовить релиз', completedAt, displayDate: '2026-08-20', occurrence: null })).resolves.toMatchObject({
       typeLabel: 'Задача', description: 'Описание задачи', relation: { label: 'Проект', title: 'Запуск приложения' },
     });
-    await expect(getCompletedItemDetails(source, { id: 'subtask-1', kind: 'subtask', title: 'Проверить сборку', completedAt, occurrence: null })).resolves.toMatchObject({
+    await expect(getCompletedItemDetails(source, { id: 'subtask-1', kind: 'subtask', title: 'Проверить сборку', completedAt, displayDate: '2026-08-20', occurrence: null })).resolves.toMatchObject({
       typeLabel: 'Подзадача', description: 'Описание подзадачи', relation: { label: 'Родительская задача', title: 'Подготовить релиз' },
     });
-    await expect(getCompletedItemDetails(source, { id: 'reminder-1', kind: 'reminder', title: 'Напомнить о релизе', completedAt, occurrence: null })).resolves.toMatchObject({
+    await expect(getCompletedItemDetails(source, { id: 'reminder-1', kind: 'reminder', title: 'Напомнить о релизе', completedAt, displayDate: '2026-08-20', occurrence: null })).resolves.toMatchObject({
       typeLabel: 'Напоминание', description: null, relation: { label: 'Связанная задача', title: 'Подготовить релиз' },
     });
   });
@@ -111,7 +140,7 @@ describe('completed use cases', () => {
     });
     await source.saveRecurrenceOccurrence({ id: 'occurrence-details', seriesId: 'series-details', occursOn: '2026-08-10', cancelledAt: null, completedAt: '2026-08-10T12:00:00.000Z', blocksOverridden: false, taskPatch: { description: 'Описание этого экземпляра' }, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null });
 
-    await expect(getCompletedItemDetails(source, { id: 'recurrence:series-details:2026-08-10', taskId: task.id, kind: 'task', title: 'Еженедельный обзор', completedAt: '2026-08-10T12:00:00.000Z', occurrence: { seriesId: 'series-details', occursOn: '2026-08-10' } })).resolves.toMatchObject({
+    await expect(getCompletedItemDetails(source, { id: 'recurrence:series-details:2026-08-10', taskId: task.id, kind: 'task', title: 'Еженедельный обзор', completedAt: '2026-08-10T12:00:00.000Z', displayDate: '2026-08-10', occurrence: { seriesId: 'series-details', occursOn: '2026-08-10' } })).resolves.toMatchObject({
       description: 'Описание этого экземпляра',
       completionContext: 'Экземпляр серии от 2026-08-10',
     });
@@ -129,7 +158,7 @@ describe('completed use cases', () => {
     await source.saveRecurrenceOccurrence({ id: 'delete-occurrence-first', seriesId: 'delete-occurrence-series', occursOn: '2026-08-10', cancelledAt: null, completedAt: '2026-08-10T12:00:00.000Z', blocksOverridden: false, taskPatch: null, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null });
     await source.saveRecurrenceOccurrence({ id: 'delete-occurrence-second', seriesId: 'delete-occurrence-series', occursOn: '2026-08-17', cancelledAt: null, completedAt: '2026-08-17T12:00:00.000Z', blocksOverridden: false, taskPatch: null, reminderPatch: null, createdAt, updatedAt: createdAt, deletedAt: null });
 
-    await permanentlyDeleteCompletedItem(source, { id: 'recurrence:delete-occurrence-series:2026-08-10', taskId: task.id, kind: 'task', title: task.title, completedAt: '2026-08-10T12:00:00.000Z', occurrence: { seriesId: 'delete-occurrence-series', occursOn: '2026-08-10' } });
+    await permanentlyDeleteCompletedItem(source, { id: 'recurrence:delete-occurrence-series:2026-08-10', taskId: task.id, kind: 'task', title: task.title, completedAt: '2026-08-10T12:00:00.000Z', displayDate: '2026-08-10', occurrence: { seriesId: 'delete-occurrence-series', occursOn: '2026-08-10' } });
 
     await expect(getCompletedItems(source)).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'recurrence:delete-occurrence-series:2026-08-17' }),
@@ -144,7 +173,7 @@ describe('completed use cases', () => {
   test('refuses permanent deletion when the completed archive entry no longer exists', async () => {
     const source = createInMemoryDataSource();
 
-    await expect(permanentlyDeleteCompletedItem(source, { id: 'missing-task', kind: 'task', title: 'Несуществующая задача', completedAt: '2026-08-20T10:00:00.000Z', occurrence: null })).rejects.toThrow('Можно удалить только завершённый элемент');
+    await expect(permanentlyDeleteCompletedItem(source, { id: 'missing-task', kind: 'task', title: 'Несуществующая задача', completedAt: '2026-08-20T10:00:00.000Z', displayDate: '2026-08-20', occurrence: null })).rejects.toThrow('Можно удалить только завершённый элемент');
   });
 
   test('permanently deletes the source item and every occurrence when deleting an entire completed series', async () => {
@@ -159,7 +188,7 @@ describe('completed use cases', () => {
     await setRecurrenceOccurrenceState(source, 'delete-series-id', '2026-08-10', 'completed', undefined, new Date('2026-08-10T12:00:00.000Z'));
     await setRecurrenceOccurrenceState(source, 'delete-series-id', '2026-08-17', 'completed', undefined, new Date('2026-08-17T12:00:00.000Z'));
 
-    await permanentlyDeleteCompletedSeries(source, { id: 'recurrence:delete-series-id:2026-08-10', taskId: task.id, kind: 'task', title: task.title, completedAt: '2026-08-10T12:00:00.000Z', occurrence: { seriesId: 'delete-series-id', occursOn: '2026-08-10' } });
+    await permanentlyDeleteCompletedSeries(source, { id: 'recurrence:delete-series-id:2026-08-10', taskId: task.id, kind: 'task', title: task.title, completedAt: '2026-08-10T12:00:00.000Z', displayDate: '2026-08-10', occurrence: { seriesId: 'delete-series-id', occursOn: '2026-08-10' } });
 
     await expect(source.getTaskItem(task.id)).resolves.toBeNull();
     await expect(source.listRecurrenceSeries()).resolves.toEqual([]);
@@ -180,7 +209,7 @@ describe('completed use cases', () => {
     if (series === undefined) throw new Error('Серия напоминания не создана');
     await setRecurrenceOccurrenceState(source, series.id, '2026-08-10', 'completed', undefined, new Date('2026-08-10T12:00:00.000Z'));
 
-    await permanentlyDeleteCompletedSeries(source, { id: `recurrence:${series.id}:2026-08-10`, kind: 'reminder', title: reminder.title, completedAt: '2026-08-10T12:00:00.000Z', occurrence: { seriesId: series.id, occursOn: '2026-08-10' } });
+    await permanentlyDeleteCompletedSeries(source, { id: `recurrence:${series.id}:2026-08-10`, kind: 'reminder', title: reminder.title, completedAt: '2026-08-10T12:00:00.000Z', displayDate: '2026-08-10', occurrence: { seriesId: series.id, occursOn: '2026-08-10' } });
 
     await expect(source.getReminder(reminder.id)).resolves.toBeNull();
     await expect(source.listRecurrenceSeries()).resolves.toEqual([]);

@@ -1,9 +1,85 @@
+import { useCallback, useEffect, useState } from 'react';
+
+import { type AccountProfileResult, type AccountProfileService, type AccountProfileState } from '../../application/account-profile';
+import { createAccountProfileServiceForUser } from '../../application/account-profile-provider';
+import { passwordManagement } from '../../application/password-management-provider';
+import { performAccountDataAction } from '../../application/account-data-actions-provider';
 import { useAppServices } from '../../application/app-services-provider';
+import { useAuthGateNavigation, useAuthGateWorkspace } from '../../application/auth-gate';
 import { notificationPermissionGateway } from '../../application/notification-permission-gateway';
 import { SettingsStatePanel } from '../../ui/settings/settings-state-panel';
 
 export default function SettingsScreen() {
-  const { settings, settingsActions } = useAppServices();
+  const { clearAccountData, clearAutonomousData, settings, settingsActions, syncAccountData, syncStatus, syncConflicts, resolveAccountSyncConflict } = useAppServices();
+  const authNavigation = useAuthGateNavigation();
+  const workspace = useAuthGateWorkspace();
+  const [account, setAccount] = useState<AccountProfileState>({ kind: 'withoutAccount' });
+  const [accountService, setAccountService] = useState<AccountProfileService | null>(null);
 
-  return <SettingsStatePanel notificationPermissions={notificationPermissionGateway} onPlanningSettingsChange={settingsActions.updatePlanningSettings} onTimeZoneChange={settingsActions.updateTimeZone} onUseDeviceTimeZone={settingsActions.useDeviceTimeZone} settings={settings} />;
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      if (workspace.kind !== 'account') {
+        setAccountService(null);
+        setAccount({ kind: 'withoutAccount' });
+        return;
+      }
+
+      const service = createAccountProfileServiceForUser(workspace.accountId);
+      setAccountService(service);
+      const cached = await service.loadCached();
+      if (!mounted) return;
+      setAccount(cached);
+      void service.refresh().then((fresh) => {
+        if (mounted && fresh.kind === 'authenticated') setAccount(fresh);
+      });
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [workspace]);
+
+  const runAccountAction = useCallback(async (action: (service: AccountProfileService) => Promise<AccountProfileResult>): Promise<AccountProfileResult> => {
+    if (accountService === null) {
+      return { kind: 'requestFailed', message: 'Войдите в аккаунт, чтобы изменить данные.' };
+    }
+    const result = await action(accountService);
+    if (result.kind !== 'requestFailed' && result.kind !== 'validationError') {
+      setAccount(await accountService.load());
+    }
+    return result;
+  }, [accountService]);
+
+  return <SettingsStatePanel
+    account={account}
+    notificationPermissions={notificationPermissionGateway}
+    onAccountCancelEmailChange={() => runAccountAction((service) => service.cancelEmailChange())}
+    onChangePassword={(input) => passwordManagement.changePassword(input)}
+    onAccountConfirmEmailChange={(input) => runAccountAction((service) => service.confirmEmailChange(input))}
+    onAccountStartEmailChange={(input) => runAccountAction((service) => service.startEmailChange(input))}
+    onAccountUpdateDisplayName={(displayName) => runAccountAction((service) => service.updateDisplayName(displayName))}
+    onClearAutonomousData={clearAutonomousData}
+    onAccountDataAction={async (input) => {
+      const result = await performAccountDataAction(input);
+      if (result.kind === 'cleared') await clearAccountData(result.dataGeneration);
+      if (result.kind === 'deleted' || result.kind === 'deletionPending') {
+        await clearAccountData();
+        await authNavigation?.signOut();
+      }
+      return result.kind !== 'failed';
+    }}
+    onRequestAccountDataCode={() => passwordManagement.requestPasswordChangeCode()}
+    onPlanningSettingsChange={settingsActions.updatePlanningSettings}
+    onRequestPasswordChangeCode={() => passwordManagement.requestPasswordChangeCode()}
+    onSignIn={() => authNavigation?.openAuth('login')}
+    onSignOut={() => { void authNavigation?.signOut(); }}
+    onSignUp={() => authNavigation?.openAuth('registration')}
+    onSyncAccountData={syncAccountData}
+    syncStatus={syncStatus}
+    syncConflicts={syncConflicts}
+    onResolveSyncConflict={resolveAccountSyncConflict}
+    onTimeZoneChange={settingsActions.updateTimeZone}
+    onUseDeviceTimeZone={settingsActions.useDeviceTimeZone}
+    settings={settings}
+  />;
 }

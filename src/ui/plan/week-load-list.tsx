@@ -3,7 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { designTokens } from '../design/tokens';
 import { SurfaceCard } from '../primitives/surface-card';
 
-import { formatPlanDate, type PlanLoadDay, type PlanLoadTone } from './plan-period-model';
+import { formatPlanDate, type PlanLoadDay } from './plan-period-model';
+import { getPlanLoadAppearance } from './plan-load-appearance';
 
 interface WeekLoadListProps {
   days: PlanLoadDay[];
@@ -12,31 +13,11 @@ interface WeekLoadListProps {
   todayDate: string;
 }
 
-interface LoadToneStyle {
-  foreground: string;
-  surface: string;
-}
-
-const loadToneStyles: Record<PlanLoadTone, LoadToneStyle> = {
-  low: {
-    foreground: designTokens.color.feedback.success.foreground,
-    surface: designTokens.color.feedback.success.surface,
-  },
-  medium: {
-    foreground: designTokens.color.feedback.warning.foreground,
-    surface: designTokens.color.feedback.warning.surface,
-  },
-  high: {
-    foreground: designTokens.color.feedback.danger.foreground,
-    surface: designTokens.color.calendar.load.high.surface,
-  },
-};
-
 export function WeekLoadList({ days, onSelectDate, selectedDate, todayDate }: WeekLoadListProps) {
   return (
     <View style={styles.list}>
       {days.map((day) => {
-        const loadStyle = loadToneStyles[day.tone];
+        const loadStyle = getPlanLoadAppearance(day.tone);
         const selected = day.isoDate === selectedDate;
         const isToday = day.isoDate === todayDate;
         const label = `${day.weekdayLabel}, ${formatPlanDate(day.isoDate)}: загрузка ${day.loadPercent}%${isToday ? ', сегодня' : ''}`;
@@ -46,7 +27,7 @@ export function WeekLoadList({ days, onSelectDate, selectedDate, todayDate }: We
             accessibilityLabel={label}
             key={day.isoDate}
             onPress={() => onSelectDate(day.isoDate)}
-            style={[styles.row, isToday && styles.todayRow, selected && styles.selectedRow]}>
+            style={[styles.row, { backgroundColor: loadStyle.surface, borderColor: loadStyle.border }, isToday && styles.todayRow, selected && styles.selectedRow]}>
             <View style={[styles.dateBadge, isToday && styles.todayDateBadge, selected && styles.selectedDateBadge]}>
               <Text style={[styles.dateNumber, selected && styles.selectedDateNumber]}>{day.dayOfMonth}</Text>
             </View>

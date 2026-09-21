@@ -1,6 +1,8 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
 import type { PropsWithChildren } from 'react';
 
+import { serviceWorkerRegistrationScript } from '../pwa/service-worker-registration';
+
 export default function Root({ children }: PropsWithChildren) {
   return (
     <html lang="ru">
@@ -14,6 +16,7 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-title" content="Plan My Plan" />
         <link rel="icon" type="image/png" href="/favicon.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <script dangerouslySetInnerHTML={{ __html: serviceWorkerRegistrationScript }} />
         <link rel="manifest" href="/manifest.json" />
         <ScrollViewStyleReset />
       </head>

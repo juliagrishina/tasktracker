@@ -7,18 +7,20 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { AppSettings, DailyEnergyEntry, Project, RecurrenceOccurrence, RecurrenceRevision, RecurrenceSeries, Reminder, TaskItem } from '../domain/entities';
-import { ensureAnonymousSession } from '../data/auth-session';
 import type { AppDataSource } from '../data/contracts';
 import { createDataSource } from '../data/data-source';
+import type { LocalDataScope } from '../data/local-data-scopes';
+import { clearAutonomousWorkspace } from './local-workspace-management';
 import { getDefaultSettings } from '../data/default-settings';
 import { ProjectRepository } from '../data/repositories/project-repository';
 import {
   emptyDemoTaskGroups,
   type DemoTaskGroups,
 } from '../ui/demo-tasks';
+import { designTokens } from '../ui/design/tokens';
 
 import { createAppRepositories } from './app-services';
 import type {
@@ -62,7 +64,12 @@ import type { LocalNotificationScheduler } from './notification-scheduling';
 import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveRecurrenceRevision, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveRecurrenceRevisionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 import { updatePlanningSettings, type UpdatePlanningSettingsInput } from './settings-use-cases';
-import { getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
+import { getDailyEnergyForDate, getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
+import { createSupabaseSyncGateway } from '../data/supabase-sync-gateway';
+import { supabase } from '../data/supabase-client';
+import { createSyncEngine, type SyncActivityState, type SyncEngine, type SyncEngineStore } from './sync-engine';
+import { resolveSyncConflict, type SyncConflictDecision } from './sync-conflicts';
+import type { SyncConflict } from '../data/sync-outbox';
 
 interface BacklogActions {
   createProject(input: CreateProjectInput): Promise<Project>;
@@ -93,6 +100,7 @@ interface PlanningActions {
   getPlanUntimedReminders(isoDate: string): ReturnType<typeof getPlanUntimedReminders>;
   getPlanUntimedTasks(isoDate: string): ReturnType<typeof getPlanUntimedTasks>;
   getEveningReviewItems(isoDate: string): ReturnType<typeof getEveningReviewItems>;
+  getDailyEnergyForDate(isoDate: string): ReturnType<typeof getDailyEnergyForDate>;
   continueIncompleteTask(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; now?: Date }): Promise<void>;
   returnIncompleteTaskToBacklog(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; reason: string | null }): Promise<void>;
   returnPlanItemToBacklog(input: Parameters<typeof returnPlanItemToBacklog>[1]): Promise<void>;
@@ -121,6 +129,7 @@ interface EnergyActions {
 
 interface AppServicesContextValue {
   isReady: boolean;
+  bootStatus: AppBootStatus;
   projects: ProjectRepository;
   settings: AppSettings;
   settingsActions: SettingsActions;
@@ -139,13 +148,21 @@ interface AppServicesContextValue {
   refreshCompletedItems(): Promise<void>;
   runBacklogAction<T>(action: () => Promise<T>): Promise<T>;
   runStorageDiagnostic(): Promise<'created' | 'persisted'>;
+  syncAccountData(): Promise<void>;
+  syncStatus: AccountSyncStatus;
+  syncConflicts: readonly SyncConflict[];
+  resolveAccountSyncConflict(conflict: SyncConflict, decision: SyncConflictDecision): Promise<void>;
+  clearAutonomousData(): Promise<void>;
+  clearAccountData(dataGeneration?: number): Promise<void>;
 }
 
 interface AppServicesProviderProps {
   children: ReactNode;
   source?: AppDataSource;
+  scope?: LocalDataScope;
   seedDevelopmentData?: boolean;
   notificationScheduler?: LocalNotificationScheduler;
+  syncEngineOverride?: SyncEngine | null;
 }
 
 const AppServicesContext = createContext<AppServicesContextValue | null>(null);
@@ -157,22 +174,77 @@ const emptyBacklogView: BacklogView = {
   projects: [],
 };
 
+function isSyncEngineStore(source: AppDataSource): source is AppDataSource & SyncEngineStore {
+  const candidate = source as Partial<SyncEngineStore>;
+  return typeof candidate.listSyncOutbox === 'function'
+    && typeof candidate.acknowledgeSyncMutations === 'function'
+    && typeof candidate.getSyncCursor === 'function'
+    && typeof candidate.applyRemoteSyncChanges === 'function';
+}
+
+export interface AccountSyncStatus {
+  kind: SyncActivityState['kind'];
+  pendingCount: number;
+  lastSuccessAt: string | null;
+}
+
+export interface AppBootStatus {
+  progress: 45 | 75 | 100;
+  message: 'Открываем локальную копию' | 'Загружаем ваши планы' | 'Готово';
+}
+
+function isSyncConflictStore(source: AppDataSource): source is AppDataSource & SyncEngineStore & {
+  listSyncConflicts(): Promise<readonly SyncConflict[]>;
+  removeSyncConflict(id: string): Promise<void>;
+  enqueueSyncMutation: Parameters<typeof resolveSyncConflict>[0]['enqueueSyncMutation'];
+} {
+  const candidate = source as Partial<SyncEngineStore> & { listSyncConflicts?: unknown; removeSyncConflict?: unknown; enqueueSyncMutation?: unknown };
+  return isSyncEngineStore(source)
+    && typeof candidate.listSyncConflicts === 'function'
+    && typeof candidate.removeSyncConflict === 'function'
+    && typeof candidate.enqueueSyncMutation === 'function';
+}
+
+function isSyncStatusStore(source: AppDataSource): source is AppDataSource & SyncEngineStore & {
+  getLastSyncSuccessAt(): Promise<string | null>;
+} {
+  const candidate = source as Partial<SyncEngineStore> & { getLastSyncSuccessAt?: unknown };
+  return isSyncEngineStore(source) && typeof candidate.getLastSyncSuccessAt === 'function';
+}
+
+function isSyncResetStore(source: AppDataSource): source is AppDataSource & SyncEngineStore & {
+  resetForFullResync(dataGeneration: number): Promise<void>;
+} {
+  const candidate = source as Partial<SyncEngineStore>;
+  return isSyncEngineStore(source) && typeof candidate.resetForFullResync === 'function';
+}
+
+function isBrowserOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
 export function AppServicesProvider({
   children,
   source,
+  scope,
   seedDevelopmentData = __DEV__,
   notificationScheduler = localNotificationScheduler,
+  syncEngineOverride,
 }: AppServicesProviderProps) {
-  const [appSource] = useState<AppDataSource>(() => source ?? createDataSource());
+  const [appSource] = useState<AppDataSource>(() => source ?? createDataSource(scope));
+  const [syncStatus, setSyncStatus] = useState<AccountSyncStatus>({ kind: 'synchronized', pendingCount: 0, lastSuccessAt: null });
   const repositories = useMemo(() => createAppRepositories(appSource), [appSource]);
   const [isReady, setIsReady] = useState(false);
+  const [bootStatus, setBootStatus] = useState<AppBootStatus>({ progress: 45, message: 'Открываем локальную копию' });
   const [settings, setSettings] = useState<AppSettings>(getDefaultSettings);
   const [dailyEnergy, setDailyEnergy] = useState<DailyEnergyEntry | null>(null);
   const [isDailyEnergyLoaded, setIsDailyEnergyLoaded] = useState(false);
   const [demoTasks, setDemoTasks] = useState<DemoTaskGroups>(emptyDemoTaskGroups);
   const [backlog, setBacklog] = useState<BacklogView>(emptyBacklogView);
   const [completedItems, setCompletedItems] = useState<readonly CompletedItem[]>([]);
+  const [syncConflicts, setSyncConflicts] = useState<readonly SyncConflict[]>([]);
   const [initializationError, setInitializationError] = useState<string | null>(null);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const runStorageDiagnostic = useCallback(
     () => runPersistenceDiagnostic(appSource),
     [appSource],
@@ -190,13 +262,51 @@ export function AppServicesProvider({
   const refreshCompletedItems = useCallback(async () => {
     setCompletedItems(await getCompletedItems(appSource));
   }, [appSource]);
+  const refreshWorkspaceState = useCallback(async () => {
+    const [loadedSettings, loadedDemoTasks, loadedBacklog, loadedCompletedItems, loadedDailyEnergy] = await Promise.all([
+      repositories.settings.get(),
+      seedDevelopmentData ? loadDemoTaskGroups(appSource) : Promise.resolve(emptyDemoTaskGroups),
+      getBacklogView(appSource),
+      getCompletedItems(appSource),
+      getDailyEnergyForCurrentDay(appSource),
+    ]);
+    setSettings(loadedSettings);
+    setDemoTasks(loadedDemoTasks);
+    setBacklog(loadedBacklog);
+    setCompletedItems(loadedCompletedItems);
+    setDailyEnergy(loadedDailyEnergy);
+    setIsDailyEnergyLoaded(true);
+  }, [appSource, repositories, seedDevelopmentData]);
+  const refreshSyncConflicts = useCallback(async () => {
+    if (isSyncConflictStore(appSource)) setSyncConflicts(await appSource.listSyncConflicts());
+  }, [appSource]);
+  const refreshSyncStatus = useCallback(async () => {
+    if (!isSyncStatusStore(appSource)) return;
+    const [outbox, lastSuccessAt] = await Promise.all([appSource.listSyncOutbox(), appSource.getLastSyncSuccessAt()]);
+    setSyncStatus((current) => ({ ...current, pendingCount: outbox.length, lastSuccessAt }));
+  }, [appSource]);
+  const createdSyncEngine = useMemo<SyncEngine | null>(() => {
+    if (scope?.kind !== 'account' || !isSyncEngineStore(appSource)) return null;
+    return createSyncEngine({
+      gateway: createSupabaseSyncGateway(supabase),
+      store: appSource,
+      onStateChange: ({ kind }) => {
+        setSyncStatus((current) => ({ ...current, kind }));
+        if (kind === 'synchronized') void refreshWorkspaceState();
+        if (kind !== 'syncing') void Promise.all([refreshSyncConflicts(), refreshSyncStatus()]);
+      },
+    });
+  }, [appSource, refreshSyncConflicts, refreshSyncStatus, refreshWorkspaceState, scope]);
+  const syncEngine = syncEngineOverride === undefined ? createdSyncEngine : syncEngineOverride;
   const runBacklogAction = useCallback(
     async <T,>(action: () => Promise<T>): Promise<T> => {
       const result = await action();
       await Promise.all([refreshBacklog(), refreshCompletedItems()]);
+      syncEngine?.notifyLocalMutation();
+      await refreshSyncStatus();
       return result;
     },
-    [refreshBacklog, refreshCompletedItems],
+    [refreshBacklog, refreshCompletedItems, refreshSyncStatus, syncEngine],
   );
   const backlogActions = useMemo<BacklogActions>(
     () => ({
@@ -244,6 +354,7 @@ export function AppServicesProvider({
       getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
       getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
       getEveningReviewItems: (isoDate) => getEveningReviewItems(appSource, isoDate),
+      getDailyEnergyForDate: (isoDate) => getDailyEnergyForDate(appSource, isoDate),
       continueIncompleteTask: (input) => continueIncompleteTask(appSource, input, notificationScheduler),
       returnIncompleteTaskToBacklog: (input) => runBacklogAction(() => returnIncompleteTaskToBacklog(appSource, input, notificationScheduler)),
       returnPlanItemToBacklog: (input) => runBacklogAction(() => returnPlanItemToBacklog(appSource, input, notificationScheduler)),
@@ -275,8 +386,15 @@ export function AppServicesProvider({
         }
         const updatedSettings = { ...settings, timeZoneId, timeZoneMode: 'manual' as const };
         await appSource.saveSettings(updatedSettings);
-        setSettings(updatedSettings);
+        const rescheduledSettings = await updatePlanningSettings(appSource, {
+          workdayStartsAt: updatedSettings.workdayStartsAt,
+          workdayEndsAt: updatedSettings.workdayEndsAt,
+          eveningReviewAt: updatedSettings.eveningReviewAt,
+          notificationLeadMinutes: updatedSettings.notificationLeadMinutes,
+        }, notificationScheduler);
+        setSettings(rescheduledSettings);
         await refreshDailyEnergy();
+        syncEngine?.notifyLocalMutation();
       },
       useDeviceTimeZone: async () => {
         const updatedSettings = {
@@ -285,20 +403,29 @@ export function AppServicesProvider({
           timeZoneMode: 'device' as const,
         };
         await appSource.saveSettings(updatedSettings);
-        setSettings(updatedSettings);
+        const rescheduledSettings = await updatePlanningSettings(appSource, {
+          workdayStartsAt: updatedSettings.workdayStartsAt,
+          workdayEndsAt: updatedSettings.workdayEndsAt,
+          eveningReviewAt: updatedSettings.eveningReviewAt,
+          notificationLeadMinutes: updatedSettings.notificationLeadMinutes,
+        }, notificationScheduler);
+        setSettings(rescheduledSettings);
         await refreshDailyEnergy();
+        syncEngine?.notifyLocalMutation();
       },
       updatePlanningSettings: async (input) => {
         const updatedSettings = await updatePlanningSettings(appSource, input, notificationScheduler);
         setSettings(updatedSettings);
+        syncEngine?.notifyLocalMutation();
       },
       deferCompletionPromptsUntil: async (isoDate) => {
         const updatedSettings = { ...settings, completionPromptDeferredOn: isoDate };
         await appSource.saveSettings(updatedSettings);
         setSettings(updatedSettings);
+        syncEngine?.notifyLocalMutation();
       },
     }),
-    [appSource, notificationScheduler, refreshDailyEnergy, settings],
+    [appSource, notificationScheduler, refreshDailyEnergy, settings, syncEngine],
   );
   const energyActions = useMemo<EnergyActions>(
     () => ({
@@ -307,34 +434,43 @@ export function AppServicesProvider({
         const entry = await saveDailyEnergyForCurrentDay(appSource, { energyPercent });
         setDailyEnergy(entry);
         setIsDailyEnergyLoaded(true);
+        syncEngine?.notifyLocalMutation();
         return entry;
       },
     }),
-    [appSource, refreshDailyEnergy],
+    [appSource, refreshDailyEnergy, syncEngine],
   );
-
-  useEffect(() => {
-    // Устанавливаем облачную identity независимо от локальной инициализации:
-    // приложение остаётся local-first и не должно ждать сеть/Supabase.
-    void ensureAnonymousSession().catch(() => {});
-  }, []);
 
   useEffect(() => {
     let isMounted = true;
 
     void (async () => {
       try {
+        setIsReady(false);
+        setIsDailyEnergyLoaded(false);
+        setInitializationError(null);
+        setBootStatus({ progress: 45, message: 'Открываем локальную копию' });
         await appSource.initialize();
         if (seedDevelopmentData) {
           await seedDemoData(appSource);
         }
-        const loadedSettings = await repositories.settings.get();
-        const loadedDemoTasks = seedDevelopmentData
-          ? await loadDemoTaskGroups(appSource)
-          : emptyDemoTaskGroups;
-        const loadedBacklog = await getBacklogView(appSource);
-        const loadedCompletedItems = await getCompletedItems(appSource);
-        const loadedDailyEnergy = await getDailyEnergyForCurrentDay(appSource);
+        setBootStatus({ progress: 75, message: 'Загружаем ваши планы' });
+        if (scope?.kind === 'account' && syncEngine !== null) {
+          try {
+            await syncEngine.syncNow();
+          } catch {
+            if (!isBrowserOffline()) {
+              throw new Error('Не удалось синхронизировать данные аккаунта');
+            }
+          }
+        }
+        const [loadedSettings, loadedDemoTasks, loadedBacklog, loadedCompletedItems, loadedDailyEnergy] = await Promise.all([
+          repositories.settings.get(),
+          seedDevelopmentData ? loadDemoTaskGroups(appSource) : Promise.resolve(emptyDemoTaskGroups),
+          getBacklogView(appSource),
+          getCompletedItems(appSource),
+          getDailyEnergyForCurrentDay(appSource),
+        ]);
         void synchronizeRecurrenceNotifications(appSource, notificationScheduler, new Date()).catch(() => {});
         void synchronizeEveningReviewNotification({ now: new Date(), scheduler: notificationScheduler, source: appSource }).catch(() => {});
 
@@ -345,11 +481,14 @@ export function AppServicesProvider({
           setCompletedItems(loadedCompletedItems);
           setDailyEnergy(loadedDailyEnergy);
           setIsDailyEnergyLoaded(true);
+          setBootStatus({ progress: 100, message: 'Готово' });
           setIsReady(true);
         }
-      } catch {
+      } catch (error) {
         if (isMounted) {
-          setInitializationError('Не удалось инициализировать локальное хранилище');
+          setInitializationError(error instanceof Error && error.message === 'Не удалось синхронизировать данные аккаунта'
+            ? error.message
+            : 'Не удалось инициализировать локальное хранилище');
         }
       }
     })();
@@ -357,12 +496,44 @@ export function AppServicesProvider({
     return () => {
       isMounted = false;
     };
-  }, [appSource, notificationScheduler, repositories, seedDevelopmentData]);
+  }, [appSource, bootstrapAttempt, notificationScheduler, repositories, scope, seedDevelopmentData, syncEngine]);
+
+  useEffect(() => {
+    if (!isReady || syncEngine === null) return;
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && isReady) syncEngine.onForeground();
+    });
+    const handleOnline = (): void => { if (isReady) syncEngine.onNetworkReconnect(); };
+    if (Platform.OS === 'web') window.addEventListener('online', handleOnline);
+    return () => {
+      appStateSubscription.remove();
+      if (Platform.OS === 'web') window.removeEventListener('online', handleOnline);
+      syncEngine.dispose();
+    };
+  }, [isReady, syncEngine]);
+
+  useEffect(() => {
+    const realtimeClient = supabase;
+    if (syncEngine === null || realtimeClient === null || scope?.kind !== 'account') return;
+    const channel = realtimeClient
+      .channel(`account-sync:${scope.accountId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'sync_changes',
+        filter: `user_id=eq.${scope.accountId}`,
+      }, () => syncEngine.onRealtimeSignal())
+      .subscribe();
+    return () => { void realtimeClient.removeChannel(channel); };
+  }, [scope, syncEngine]);
 
   if (initializationError !== null) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{initializationError}</Text>
+        <Pressable accessibilityRole="button" onPress={() => setBootstrapAttempt((attempt) => attempt + 1)} style={styles.retryButton}>
+          <Text style={styles.retryButtonText}>Повторить</Text>
+        </Pressable>
       </View>
     );
   }
@@ -371,6 +542,7 @@ export function AppServicesProvider({
     <AppServicesContext.Provider
       value={{
         isReady,
+        bootStatus,
         projects: repositories.projects,
         settings,
         settingsActions,
@@ -389,6 +561,29 @@ export function AppServicesProvider({
         refreshCompletedItems,
         runBacklogAction,
         runStorageDiagnostic,
+        syncAccountData: async () => {
+          if (syncEngine !== null) await syncEngine.syncNow();
+          await Promise.all([refreshWorkspaceState(), refreshSyncConflicts(), refreshSyncStatus()]);
+        },
+        syncStatus,
+        syncConflicts,
+        resolveAccountSyncConflict: async (conflict, decision) => {
+          if (!isSyncConflictStore(appSource)) throw new Error('Хранилище конфликтов синхронизации недоступно.');
+          await resolveSyncConflict(appSource, conflict, decision);
+          await refreshSyncConflicts();
+          syncEngine?.notifyLocalMutation();
+        },
+        clearAutonomousData: async () => {
+          await clearAutonomousWorkspace({ scope: scope ?? { kind: 'autonomous' }, source: appSource });
+          await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy()]);
+        },
+        clearAccountData: async (dataGeneration) => {
+          if (dataGeneration !== undefined && isSyncResetStore(appSource)) await appSource.resetForFullResync(dataGeneration);
+          else await appSource.clearAll();
+          setSettings(await appSource.getSettings());
+          setDemoTasks(emptyDemoTaskGroups);
+          await Promise.all([refreshBacklog(), refreshCompletedItems(), refreshDailyEnergy(), refreshSyncConflicts(), refreshSyncStatus()]);
+        },
       }}>
       {children}
     </AppServicesContext.Provider>
@@ -420,5 +615,19 @@ const styles = StyleSheet.create({
     color: '#B42318',
     fontSize: 16,
     textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: designTokens.color.primary,
+    borderRadius: designTokens.radius.control,
+    marginTop: designTokens.space[16],
+    minHeight: designTokens.size.touchTargetMin,
+    paddingHorizontal: designTokens.space[20],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryButtonText: {
+    color: designTokens.color.text.inverse,
+    fontSize: designTokens.typography.size.body,
+    fontWeight: designTokens.typography.weight.semibold,
   },
 });

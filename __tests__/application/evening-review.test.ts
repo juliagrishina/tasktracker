@@ -46,4 +46,15 @@ describe('evening review', () => {
     expect(scheduler.schedule).not.toHaveBeenCalled();
     await expect(source.getSettings()).resolves.toMatchObject({ eveningReviewNotificationId: null });
   });
+
+  test('does not rewrite default settings when there is no review notification to clear', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' });
+    const scheduler = { cancel: jest.fn(), schedule: jest.fn() };
+
+    await synchronizeEveningReviewNotification({ source, scheduler, now: new Date('2026-08-28T18:30:00.000Z') });
+
+    expect(scheduler.cancel).not.toHaveBeenCalled();
+    expect(scheduler.schedule).not.toHaveBeenCalled();
+    await expect(source.listSyncOutbox()).resolves.toEqual([]);
+  });
 });

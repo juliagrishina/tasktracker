@@ -114,7 +114,9 @@ export async function synchronizeEveningReviewNotification(input: {
   const scheduledAt = getInstantInTimeZone(today, settings.eveningReviewAt, settings.timeZoneId);
   const reviewItems = await getEveningReviewItems(input.source, today);
   if (new Date(scheduledAt) <= input.now || reviewItems.length === 0) {
-    await input.source.saveSettings({ ...settings, eveningReviewNotificationId: null });
+    if (settings.eveningReviewNotificationId !== null && settings.eveningReviewNotificationId !== undefined) {
+      await input.source.saveSettings({ ...settings, eveningReviewNotificationId: null });
+    }
     return;
   }
   const notificationId = await input.scheduler.schedule({

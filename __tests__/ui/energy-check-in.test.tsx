@@ -3,6 +3,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { AppServicesProvider } from '../../src/application/app-services-provider';
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { getDailyEnergyForCurrentDay } from '../../src/application/energy-use-cases';
+import { getDateInTimeZone } from '../../src/domain/planning';
 import { PlanScreen } from '../../src/ui/plan/plan-screen';
 
 describe('daily energy check-in', () => {
@@ -41,7 +42,8 @@ describe('daily energy check-in', () => {
     }, { timeout: appInitializationTimeout });
 
     await fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
-    await waitFor(() => expect(view.getByText('Энергия за сегодня')).toBeOnTheScreen());
+    const today = getDateInTimeZone(new Date().toISOString(), 'Europe/Moscow').split('-').reverse().join('.');
+    await waitFor(() => expect(view.getByText(`Энергия за ${today}`)).toBeOnTheScreen());
     expect(view.getByText('Не указана')).toBeOnTheScreen();
     await fireEvent.press(view.getByLabelText('Указать оценку энергии'));
     await waitFor(() => expect(view.getByLabelText('Энергия 80%')).toBeOnTheScreen());
@@ -56,4 +58,24 @@ describe('daily energy check-in', () => {
       expect(view.getByText('80%')).toBeOnTheScreen();
     });
   });
+
+  test('shows the selected historic date energy in a read-only evening review', async () => {
+    const source = createInMemoryDataSource();
+    const now = new Date();
+    const currentDate = getDateInTimeZone(now.toISOString(), 'Europe/Moscow');
+    await source.saveDailyEnergyEntry({ recordedOn: currentDate, energyPercent: 75, createdAt: now.toISOString(), updatedAt: now.toISOString() });
+    await source.saveDailyEnergyEntry({ recordedOn: '2026-09-15', energyPercent: 58, createdAt: '2026-09-15T08:00:00.000Z', updatedAt: '2026-09-15T08:00:00.000Z' });
+    const view = await render(
+      <AppServicesProvider seedDevelopmentData={false} source={source}>
+        <PlanScreen initialDate="2026-09-15" />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => expect(view.getByLabelText('Открыть вечернюю проверку')).toBeOnTheScreen(), { timeout: appInitializationTimeout });
+    await fireEvent.press(view.getByLabelText('Открыть вечернюю проверку'));
+
+    await waitFor(() => expect(view.getByText('Энергия за 15.09.2026')).toBeOnTheScreen(), { timeout: appInitializationTimeout });
+    expect(view.getByText('58%')).toBeOnTheScreen();
+    expect(view.queryByLabelText('Изменить оценку энергии')).toBeNull();
+  }, appInitializationTimeout);
 });

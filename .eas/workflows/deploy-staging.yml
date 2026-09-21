@@ -1,0 +1,12 @@
+name: Deploy staging web
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  deploy_staging:
+    name: Deploy staging web
+    type: deploy
+    environment: preview
+    params:
+      alias: staging

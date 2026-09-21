@@ -6,7 +6,7 @@
 
 **Текущая архитектура:** [`docs/tz/account-data-and-cloud-architecture.md`](../../tz/account-data-and-cloud-architecture.md)
 
-**Цель:** добавить постоянный email-аккаунт, сохранив автономный режим, затем включить безопасную account-scoped offline-first синхронизацию всех бизнес-данных между iPhone и web.
+**Цель:** добавить постоянный email-аккаунт и безопасную account-scoped offline-first синхронизацию всех бизнес-данных между iPhone и web. Сохранённые autonomous области остаются только legacy-источником безопасной миграции или очистки, не пользовательским режимом.
 
 **Порядок выполнения:** строго `E11-T1` → `E11-T26`. Этап A принимается отдельно до включения пользовательского обещания облачного восстановления. Каждая задача выполняется в собственном scope с target tests и typecheck; полный suite, lint и security/E2E выполняются в `E11-T26`.
 
@@ -41,7 +41,7 @@
 
 ### E11-T4 — Локальные области по аккаунтам
 
-- Создать registry автономной и account-scoped областей; текущую SQLite безопасно принять как автономную.
+- Создать registry legacy-автономной и account-scoped областей; текущую SQLite безопасно принять как legacy-область.
 - Слои: `src/data/migrations.ts`, data-source factory, native/web persistence, repository bootstrap.
 - Зависимости: E11-T3.
 - Приёмка: области изолированы, скрываются без удаления, UUID и связи сохранены.
@@ -50,11 +50,11 @@
 
 ### E11-T5 — Первый запуск и экран входа/регистрации
 
-- Добавить Auth gate, формы регистрации/входа и «Продолжить без аккаунта».
+- Исходная задача добавила Auth gate и формы регистрации/входа. В части guest CTA она заменена E11-T27: пользовательский вход возможен только через регистрацию или вход.
 - Слои: `src/app/`, новые `src/ui/auth/`, navigation.
 - Зависимости: E11-T2–E11-T4.
-- Приёмка: first launch открывает Auth, autonomous flow работает offline, формы доступны на iPhone/web.
-- Проверки: routing, mode switching, autonomous flow, accessibility.
+- Приёмка: first launch открывает Auth, формы доступны на iPhone/web; legacy autonomous scope не открывается как обычный flow.
+- Проверки: routing, mode switching, access-policy regression, accessibility.
 - Trello: [E11-T5](https://trello.com/c/OzUsJB4u)
 
 ### E11-T6 — Регистрация и шестизначный OTP
@@ -107,13 +107,13 @@
 - Реализовать current-session logout без удаления данных, включая offline best-effort revoke.
 - Слои: Auth session service, workspace selector, navigation/settings UI.
 - Зависимости: E11-T3–E11-T5.
-- Приёмка: account area скрыта, autonomous area отдельна, повторный вход возвращает прежние данные.
-- Проверки: online/offline logout, relogin, account/autonomous isolation.
+- Приёмка: account area скрыта, legacy autonomous area остаётся изолированной и недоступной из Auth, повторный вход возвращает прежние данные.
+- Проверки: online/offline logout, relogin, account/legacy isolation.
 - Trello: [E11-T11](https://trello.com/c/K3dmhm1O)
 
-### E11-T12 — Данные аккаунта и автономная очистка
+### E11-T12 — Данные аккаунта и очистка legacy-области
 
-- Переименовать settings section и реализовать удаление только текущей autonomous workspace с подтверждением.
+- Переименовать settings section и реализовать безопасное удаление только явно выбранной legacy autonomous workspace с подтверждением; не делать её пользовательским режимом.
 - Слои: settings UI, local workspace management, confirmation UI.
 - Зависимости: E11-T4, E11-T9, E11-T11.
 - Приёмка: действия зависят от auth state, скрытые account areas не затрагиваются.
@@ -255,3 +255,130 @@
 - Не обещать cloud restore пользователю до прохождения E11-T26.
 - Не переносить автономные данные без явного выбора пользователя.
 - Не объединять scope соседних карточек без отдельного согласования.
+
+## Дополнение 2026-09-10 — web/PWA hardening и QA-дефекты
+
+Этот раздел дополняет исходную декомпозицию E11-T1–E11-T26. Он вводит
+временный режим всего продукта «вход или регистрация обязательны» (не
+временный QA-режим): он сохраняется и после завершения QA Epic 11 до отдельного
+продуктового решения. Затем раздел
+укрепляет web/PWA-реплику. Никакая задача раздела не изменяет production
+Supabase, не публикует staging-сборку и не удаляет пользовательские данные
+без отдельного явного разрешения.
+
+### E11-B5 — Кнопки редактора обрезаются на iPhone
+
+- Исправить action row редактора Backlog для узкой ширины: каждая кнопка
+  должна помещаться целиком либо переноситься в предсказуемую следующую
+  строку с сохранением touch target.
+- Слои: `src/ui/backlog/`, общие button/action-row styles, UI tests.
+- Готово, когда «Выполнено», «Сохранить», «Отмена» и «Удалить» доступны при
+  iPhone-width без обрезания текста и горизонтального переполнения.
+- Проверка: узкий layout regression test, существующие Backlog form/action
+  tests, typecheck и ручная iPhone-проверка.
+
+### E11-B6 — Ввод часового пояса скрыт клавиатурой
+
+- Сделать sheet выбора часового пояса keyboard-aware: поле поиска и
+  выбранный результат остаются видимыми на iPhone при открытой клавиатуре.
+- Слои: `src/ui/settings/time-zone-picker.tsx`, Settings UI tests.
+- Готово, когда поиск IANA-zone не перекрывается системной клавиатурой и
+  sheet корректно возвращается в исходное положение после её скрытия.
+- Проверка: render/interaction regression tests, typecheck и ручная
+  iPhone-проверка с вводом в «Поиск часового пояса».
+
+### E11-B7 — Очищенные автономные данные возвращаются
+
+- Зафиксировать источник демо-инициализации и разделить «пустая область
+  после clear» от «область никогда не инициализировалась».
+- Слои: `src/application/demo-data.ts`, bootstrap/data-scope state, tests
+  очистки автономной области.
+- Готово, когда очистка сохраняется после неудачной регистрации, возврата на
+  Auth и повторного открытия области; старые demo data не появляются вновь.
+- Проверка: clear → failed registration → restart/return regression test,
+  isolation tests, typecheck и полный suite.
+
+### E11-B8 — Нейтральное OTP-письмо для регистрации
+
+- Привести staging Auth template для anonymous-to-email linking к
+  пользовательской формулировке «Подтвердите email для аккаунта» и
+  шестизначному `{{ .Token }}` без ссылок на localhost и «new email».
+- Слои: staging-only Supabase Auth configuration/template contract,
+  `supabase/` documentation/tests.
+- Готово, когда первая регистрация получает понятное OTP-письмо, а смена
+  email остаётся отдельным корректно названным сценарием.
+- Проверка: template contract, один staging smoke с тестовым адресом,
+  проверка Resend delivery; production не меняется.
+
+### E11-T27 — Глобально скрыть вход без аккаунта, сохранив автономные области
+
+- Установить единую product policy с выключенным guest entry по умолчанию;
+  скрыть CTA на Auth и OTP-screen, а сохранённая anonymous session не должна
+  автоматически открывать рабочую область.
+- Слои: `src/application/auth-gate.tsx`, `src/application/product-access-policy.ts`,
+  `src/ui/auth/`, Auth tests.
+- Готово, когда пользователю доступны только регистрация и вход, logout
+  возвращает на Auth, а autonomous data/scope и техническая anonymous identity
+  не удаляются.
+- Сеть обязательна для регистрации, первого credentialed входа на устройстве,
+  явной повторной аутентификации и восстановления истёкшей сессии. После
+  успешного online-входа валидная сохранённая сессия открывает account area offline.
+- Проверка: Auth gate/UI regression tests, typecheck, lint и полный suite.
+- Статус: реализовано в commit `95d7161` ветки `codex/epic-11-auth`.
+
+### E11-T28 — IndexedDB и безопасная миграция web-данных
+
+- Перевести persistent web snapshot с `localStorage` на IndexedDB за
+  неизменным `AppDataSource` interface; legacy snapshot переносить только
+  после validation и readback, не удаляя исходный ключ.
+- Слои: web data-source, IndexedDB storage port, migration tests.
+- Зависимости: E11-T27; дизайн:
+  [`2026-09-10-web-indexeddb-replica-design.md`](../specs/2026-09-10-web-indexeddb-replica-design.md).
+- Готово, когда Account A и Account B изолированы после reload, а legacy
+  autonomous snapshot остаётся защищённым источником миграции; pending outbox
+  не теряется, а corrupt/partial legacy data не уничтожается.
+- Проверка: migration/rollback/offline-reopen tests, typecheck, lint, полный
+  suite и web export.
+
+### E11-T29 — Offline PWA shell и безопасное обновление
+
+- Добавить service worker и precache только статической app shell: HTML,
+  JS bundles, styles, fonts, icons и manifest. Не кэшировать Supabase/Auth,
+  OTP и другие API responses.
+- Слои: web export pipeline, Workbox/service-worker configuration, PWA
+  asset/registration tests and operations documentation.
+- Зависимости: E11-T28.
+- Готово, когда полностью закрытая установленная PWA после успешного online-входа
+  повторно запускается offline с валидной сохранённой сессией, пользовательские
+  данные берутся из IndexedDB, а новая shell-версия не применяется посреди
+  активной операции. При отсутствии или истечении сессии показывается Auth, без
+  подстановки legacy-области; Supabase/Auth/OTP API responses не кэшируются.
+- Проверка: exported assets/registration tests, cache strategy tests,
+  web export и ручной offline reopen на desktop/iPhone PWA.
+
+### E11-T30 — Staging PWA на EAS Hosting
+
+- Опубликовать отдельную staging web-сборку через EAS Hosting с HTTPS alias;
+  перед deploy guard проверяет, что используются только public staging URL и
+  publishable key. Redirect URLs Supabase расширяются только staging URL.
+- Слои: `eas.json`, QA deploy guard, operations guide, configuration tests.
+- Зависимости: E11-T28, E11-T29.
+- Готово, когда URL не зависит от локального компьютера, не содержит
+  секретов и открывает auth screen против staging Supabase.
+- Проверка: config contract, `qa:verify`, exported build inspection и ручной
+  browser/iPhone PWA smoke; публикация требует отдельного явного одобрения.
+
+### E11-T31 — Сквозная web/PWA-приёмка Epic 11
+
+- Выполнить staging-only сценарии регистрации, OTP, первого online login, полного
+  закрытия и offline reopen с валидной сессией, offline create/edit, durable
+  pending outbox и reconnect на desktop browser и установленной PWA iPhone.
+- Отдельно проверить отсутствие guest regression: при logout, очищенной или
+  истёкшей сессии нет guest-entry, не создаётся новая autonomous область и не
+  открываются legacy-данные.
+- Слои: `docs/testing/`, QA evidence and release checklist.
+- Зависимости: E11-B5–E11-B8, E11-T27–E11-T30.
+- Готово, когда каждый сценарий имеет результат passed/failed/blocked с
+  воспроизводимым evidence; production и реальный пользовательский data scope
+  не задействованы.
+- Проверка: полный Jest suite, typecheck, lint, web export и manual checklist.

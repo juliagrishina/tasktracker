@@ -60,4 +60,18 @@ describe('schedule block notifications', () => {
     expect(scheduler.schedule).not.toHaveBeenCalled();
     expect(updated.notificationId).toBeNull();
   });
+
+  test('keeps the instant but formats the notification in the effective device timezone', async () => {
+    const scheduler = { schedule: jest.fn().mockResolvedValue('notification-nha-trang'), cancel: jest.fn() };
+    await synchronizeScheduleBlockNotification({
+      block: {
+        id: 'block-1', taskItemId: 'task-1', occurrenceId: null, notificationId: null,
+        timeZoneId: 'Europe/Moscow', startsAt: '2026-09-01T10:00:00+03:00', endsAt: '2026-09-01T11:00:00+03:00',
+        createdAt: '2026-08-27T00:00:00.000Z', updatedAt: '2026-08-27T00:00:00.000Z', deletedAt: null,
+      },
+      displayTimeZoneId: 'Asia/Ho_Chi_Minh', notificationLeadMinutes: 10, scheduler, taskTitle: 'Созвон', now: new Date('2026-09-01T06:00:00.000Z'),
+    });
+
+    expect(scheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ body: 'Созвон начнётся в 14:00', scheduledAt: '2026-09-01T06:50:00.000Z' }));
+  });
 });

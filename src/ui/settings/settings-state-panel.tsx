@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -9,28 +9,52 @@ import {
   type NotificationPermissionStatus,
   type WebNotificationPermissionGateway,
 } from '../../application/notification-permissions';
+import type { AccountProfileResult, AccountProfileState } from '../../application/account-profile';
+import type { PasswordManagementResult } from '../../application/password-management';
 import type { UpdatePlanningSettingsInput } from '../../application/settings-use-cases';
 import type { AppSettings } from '../../domain/entities';
+import type { SyncConflict } from '../../data/sync-outbox';
+import type { SyncConflictDecision } from '../../application/sync-conflicts';
+import type { AccountSyncStatus } from '../../application/app-services-provider';
 import { PlanningValuePicker } from '../backlog/planning-value-picker';
 import { designTokens } from '../design/tokens';
 import { ActionButton } from '../primitives/action-button';
+import { PasswordInput } from '../primitives/password-input';
 import { StatusPill } from '../primitives/status-pill';
 import { SurfaceCard } from '../primitives/surface-card';
 import { temporaryWebContentStyle } from '../screen-shell';
 
 import { settingsDemoState } from './settings-demo-state';
+import { AccountSettingsCard } from './account-settings-card';
 import { getAppVersion } from './app-version';
 import { TimeZonePicker } from './time-zone-picker';
 
 interface SettingsStatePanelProps {
+  account?: AccountProfileState;
   notificationPermissions?: NotificationPermissionGateway;
+  onAccountCancelEmailChange?: () => Promise<AccountProfileResult>;
+  onChangePassword?: (input: { currentPassword: string; code: string; password: string; passwordConfirmation: string }) => Promise<PasswordManagementResult>;
+  onAccountConfirmEmailChange?: (input: { code: string }) => Promise<AccountProfileResult>;
+  onRequestPasswordChangeCode?: () => Promise<PasswordManagementResult>;
+  onAccountStartEmailChange?: (input: { currentPassword: string; email: string }) => Promise<AccountProfileResult>;
+  onAccountUpdateDisplayName?: (displayName: string) => Promise<AccountProfileResult>;
   onPlanningSettingsChange?: (input: UpdatePlanningSettingsInput) => Promise<void>;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
+  onSyncAccountData?: () => Promise<void>;
+  syncStatus?: AccountSyncStatus;
+  syncConflicts?: readonly SyncConflict[];
+  onResolveSyncConflict?: (conflict: SyncConflict, decision: SyncConflictDecision) => Promise<void>;
+  onClearAutonomousData?: () => Promise<void>;
+  onAccountDataAction?: (input: { operation: 'clear_account_data' | 'delete_account'; password: string; code: string }) => Promise<boolean>;
+  onRequestAccountDataCode?: () => Promise<PasswordManagementResult>;
+  onSignUp?: () => void;
   onTimeZoneChange?: (timeZoneId: string) => Promise<void>;
   onUseDeviceTimeZone?: () => Promise<void>;
   settings: AppSettings;
 }
 
-export function SettingsStatePanel({ notificationPermissions, onPlanningSettingsChange, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
+export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notificationPermissions, onAccountCancelEmailChange, onChangePassword, onAccountConfirmEmailChange, onRequestPasswordChangeCode, onAccountStartEmailChange, onAccountUpdateDisplayName, onClearAutonomousData, onAccountDataAction, onRequestAccountDataCode, onPlanningSettingsChange, onSignIn, onSignOut, onSignUp, onSyncAccountData, syncStatus = { kind: 'synchronized', pendingCount: 0, lastSuccessAt: null }, syncConflicts = [], onResolveSyncConflict, onTimeZoneChange, onUseDeviceTimeZone, settings }: SettingsStatePanelProps) {
   const appVersion = getAppVersion();
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isNotificationPermissionPromptVisible, setIsNotificationPermissionPromptVisible] = useState(false);
@@ -38,6 +62,10 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
   const [syncLabel, setSyncLabel] = useState<string>(settingsDemoState.initialSyncLabel);
   const [isTimeZonePickerVisible, setIsTimeZonePickerVisible] = useState(false);
   const [planningSettingsEditorPlacement, setPlanningSettingsEditorPlacement] = useState<'plan' | 'notifications' | null>(null);
+  const [isClearConfirmationVisible, setIsClearConfirmationVisible] = useState(false);
+  const [accountOperation, setAccountOperation] = useState<'clear_account_data' | 'delete_account' | null>(null);
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountCode, setAccountCode] = useState('');
   const [isSavingPlanningSettings, setIsSavingPlanningSettings] = useState(false);
   const [planningSettings, setPlanningSettings] = useState<UpdatePlanningSettingsInput>(() => getPlanningSettings(settings));
   const notificationPermissionService = useMemo(
@@ -54,6 +82,26 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
   const refreshDemoStatus = () => {
     setSyncLabel('синхр. только что');
     setFeedback('Статус обновлён в демо-режиме');
+  };
+  const openAccountOperation = (operation: 'clear_account_data' | 'delete_account') => {
+    setAccountPassword('');
+    setAccountCode('');
+    setAccountOperation(operation);
+  };
+  const requestAccountDataCode = async () => {
+    const result = await onRequestAccountDataCode?.();
+    setFeedback(result?.kind === 'codeSent' ? 'Код подтверждения отправлен на email.' : 'Не удалось отправить код. Проверьте подключение или запросите его позднее.');
+  };
+  const completeAccountOperation = async () => {
+    if (accountOperation === null || onAccountDataAction === undefined) return;
+    const completed = await onAccountDataAction({ operation: accountOperation, password: accountPassword, code: accountCode });
+    if (completed) {
+      setAccountOperation(null);
+      setAccountPassword('');
+      setAccountCode('');
+      return;
+    }
+    setFeedback('Операцию не удалось завершить. Проверьте пароль, код и подключение к интернету.');
   };
   const selectTimeZone = async (timeZoneId: string) => {
     if (onTimeZoneChange === undefined) return;
@@ -118,6 +166,18 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, temporaryWebContentStyle()]}>
+        <AccountSettingsCard
+          account={account}
+          onCancelEmailChange={onAccountCancelEmailChange}
+          onChangePassword={onChangePassword}
+          onConfirmEmailChange={onAccountConfirmEmailChange}
+          onRequestPasswordChangeCode={onRequestPasswordChangeCode}
+          onSignIn={onSignIn}
+          onSignOut={onSignOut}
+          onSignUp={onSignUp}
+          onStartEmailChange={onAccountStartEmailChange}
+          onUpdateDisplayName={onAccountUpdateDisplayName}
+        />
         <SurfaceCard style={styles.microsoftCard} tone="info">
           <View style={styles.microsoftHead}>
             <View style={styles.microsoftIcon}>
@@ -140,18 +200,18 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
-          <CardTitle action="Изменить" onAction={() => openPlanningSettingsEditor('plan')} title="План дня" />
-          <SettingsRow description="Знаменатель загрузки" label="Рабочий диапазон" value={`${settings.workdayStartsAt}–${settings.workdayEndsAt}`} />
-          <SettingsRow description="Дела без времени" label="Вечерняя проверка" value={settings.eveningReviewAt} />
+          <CardTitle title="План дня" />
+          <SettingsRow description="Знаменатель загрузки" label="Рабочий диапазон" onPress={() => openPlanningSettingsEditor('plan')} value={`${settings.workdayStartsAt}–${settings.workdayEndsAt}`} />
+          <SettingsRow description="Дела без времени" label="Вечерняя проверка" onPress={() => openPlanningSettingsEditor('plan')} value={settings.eveningReviewAt} />
           <SettingsRow description={settings.timeZoneMode === 'manual' ? 'Выбран вручную из списка IANA' : 'Определяется автоматически устройством'} label="Часовой пояс" onPress={() => setIsTimeZonePickerVisible(true)} value={settings.timeZoneId} />
           {settings.timeZoneMode === 'manual' ? <View style={styles.deviceTimeZoneAction}><ActionButton label="Использовать пояс устройства" onPress={() => void activateDeviceTimeZone()} tone="soft" /></View> : <Text style={styles.settingDescription}>Сейчас используется пояс устройства: {settings.timeZoneId}</Text>}
-          {planningSettingsEditorPlacement === 'plan' ? <PlanningSettingsEditor includePlanFields isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} settings={planningSettings} /> : null}
+          {planningSettingsEditorPlacement === 'plan' ? <PlanningSettingsEditor isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} section="plan" settings={planningSettings} /> : null}
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
           <CardTitle action={notificationPermissionAction(notificationPermissionStatus).label} actionTone={notificationPermissionAction(notificationPermissionStatus).tone} onAction={notificationPermissions === undefined ? undefined : () => setIsNotificationPermissionPromptVisible(true)} title="Уведомления" />
           <SettingsRow description="До задачи или встречи" label="Предварительное" onPress={() => openPlanningSettingsEditor('notifications')} value={`${settings.notificationLeadMinutes} минут`} />
-          {planningSettingsEditorPlacement === 'notifications' ? <PlanningSettingsEditor isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} settings={planningSettings} /> : null}
+          {planningSettingsEditorPlacement === 'notifications' ? <PlanningSettingsEditor isSaving={isSavingPlanningSettings} onCancel={() => setPlanningSettingsEditorPlacement(null)} onChange={setPlanningSettings} onSave={() => void savePlanningSettings()} section="notifications" settings={planningSettings} /> : null}
           {isNotificationPermissionPromptVisible ? <View style={styles.permissionPrompt}>
             <Text style={styles.settingDescription}>Разрешите локальные напоминания, когда будете готовы. План дня останется доступен в любом случае.</Text>
             <View style={styles.buttonRow}>
@@ -165,12 +225,27 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
         </SurfaceCard>
 
         <SurfaceCard style={styles.card}>
-          <CardTitle title="Данные на этом устройстве" />
-          <Text style={styles.storageDescription}>Проекты, задачи, подзадачи, напоминания, блоки расписания и настройки хранятся только на этом устройстве.</Text>
+          <CardTitle title="Данные аккаунта и устройства" />
+          <Text style={styles.storageDescription}>Планы доступны без сети благодаря локальной копии на этом устройстве.</Text>
           <View style={styles.warning}>
-            <Text style={styles.warningText}>При удалении приложения или переходе на другое устройство эти данные не восстанавливаются.</Text>
+            <Text style={styles.warningText}>После восстановления сети изменения синхронизируются с вашим аккаунтом.</Text>
           </View>
-          <Text style={styles.storageDescription}>Анонимная учётная запись и история поведения не являются резервной копией и не восстанавливают ваши данные.</Text>
+          <Text style={styles.storageDescription}>Удаление приложения или данных браузера удаляет только локальную копию: войдите в тот же аккаунт при наличии сети, чтобы загрузить синхронизированные данные. Удаление данных аккаунта на всех устройствах требует отдельного подтверждения ниже.</Text>
+          {account.kind === 'authenticated' ? <AccountSyncStatusPanel conflictCount={syncConflicts.length} onSyncAccountData={onSyncAccountData} status={syncStatus} /> : null}
+          {syncConflicts.map((conflict) => <SyncConflictCard conflict={conflict} key={conflict.id} onResolve={onResolveSyncConflict} />)}
+          {account.kind === 'withoutAccount' && onClearAutonomousData !== undefined ? <ActionButton label="Очистить все данные" onPress={() => setIsClearConfirmationVisible(true)} tone="secondary" /> : null}
+          {account.kind === 'authenticated' ? <><ActionButton label="Очистить все данные" onPress={() => openAccountOperation('clear_account_data')} tone="secondary" /><ActionButton label="Удалить аккаунт" onPress={() => openAccountOperation('delete_account')} tone="danger" />
+          {accountOperation !== null ? <View style={styles.warning}>
+            <Text style={styles.warningText}>{accountOperation === 'delete_account' ? 'При удалении аккаунта будут безвозвратно удалены аккаунт, профиль и все связанные данные на всех устройствах.' : 'Вы действительно хотите удалить все данные аккаунта? Сам аккаунт, имя, email и пароль сохранятся.'}</Text>
+            <PasswordInput accessibilityLabel="Текущий пароль для удаления" onChangeText={setAccountPassword} value={accountPassword} style={styles.input} visibilityLabel="текущий пароль для удаления" />
+            <ActionButton label="Отправить код подтверждения" onPress={() => { void requestAccountDataCode(); }} tone="secondary" />
+            <TextInput accessibilityLabel="Код подтверждения удаления" keyboardType="number-pad" maxLength={6} onChangeText={setAccountCode} value={accountCode} style={styles.input} />
+            <View style={styles.buttonRow}><View style={styles.actionWrap}><ActionButton label="Отмена" onPress={() => setAccountOperation(null)} tone="secondary" /></View><View style={styles.actionWrap}><ActionButton disabled={accountPassword === '' || !/^\d{6}$/u.test(accountCode)} label={accountOperation === 'delete_account' ? 'Удалить аккаунт безвозвратно' : 'Удалить все данные'} onPress={() => { void completeAccountOperation(); }} tone="danger" /></View></View>
+          </View> : null}</> : null}
+          {isClearConfirmationVisible ? <View style={styles.warning}>
+            <Text style={styles.warningText}>Вы действительно хотите удалить все локальные данные на этом устройстве?</Text>
+            <View style={styles.buttonRow}><View style={styles.actionWrap}><ActionButton label="Отмена" onPress={() => setIsClearConfirmationVisible(false)} tone="secondary" /></View><View style={styles.actionWrap}><ActionButton label="Удалить все данные" onPress={() => { void onClearAutonomousData?.().then(() => setIsClearConfirmationVisible(false)); }} tone="danger" /></View></View>
+          </View> : null}
         </SurfaceCard>
 
         <Text style={styles.footer}>Версия {appVersion} · Часовой пояс плана: {settings.timeZoneId}</Text>
@@ -179,6 +254,71 @@ export function SettingsStatePanel({ notificationPermissions, onPlanningSettings
       <TimeZonePicker onRequestClose={() => setIsTimeZonePickerVisible(false)} onSelect={(timeZoneId) => void selectTimeZone(timeZoneId)} selectedTimeZoneId={settings.timeZoneId} visible={isTimeZonePickerVisible} />
     </SafeAreaView>
   );
+}
+
+function AccountSyncStatusPanel({ conflictCount, onSyncAccountData, status }: { conflictCount: number; onSyncAccountData?: () => Promise<void>; status: AccountSyncStatus }) {
+  const actionLabel = status.kind === 'offline' || status.kind === 'failed' ? 'Повторить' : 'Синхронизировать сейчас';
+
+  return <View style={styles.syncStatus}>
+    <Text accessibilityLiveRegion="polite" style={styles.syncStatusTitle}>{syncStatusTitle(status.kind)}</Text>
+    {status.lastSuccessAt === null ? null : <Text style={styles.settingDescription}>Последняя успешная синхронизация: {formatSyncDateTime(status.lastSuccessAt)}</Text>}
+    {status.pendingCount === 0 ? null : <Text style={styles.settingDescription}>Ожидают отправки: {status.pendingCount}</Text>}
+    {conflictCount === 0 ? null : <Text style={styles.warningText}>Требуется разрешить конфликт</Text>}
+    {onSyncAccountData === undefined ? null : <ActionButton label={actionLabel} onPress={() => { void onSyncAccountData(); }} tone={status.kind === 'failed' ? 'secondary' : 'primary'} />}
+  </View>;
+}
+
+function syncStatusTitle(kind: AccountSyncStatus['kind']): string {
+  if (kind === 'syncing') return 'Синхронизация…';
+  if (kind === 'offline') return 'Нет сети — изменения сохранены на устройстве';
+  if (kind === 'failed') return 'Не удалось синхронизировать';
+  return 'Синхронизировано';
+}
+
+function formatSyncDateTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'недавно' : date.toLocaleString('ru-RU');
+}
+
+function SyncConflictCard({ conflict, onResolve }: { conflict: SyncConflict; onResolve?: (conflict: SyncConflict, decision: SyncConflictDecision) => Promise<void> }) {
+  const localTitle = conflictTitle(conflict.local.payload);
+  const serverTitle = conflictTitle(conflict.server.payload);
+  const remoteDelete = conflict.server.operation === 'delete';
+  return <View style={styles.warning}>
+    <Text style={styles.warningText}>Требуется разрешить конфликт синхронизации: {localTitle ?? serverTitle ?? conflict.local.entityType}</Text>
+    <Text style={styles.settingDescription}>Это устройство · {formatConflictTime(conflict.local.createdAt)}</Text>
+    <Text style={styles.settingDescription}>{localTitle ?? 'Изменённая версия'}</Text>
+    <Text style={styles.settingDescription}>Версия в аккаунте · {formatConflictTime(conflict.server.changedAt)}</Text>
+    <Text style={styles.settingDescription}>{remoteDelete ? 'Запись удалена' : (serverTitle ?? 'Версия из аккаунта')}</Text>
+    <Text style={styles.settingDescription}>Различия: {formatConflictDifferences(conflict)}</Text>
+    {onResolve === undefined ? null : <View style={styles.buttonRow}>
+      <View style={styles.actionWrap}><ActionButton label={remoteDelete ? 'Восстановить изменённую запись' : 'Оставить эту версию'} onPress={() => { void onResolve(conflict, 'keep_local'); }} tone="primary" /></View>
+      <View style={styles.actionWrap}><ActionButton label={remoteDelete ? 'Подтвердить удаление' : 'Оставить версию из аккаунта'} onPress={() => { void onResolve(conflict, 'keep_remote'); }} tone="secondary" /></View>
+    </View>}
+  </View>;
+}
+
+function conflictTitle(payload: unknown): string | null {
+  return payload !== null && typeof payload === 'object' && !Array.isArray(payload) && typeof (payload as { title?: unknown }).title === 'string'
+    ? (payload as { title: string }).title
+    : null;
+}
+
+function formatConflictTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? value : date.toLocaleString('ru-RU');
+}
+
+function formatConflictDifferences(conflict: SyncConflict): string {
+  const local = asRecord(conflict.local.payload);
+  const server = asRecord(conflict.server.payload);
+  if (local === null || server === null) return 'версии отличаются';
+  const keys = [...new Set([...Object.keys(local), ...Object.keys(server)])].filter((key) => JSON.stringify(local[key]) !== JSON.stringify(server[key]) && !['updatedAt', 'updated_at', 'version', 'userId', 'user_id'].includes(key));
+  return keys.length === 0 ? 'состояние записи' : keys.join(', ');
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function getPlanningSettings(settings: AppSettings): UpdatePlanningSettingsInput {
@@ -202,17 +342,17 @@ const notificationLeadOptions = Array.from({ length: 25 }, (_, index) => {
   return { label: `${value} минут`, value };
 });
 
-function PlanningSettingsEditor({ includePlanFields = false, isSaving, onCancel, onChange, onSave, settings }: {
-  includePlanFields?: boolean;
+function PlanningSettingsEditor({ isSaving, onCancel, onChange, onSave, section, settings }: {
   isSaving: boolean;
   onCancel: () => void;
   onChange: Dispatch<SetStateAction<UpdatePlanningSettingsInput>>;
   onSave: () => void;
+  section: 'plan' | 'notifications';
   settings: UpdatePlanningSettingsInput;
 }) {
   return <View style={styles.planEditor}>
-    <Text style={styles.editorTitle}>{includePlanFields ? 'Параметры плана' : 'Предварительное уведомление'}</Text>
-    {includePlanFields ? <>
+    <Text style={styles.editorTitle}>{section === 'plan' ? 'Параметры плана' : 'Предварительное уведомление'}</Text>
+    {section === 'plan' ? <>
       <Text style={styles.fieldLabel}>Рабочий диапазон</Text>
       <View style={styles.pickerRow}>
         <View style={styles.pickerColumn}><Text style={styles.fieldHint}>Начало</Text><PlanningValuePicker accessibilityLabel="Начало рабочего дня" onChange={(workdayStartsAt) => onChange((current) => ({ ...current, workdayStartsAt }))} options={timeOptions} title="Начало рабочего дня" value={settings.workdayStartsAt} /></View>
@@ -221,11 +361,13 @@ function PlanningSettingsEditor({ includePlanFields = false, isSaving, onCancel,
       <Text style={styles.fieldLabel}>Вечерняя проверка</Text>
       <PlanningValuePicker accessibilityLabel="Время вечерней проверки" onChange={(eveningReviewAt) => onChange((current) => ({ ...current, eveningReviewAt }))} options={timeOptions} title="Время вечерней проверки" value={settings.eveningReviewAt} />
     </> : null}
-    <Text style={styles.fieldLabel}>Предварительное уведомление</Text>
-    <PlanningValuePicker accessibilityLabel="Интервал уведомления" onChange={(notificationLeadMinutes) => onChange((current) => ({ ...current, notificationLeadMinutes: Number(notificationLeadMinutes) }))} options={notificationLeadOptions} title="Интервал уведомления" value={String(settings.notificationLeadMinutes)} />
+    {section === 'notifications' ? <>
+      <Text style={styles.fieldLabel}>Предварительное уведомление</Text>
+      <PlanningValuePicker accessibilityLabel="Интервал уведомления" onChange={(notificationLeadMinutes) => onChange((current) => ({ ...current, notificationLeadMinutes: Number(notificationLeadMinutes) }))} options={notificationLeadOptions} title="Интервал уведомления" value={String(settings.notificationLeadMinutes)} />
+    </> : null}
     <View style={styles.buttonRow}>
       <View style={styles.actionWrap}><ActionButton label="Отмена" onPress={onCancel} tone="secondary" /></View>
-      <View style={styles.actionWrap}><ActionButton disabled={isSaving} label={includePlanFields ? 'Сохранить параметры плана' : 'Сохранить интервал'} onPress={onSave} tone="primary" /></View>
+      <View style={styles.actionWrap}><ActionButton disabled={isSaving} label={section === 'plan' ? 'Сохранить параметры плана' : 'Сохранить интервал'} onPress={onSave} tone="primary" /></View>
     </View>
   </View>;
 }
@@ -449,12 +591,15 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.meta,
     lineHeight: designTokens.typography.lineHeight.meta,
   },
+  syncStatus: { gap: designTokens.space[4], marginTop: designTokens.space[10] },
+  syncStatusTitle: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.meta, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.meta },
   storageDescription: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.meta, lineHeight: designTokens.typography.lineHeight.meta, marginTop: designTokens.space[8] },
   deviceTimeZoneAction: { marginTop: designTokens.space[8] },
   planEditor: { borderTopColor: designTokens.color.border.subtle, borderTopWidth: 1, gap: designTokens.space[8], marginTop: designTokens.space[12], paddingTop: designTokens.space[12] },
   editorTitle: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.label, fontWeight: designTokens.typography.weight.bold, lineHeight: designTokens.typography.lineHeight.label },
   fieldLabel: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.meta, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.meta, marginTop: designTokens.space[4] },
   fieldHint: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.micro, lineHeight: designTokens.typography.lineHeight.micro, marginBottom: designTokens.space[4] },
+  input: { backgroundColor: designTokens.color.surface.canvas, borderColor: designTokens.color.border.subtle, borderWidth: 1, borderRadius: designTokens.radius.row, color: designTokens.color.text.primary, minHeight: designTokens.size.touchTargetMin, paddingHorizontal: designTokens.space[10] },
   pickerRow: { flexDirection: 'row', gap: designTokens.space[8] },
   pickerColumn: { flex: 1 },
   dangerText: {

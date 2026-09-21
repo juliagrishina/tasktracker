@@ -21,7 +21,15 @@ import {
 
 import type { AppDataSource } from './contracts';
 import { getDefaultSettings, resolveTimeZoneId } from './default-settings';
+import {
+  migrateLegacyDatabaseToAutonomousScope,
+  type ScopeMigrationDatabase,
+} from './local-data-scope-migration';
+import { databaseNameForScope, type LocalDataScope } from './local-data-scopes';
+import { migrateLegacyIdsInNativeDatabase } from './native-legacy-id-migration';
 import { migrateDatabase } from './migrations';
+import { createLocalSyncId, createSyncTrackingDataSource, type IncomingSyncConflict, type RemoteSyncChange, type SyncConflict, type SyncMetadataDataSource, type SyncMutationResult, type SyncOutboxMutation } from './sync-outbox';
+import { createStoredSyncConflict } from '../application/sync-conflicts';
 
 interface SettingsRow {
   time_zone_id: string | null;
@@ -142,9 +150,11 @@ interface RecurrenceRevisionRow {
   updated_at: string | null;
 }
 
-class NativeDataSource implements AppDataSource {
+class NativeDataSource implements AppDataSource, SyncMetadataDataSource {
   private databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
   private initializationPromise: Promise<void> | null = null;
+
+  constructor(private readonly scope: LocalDataScope) {}
 
   async initialize(): Promise<void> {
     if (this.initializationPromise === null) {
@@ -152,6 +162,193 @@ class NativeDataSource implements AppDataSource {
     }
 
     await this.initializationPromise;
+  }
+
+  async enqueueSyncMutation(input: Omit<SyncOutboxMutation, 'mutationId' | 'deviceId' | 'expectedVersion' | 'dataGeneration' | 'createdAt'>): Promise<SyncOutboxMutation> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const now = new Date().toISOString();
+    let state = await database.getFirstAsync<{ device_id: string; data_generation: number }>(
+      'SELECT device_id, data_generation FROM sync_state WHERE id = 1',
+    );
+    if (state === null) {
+      state = { device_id: createLocalSyncId(), data_generation: 1 };
+      await database.runAsync(
+        'INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at) VALUES (1, ?, ?, NULL, ?)',
+        [state.device_id, state.data_generation, now],
+      );
+    }
+
+    const versionRow = await database.getFirstAsync<{ version: number }>(
+      'SELECT version FROM sync_entity_versions WHERE entity_type = ? AND entity_id = ?',
+      [input.entityType, input.entityId],
+    );
+    const expectedVersion = versionRow?.version ?? 0;
+    await database.runAsync(
+      `INSERT INTO sync_entity_versions (entity_type, entity_id, version)
+       VALUES (?, ?, ?)
+       ON CONFLICT(entity_type, entity_id) DO UPDATE SET version = excluded.version`,
+      [input.entityType, input.entityId, expectedVersion + 1],
+    );
+
+    const mutation: SyncOutboxMutation = {
+      ...input,
+      mutationId: createLocalSyncId(),
+      deviceId: state.device_id,
+      expectedVersion,
+      dataGeneration: state.data_generation,
+      createdAt: now,
+    };
+    await database.runAsync(
+      `INSERT INTO sync_outbox (
+        mutation_id, device_id, entity_type, entity_id, operation,
+        expected_version, data_generation, payload_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        mutation.mutationId,
+        mutation.deviceId,
+        mutation.entityType,
+        mutation.entityId,
+        mutation.operation,
+        mutation.expectedVersion,
+        mutation.dataGeneration,
+        JSON.stringify(mutation.payload),
+        mutation.createdAt,
+      ],
+    );
+    return mutation;
+  }
+
+  async listSyncOutbox(): Promise<readonly SyncOutboxMutation[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<{
+      mutation_id: string; device_id: string; entity_type: SyncOutboxMutation['entityType']; entity_id: string;
+      operation: SyncOutboxMutation['operation']; expected_version: number; data_generation: number;
+      payload_json: string; created_at: string;
+    }>(`SELECT mutation_id, device_id, entity_type, entity_id, operation,
+          expected_version, data_generation, payload_json, created_at
+        FROM sync_outbox ORDER BY created_at ASC, mutation_id ASC`);
+    return rows.map((row) => ({
+      mutationId: row.mutation_id,
+      deviceId: row.device_id,
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      operation: row.operation,
+      expectedVersion: row.expected_version,
+      dataGeneration: row.data_generation,
+      payload: JSON.parse(row.payload_json),
+      createdAt: row.created_at,
+    }));
+  }
+
+  async acknowledgeSyncMutations(results: readonly SyncMutationResult[]): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.withTransactionAsync(async () => {
+      for (const result of results) {
+        await database.runAsync('DELETE FROM sync_outbox WHERE mutation_id = ?', [result.mutationId]);
+        await database.runAsync(
+          `INSERT INTO sync_entity_versions (entity_type, entity_id, version) VALUES (?, ?, ?)
+           ON CONFLICT(entity_type, entity_id) DO UPDATE SET version = excluded.version`,
+          [result.entityType, result.entityId, result.version],
+        );
+      }
+    });
+  }
+
+  async recordSyncConflicts(conflicts: readonly IncomingSyncConflict[]): Promise<readonly SyncConflict[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const now = new Date().toISOString();
+    const stored = conflicts.map((conflict) => createStoredSyncConflict(conflict, createLocalSyncId(), now));
+    await database.withTransactionAsync(async () => {
+      for (const conflict of stored) {
+        await database.runAsync(
+          `INSERT INTO sync_conflicts (id, local_mutation_json, server_operation, server_version, server_payload_json, server_changed_at, server_device_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [conflict.id, JSON.stringify(conflict.local), conflict.server.operation, conflict.server.version, JSON.stringify(conflict.server.payload), conflict.server.changedAt, conflict.server.deviceId, conflict.createdAt],
+        );
+      }
+    });
+    return stored;
+  }
+
+  async listSyncConflicts(): Promise<readonly SyncConflict[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<{ id: string; local_mutation_json: string; server_operation: 'upsert' | 'delete'; server_version: number; server_payload_json: string; server_changed_at: string; server_device_id: string | null; created_at: string }>(
+      'SELECT id, local_mutation_json, server_operation, server_version, server_payload_json, server_changed_at, server_device_id, created_at FROM sync_conflicts ORDER BY created_at ASC',
+    );
+    return rows.map((row) => ({ id: row.id, local: JSON.parse(row.local_mutation_json) as SyncOutboxMutation, server: { operation: row.server_operation, version: row.server_version, payload: JSON.parse(row.server_payload_json), changedAt: row.server_changed_at, deviceId: row.server_device_id }, createdAt: row.created_at }));
+  }
+
+  async removeSyncConflict(id: string): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.runAsync('DELETE FROM sync_conflicts WHERE id = ?', [id]);
+  }
+
+  async getLastSyncSuccessAt(): Promise<string | null> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<{ last_success_at: string | null }>('SELECT last_success_at FROM sync_state WHERE id = 1');
+    return row?.last_success_at ?? null;
+  }
+
+  async recordSyncSuccess(at: string): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const state = await database.getFirstAsync<{ device_id: string; data_generation: number }>('SELECT device_id, data_generation FROM sync_state WHERE id = 1');
+    if (state === null) {
+      await database.runAsync('INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at, last_success_at) VALUES (1, ?, 1, NULL, ?, ?)', [createLocalSyncId(), at, at]);
+      return;
+    }
+    await database.runAsync('UPDATE sync_state SET last_success_at = ?, updated_at = ? WHERE id = 1', [at, at]);
+  }
+
+  async getSyncCursor(): Promise<number> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<{ pull_cursor: number | null }>('SELECT pull_cursor FROM sync_state WHERE id = 1');
+    return row?.pull_cursor ?? 0;
+  }
+
+  async getLocalDataGeneration(): Promise<number> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const row = await database.getFirstAsync<{ data_generation: number }>('SELECT data_generation FROM sync_state WHERE id = 1');
+    return row?.data_generation ?? 1;
+  }
+
+  async applyRemoteSyncChanges(changes: readonly RemoteSyncChange[], cursor: number): Promise<void> {
+    await this.transaction(async () => {
+      for (const change of changes) await this.applyRemoteSyncChange(change);
+      const database = await this.getDatabase();
+      const current = await database.getFirstAsync<{ device_id: string; data_generation: number }>('SELECT device_id, data_generation FROM sync_state WHERE id = 1');
+      if (current === null) {
+        await database.runAsync('INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at) VALUES (1, ?, 1, ?, ?)', [createLocalSyncId(), cursor, new Date().toISOString()]);
+      } else {
+        await database.runAsync('UPDATE sync_state SET pull_cursor = ?, updated_at = ? WHERE id = 1', [cursor, new Date().toISOString()]);
+      }
+    });
+  }
+
+  async resetForFullResync(dataGeneration: number): Promise<void> {
+    await this.transaction(async () => {
+      const database = await this.getDatabase();
+      const tables = ['recurrence_revisions', 'recurrence_occurrences', 'recurrence_series', 'schedule_blocks', 'transfer_history', 'reminders', 'task_items', 'projects', 'daily_energy_entries'];
+      for (const table of tables) await database.execAsync(`DELETE FROM ${table}`);
+      await database.execAsync('DELETE FROM sync_outbox; DELETE FROM sync_entity_versions; DELETE FROM sync_conflicts;');
+      const state = await database.getFirstAsync<{ device_id: string }>('SELECT device_id FROM sync_state WHERE id = 1');
+      const deviceId = state?.device_id ?? createLocalSyncId();
+      await database.runAsync(
+        `INSERT INTO sync_state (id, device_id, data_generation, pull_cursor, updated_at, last_success_at) VALUES (1, ?, ?, NULL, ?, NULL)
+         ON CONFLICT(id) DO UPDATE SET device_id = excluded.device_id, data_generation = excluded.data_generation, pull_cursor = NULL, updated_at = excluded.updated_at, last_success_at = NULL`,
+        [deviceId, dataGeneration, new Date().toISOString()],
+      );
+      await this.saveSettings(getDefaultSettings());
+    });
   }
 
   async getSettings(): Promise<AppSettings> {
@@ -234,6 +431,29 @@ class NativeDataSource implements AppDataSource {
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         };
+  }
+
+  async clearAll(): Promise<void> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    await database.execAsync('DELETE FROM recurrence_revisions; DELETE FROM recurrence_occurrences; DELETE FROM recurrence_series; DELETE FROM schedule_blocks; DELETE FROM transfer_history; DELETE FROM reminders; DELETE FROM task_items; DELETE FROM projects; DELETE FROM daily_energy_entries; DELETE FROM sync_outbox; DELETE FROM sync_entity_versions; DELETE FROM sync_conflicts; DELETE FROM sync_state;');
+    await this.saveSettings(getDefaultSettings());
+  }
+
+  async listDailyEnergyEntries(): Promise<readonly DailyEnergyEntry[]> {
+    await this.initialize();
+    const database = await this.getDatabase();
+    const rows = await database.getAllAsync<DailyEnergyEntryRow>(
+      `SELECT recorded_on, energy_percent, created_at, updated_at
+      FROM daily_energy_entries
+      ORDER BY recorded_on ASC`,
+    );
+    return rows.map((row) => ({
+      recordedOn: row.recorded_on,
+      energyPercent: row.energy_percent,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
   }
 
   async saveDailyEnergyEntry(entry: DailyEnergyEntry): Promise<void> {
@@ -1082,6 +1302,37 @@ class NativeDataSource implements AppDataSource {
     return result.value;
   }
 
+  private async applyRemoteSyncChange(change: RemoteSyncChange): Promise<void> {
+    const payload = change.payload as Record<string, unknown>;
+    if (change.operation === 'delete') {
+      if (change.entityType === 'projects') await this.deleteProject(change.entityId);
+      else if (change.entityType === 'task_items') await this.deleteTaskItem(change.entityId);
+      else if (change.entityType === 'reminders') await this.deleteReminder(change.entityId);
+      else if (change.entityType === 'schedule_blocks') await this.deleteScheduleBlock(change.entityId);
+      else if (change.entityType === 'recurrence_series') await this.deleteRecurrenceSeries(change.entityId);
+      else if (change.entityType === 'recurrence_occurrences') await this.deleteRecurrenceOccurrence(change.entityId);
+      else if (change.entityType === 'recurrence_revisions') await this.deleteRecurrenceRevision(change.entityId);
+    } else if (change.entityType === 'projects') await this.saveProject({ ...(payload as unknown as Project), id: change.entityId });
+    else if (change.entityType === 'task_items') await this.saveTaskItem({ ...(payload as TaskItem), id: change.entityId });
+    else if (change.entityType === 'reminders') await this.saveReminder({ ...(payload as unknown as Reminder), id: change.entityId });
+    else if (change.entityType === 'schedule_blocks') await this.saveScheduleBlock({ ...(payload as unknown as ScheduleBlock), id: change.entityId });
+    else if (change.entityType === 'recurrence_series') await this.saveRecurrenceSeries({ ...(payload as unknown as RecurrenceSeries), id: change.entityId });
+    else if (change.entityType === 'recurrence_occurrences') await this.saveRecurrenceOccurrence({ ...(payload as unknown as RecurrenceOccurrence), id: change.entityId });
+    else if (change.entityType === 'recurrence_revisions') await this.saveRecurrenceRevision({ ...(payload as unknown as RecurrenceRevision), id: change.entityId });
+    else if (change.entityType === 'transfer_history') await this.saveTransferHistory({ ...(payload as unknown as TransferHistory), id: change.entityId });
+    else if (change.entityType === 'daily_energy_entries') await this.saveDailyEnergyEntry(payload as unknown as DailyEnergyEntry);
+    else if (change.entityType === 'user_settings') {
+      const current = await this.getSettings();
+      await this.saveSettings({ ...current, ...pickSharedSettings(payload) });
+    }
+    const database = await this.getDatabase();
+    await database.runAsync(
+      `INSERT INTO sync_entity_versions (entity_type, entity_id, version) VALUES (?, ?, ?)
+       ON CONFLICT(entity_type, entity_id) DO UPDATE SET version = excluded.version`,
+      [change.entityType, change.entityId, change.version],
+    );
+  }
+
   private mapRecurrenceOccurrence(row: RecurrenceOccurrenceRow): RecurrenceOccurrence {
     return {
       id: row.id,
@@ -1122,19 +1373,42 @@ class NativeDataSource implements AppDataSource {
   }
 
   private async initializeDatabase(): Promise<void> {
+    if (this.scope.kind === 'autonomous') {
+      await migrateLegacyDatabaseToAutonomousScope({
+        openDatabaseAsync: (name) =>
+          SQLite.openDatabaseAsync(name) as unknown as Promise<ScopeMigrationDatabase>,
+        backupDatabaseAsync: ({ sourceDatabase, destDatabase }) =>
+          SQLite.backupDatabaseAsync({
+            sourceDatabase: sourceDatabase as SQLite.SQLiteDatabase,
+            destDatabase: destDatabase as SQLite.SQLiteDatabase,
+          }),
+      });
+    }
+
     const database = await this.getDatabase();
     await migrateDatabase(database);
+    await migrateLegacyIdsInNativeDatabase(database);
   }
 
   private getDatabase(): Promise<SQLite.SQLiteDatabase> {
     if (this.databasePromise === null) {
-      this.databasePromise = SQLite.openDatabaseAsync('tasktracker.db');
+      this.databasePromise = SQLite.openDatabaseAsync(databaseNameForScope(this.scope));
     }
 
     return this.databasePromise;
   }
 }
 
-export function createDataSource(): AppDataSource {
-  return new NativeDataSource();
+function pickSharedSettings(payload: Record<string, unknown>): Partial<AppSettings> {
+  const result: Partial<AppSettings> = {};
+  if (typeof payload.workdayStartsAt === 'string') result.workdayStartsAt = payload.workdayStartsAt;
+  if (typeof payload.workdayEndsAt === 'string') result.workdayEndsAt = payload.workdayEndsAt;
+  if (typeof payload.eveningReviewAt === 'string') result.eveningReviewAt = payload.eveningReviewAt;
+  if (typeof payload.notificationLeadMinutes === 'number') result.notificationLeadMinutes = payload.notificationLeadMinutes;
+  if (typeof payload.completionPromptDeferredOn === 'string' || payload.completionPromptDeferredOn === null) result.completionPromptDeferredOn = payload.completionPromptDeferredOn;
+  return result;
+}
+
+export function createDataSource(scope: LocalDataScope = { kind: 'autonomous' }): AppDataSource {
+  return createSyncTrackingDataSource(new NativeDataSource(scope), scope);
 }

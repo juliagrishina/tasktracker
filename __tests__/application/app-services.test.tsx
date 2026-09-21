@@ -1,5 +1,6 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Pressable, Text, View } from 'react-native';
+import { useEffect } from 'react';
 
 import {
   AppServicesProvider,
@@ -8,6 +9,17 @@ import {
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import { getDefaultSettings } from '../../src/data/default-settings';
 import { createTask } from '../../src/application/backlog-use-cases';
+import type { SyncEngine } from '../../src/application/sync-engine';
+
+const mockSyncGateway = {
+  push: jest.fn(),
+  pull: jest.fn(),
+  getDataGeneration: jest.fn(),
+};
+
+jest.mock('../../src/data/supabase-sync-gateway', () => ({
+  createSupabaseSyncGateway: jest.fn(() => mockSyncGateway),
+}));
 
 function ServicesProbe() {
   const { demoTasks, isReady, settings } = useAppServices();
@@ -52,6 +64,12 @@ function TimeZoneModeProbe() {
   );
 }
 
+function TimeZoneChangeProbe() {
+  const { isReady, settingsActions } = useAppServices();
+  if (!isReady) return <Text>loading timezone change</Text>;
+  return <Pressable onPress={() => void settingsActions.updateTimeZone('Asia/Ho_Chi_Minh')}><Text>Сменить пояс</Text></Pressable>;
+}
+
 function PlanningSettingsProbe() {
   const { isReady, settings, settingsActions } = useAppServices();
 
@@ -69,6 +87,31 @@ function PlanningSettingsProbe() {
       <Text>{`${settings.workdayStartsAt}-${settings.workdayEndsAt}:${settings.eveningReviewAt}:${settings.notificationLeadMinutes}`}</Text>
     </Pressable>
   );
+}
+
+function AccountClearProbe() {
+  const { clearAccountData, isReady } = useAppServices();
+  if (!isReady) return <Text>loading account clear</Text>;
+  return <Pressable onPress={() => void clearAccountData(2)}><Text>Очистить облачную реплику</Text></Pressable>;
+}
+
+function BootReadinessProbe({ events }: { events: string[] }) {
+  const { isReady, settings } = useAppServices();
+
+  useEffect(() => {
+    if (isReady) events.push('provider.ready');
+  }, [events, isReady]);
+
+  return <Text>{isReady ? `локальная копия готова:${settings.notificationLeadMinutes}` : 'локальная копия загружается'}</Text>;
+}
+
+function AutomaticSyncStatusProbe({ onCreate }: { onCreate: () => Promise<void> }) {
+  const { isReady, runBacklogAction, syncStatus } = useAppServices();
+  if (!isReady) return <Text>загрузка статуса</Text>;
+  return <View>
+    <Text>{`${syncStatus.pendingCount}:${syncStatus.lastSuccessAt === null ? 'нет' : 'есть'}`}</Text>
+    <Pressable onPress={() => void runBacklogAction(onCreate)}><Text>Создать проект для автоматической синхронизации</Text></Pressable>
+  </View>;
 }
 
 describe('AppServicesProvider', () => {
@@ -131,6 +174,20 @@ describe('AppServicesProvider', () => {
     });
   });
 
+  test('rebuilds local schedule notifications in the newly effective device timezone', async () => {
+    const source = createInMemoryDataSource();
+    const notificationScheduler = { schedule: jest.fn().mockResolvedValue('notification-1'), cancel: jest.fn() };
+    await source.saveTaskItem({ id: 'timezone-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Созвон', description: null, estimatedDurationMinutes: null, scheduledOn: null, periodStartOn: null, periodEndOn: null, completedAt: null, createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z', deletedAt: null });
+    await source.saveScheduleBlock({ id: 'timezone-block', taskItemId: 'timezone-task', occurrenceId: null, notificationId: null, timeZoneId: 'Europe/Moscow', startsAt: '2030-09-01T10:00:00+03:00', endsAt: '2030-09-01T11:00:00+03:00', createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z', deletedAt: null });
+    const view = await render(<AppServicesProvider source={source} seedDevelopmentData={false} notificationScheduler={notificationScheduler}><TimeZoneChangeProbe /></AppServicesProvider>);
+    await waitFor(() => expect(view.getByText('Сменить пояс')).toBeOnTheScreen());
+    notificationScheduler.schedule.mockClear();
+
+    await fireEvent.press(view.getByText('Сменить пояс'));
+
+    await waitFor(() => expect(notificationScheduler.schedule).toHaveBeenCalledWith(expect.objectContaining({ body: 'Созвон начнётся в 14:00' })));
+  });
+
   test('exposes an action that persists planning settings', async () => {
     const source = createInMemoryDataSource();
     const notificationScheduler = { schedule: jest.fn(), cancel: jest.fn() };
@@ -154,5 +211,162 @@ describe('AppServicesProvider', () => {
         notificationLeadMinutes: 30,
       });
     });
+  });
+
+  test('replaces the current account replica with the generation returned by a successful cloud clear', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' }) as unknown as {
+      getLocalDataGeneration(): Promise<number>;
+      getProject(id: string): Promise<unknown>;
+      saveProject(project: { id: string; title: string; description: null; completedAt: null; createdAt: string; updatedAt: string; deletedAt: null }): Promise<void>;
+    };
+    await source.saveProject({ id: 'project-a', title: 'Удаляемая задача', description: null, completedAt: null, createdAt: '2026-09-04T10:00:00.000Z', updatedAt: '2026-09-04T10:00:00.000Z', deletedAt: null });
+    const view = await render(<AppServicesProvider source={source as never} seedDevelopmentData={false}><AccountClearProbe /></AppServicesProvider>);
+
+    await waitFor(() => expect(view.getByText('Очистить облачную реплику')).toBeOnTheScreen());
+    await fireEvent.press(view.getByText('Очистить облачную реплику'));
+
+    await waitFor(async () => {
+      await expect(source.getProject('project-a')).resolves.toBeNull();
+      await expect(source.getLocalDataGeneration()).resolves.toBe(2);
+    });
+  });
+
+  test('waits for initial account sync before exposing an account replica', async () => {
+    const events: string[] = [];
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-17' });
+    const initialize = source.initialize.bind(source);
+    const getSettings = source.getSettings.bind(source);
+    const listTaskItems = source.listTaskItems.bind(source);
+    let recordedInitialize = false;
+    let recordedSettingsRead = false;
+    let recordedBacklogRead = false;
+    source.initialize = async () => {
+      if (!recordedInitialize) {
+        recordedInitialize = true;
+        events.push('source.initialize');
+      }
+      await initialize();
+    };
+    source.getSettings = async () => {
+      if (!recordedSettingsRead) {
+        recordedSettingsRead = true;
+        events.push('settings.get');
+      }
+      return getSettings();
+    };
+    source.listTaskItems = async () => {
+      if (!recordedBacklogRead) {
+        recordedBacklogRead = true;
+        events.push('backlog.read');
+      }
+      return listTaskItems();
+    };
+
+    let releaseSync: (() => Promise<void>) | null = null;
+    const syncEngine: SyncEngine = {
+      syncNow: jest.fn(() => new Promise<{ pushed: number; pulled: number }>((resolve) => {
+        events.push('sync.syncNow');
+        releaseSync = async () => {
+          await source.saveSettings({ ...getDefaultSettings(), notificationLeadMinutes: 37 });
+          resolve({ pushed: 0, pulled: 1 });
+        };
+      })),
+      notifyLocalMutation: jest.fn(),
+      onForeground: jest.fn(),
+      onNetworkReconnect: jest.fn(),
+      onRealtimeSignal: jest.fn(),
+      dispose: jest.fn(),
+    };
+
+    const view = await render(
+      <AppServicesProvider scope={{ kind: 'account', accountId: 'account-17' }} seedDevelopmentData={false} source={source} syncEngineOverride={syncEngine}>
+        <BootReadinessProbe events={events} />
+      </AppServicesProvider>,
+    );
+
+    await waitFor(() => expect(syncEngine.syncNow).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(events).toEqual([
+      'source.initialize',
+      'sync.syncNow',
+    ]));
+    expect(view.getByText('локальная копия загружается')).toBeOnTheScreen();
+
+    await act(async () => {
+      await releaseSync?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(view.getByText('локальная копия готова:37')).toBeOnTheScreen());
+    expect(events).toEqual([
+      'source.initialize',
+      'sync.syncNow',
+      'settings.get',
+      'backlog.read',
+      'provider.ready',
+    ]);
+  });
+
+  test('opens an existing account replica when the browser is offline', async () => {
+    const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-offline' });
+    await source.saveSettings({ ...getDefaultSettings(), notificationLeadMinutes: 37 });
+    const originalOnlineDescriptor = Object.getOwnPropertyDescriptor(navigator, 'onLine');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    const syncEngine: SyncEngine = {
+      syncNow: jest.fn().mockRejectedValue(new Error('offline')),
+      notifyLocalMutation: jest.fn(),
+      onForeground: jest.fn(),
+      onNetworkReconnect: jest.fn(),
+      onRealtimeSignal: jest.fn(),
+      dispose: jest.fn(),
+    };
+
+    try {
+      const view = await render(
+        <AppServicesProvider scope={{ kind: 'account', accountId: 'account-offline' }} seedDevelopmentData={false} source={source} syncEngineOverride={syncEngine}>
+          <ServicesProbe />
+        </AppServicesProvider>,
+      );
+
+      await waitFor(() => expect(view.getByText('37:нет данных')).toBeOnTheScreen());
+      expect(syncEngine.syncNow).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalOnlineDescriptor === undefined) delete (navigator as { onLine?: boolean }).onLine;
+      else Object.defineProperty(navigator, 'onLine', originalOnlineDescriptor);
+    }
+  });
+
+  test('refreshes the visible sync status after a debounced local account change is synchronized', async () => {
+    jest.useFakeTimers();
+    try {
+      const source = createInMemoryDataSource({ kind: 'account', accountId: 'account-a' });
+      mockSyncGateway.push.mockImplementation(async (mutations) => ({
+        mutations: mutations.map((mutation: { mutationId: string; entityType: string; entityId: string; operation: 'upsert' | 'delete' }) => ({ ...mutation, version: 1 })),
+        conflicts: [],
+      }));
+      mockSyncGateway.pull.mockResolvedValue([]);
+
+      const view = await render(
+        <AppServicesProvider scope={{ kind: 'account', accountId: 'account-a' }} seedDevelopmentData={false} source={source}>
+          <AutomaticSyncStatusProbe onCreate={() => source.saveProject({
+            id: 'project-a', title: 'Проект для синхронизации', description: null, completedAt: null,
+            createdAt: '2026-09-14T10:00:00.000Z', updatedAt: '2026-09-14T10:00:00.000Z', deletedAt: null,
+          })} />
+        </AppServicesProvider>,
+      );
+
+      await waitFor(() => expect(view.getByText('0:есть')).toBeOnTheScreen());
+      await fireEvent.press(view.getByText('Создать проект для автоматической синхронизации'));
+      await waitFor(() => expect(view.getByText('1:есть')).toBeOnTheScreen());
+      await act(async () => {
+        jest.advanceTimersByTime(500);
+        await Promise.resolve();
+      });
+      await waitFor(async () => {
+        await expect(source.listSyncOutbox()).resolves.toEqual([]);
+      });
+      await waitFor(() => expect(view.getByText('0:есть')).toBeOnTheScreen());
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

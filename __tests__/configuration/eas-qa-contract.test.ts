@@ -10,7 +10,10 @@ describe('EAS QA delivery contract', () => {
     };
     const guard = readRepositoryFile('tools', 'eas', 'verify-qa-staging.mjs');
 
-    expect(packageJson.scripts?.['qa:verify']).toBe('node tools/eas/verify-qa-staging.mjs');
+    expect(packageJson.scripts?.['qa:config']).toBe('node scripts/verify-qa-staging-config.cjs --env-file .env.local');
+    expect(packageJson.scripts?.['qa:verify']).toContain('npm run qa:config');
+    expect(packageJson.scripts?.['qa:verify']).toContain('npm run typecheck');
+    expect(packageJson.scripts?.['qa:verify']).toContain('npm run lint');
     expect(guard).toContain('https://zwckrqbdepgvenanyans.supabase.co');
     expect(guard).toContain("ensureIgnored('.env.local')");
     expect(guard).toContain('The local QA environment must contain only the two approved public staging variables.');

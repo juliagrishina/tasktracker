@@ -5,6 +5,7 @@ import { formatDuration } from '../format-duration';
 import { PlanningValuePicker, type PlanningValueOption } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
 import { getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
+import { createUuid } from '../../domain/uuid';
 
 export type TaskScheduleMode = 'none' | 'date' | 'period';
 export type TaskRepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'intervalDays';
@@ -86,7 +87,7 @@ export function createDefaultBlock(defaultDate: string, now = new Date(), timeZo
   return {
     date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
     durationMinutes: '60',
-    id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: createUuid(),
     startsAt: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
   };
 }
@@ -121,6 +122,10 @@ export function validateTaskPlanningDraft(value: TaskPlanningDraft): string | nu
 
 export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showRepeat = true, value }: TaskPlanningFieldsProps) {
   const update = (patch: Partial<TaskPlanningDraft>) => onChange({ ...value, ...patch });
+  const updateScheduledDate = (scheduledOn: string) => update({
+    scheduledOn,
+    blocks: value.blocks.map((block, index) => index === 0 ? { ...block, date: scheduledOn } : block),
+  });
 
   return (
     <View style={styles.section}>
@@ -141,7 +146,7 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
         })}
       </View>
       {value.scheduleMode === 'date' ? (
-        <Field label="Дата задачи"><PlanningDatePicker accessibilityLabel="Дата задачи" onChange={(scheduledOn) => update({ scheduledOn })} value={value.scheduledOn} /></Field>
+        <Field label="Дата задачи"><PlanningDatePicker accessibilityLabel="Дата задачи" onChange={updateScheduledDate} value={value.scheduledOn} /></Field>
       ) : null}
       {value.scheduleMode === 'period' ? (
         <View>
@@ -149,6 +154,32 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
           <Field label="Конец периода"><PlanningDatePicker accessibilityLabel="Конец периода задачи" onChange={(periodEndOn) => update({ periodEndOn })} value={value.periodEndOn} /></Field>
         </View>
       ) : null}
+      <View style={styles.blockHeader}>
+        <Text style={styles.label}>Временные блоки</Text>
+        <Pressable
+          accessibilityLabel="Добавить блок времени"
+          accessibilityRole="button"
+          onPress={() => { if (defaultBlock === null) onNoFreeSlot?.(); else update({ blocks: [...value.blocks, { ...defaultBlock, id: createUuid() }] }); }}
+          style={styles.addBlockButton}>
+          <Text style={styles.addBlockText}>Добавить блок времени</Text>
+        </Pressable>
+      </View>
+      {value.blocks.map((block, index) => {
+        const derivesDateFromTask = value.scheduleMode === 'date' && index === 0;
+        return <View key={block.id} style={styles.block}>
+          <View style={styles.blockTitleRow}>
+            <Text style={styles.blockTitle}>Блок {index + 1}</Text>
+            <Pressable accessibilityLabel={`Удалить блок ${index + 1}`} onPress={() => update({ blocks: value.blocks.filter((entry) => entry.id !== block.id) })}>
+              <Text style={styles.removeBlockText}>Удалить</Text>
+            </Pressable>
+          </View>
+          {derivesDateFromTask ? <Text style={styles.derivedDate}>{`На дату задачи: ${formatPlanningDate(value.scheduledOn)}`}</Text> : <Field label="Дата"><PlanningDatePicker accessibilityLabel={`Дата блока ${index + 1}`} onChange={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} /></Field>}
+          <Text style={styles.label}>Начало</Text>
+          <PlanningValuePicker accessibilityLabel={`Начало блока ${index + 1}`} onChange={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} options={timeOptions} title="Начало блока" value={block.startsAt} />
+          <Text style={styles.label}>Длительность</Text>
+          <PlanningValuePicker accessibilityLabel={`Длительность блока ${index + 1}`} onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} options={durationOptions} title="Длительность блока" value={block.durationMinutes} />
+        </View>;
+      })}
       {showRepeat ? <>
         <Text style={styles.label}>Повторение</Text>
         <View style={styles.chips}>
@@ -171,33 +202,13 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
         ) : null}
         {value.repeatFrequency === 'weekly' ? <View><Text style={styles.label}>Дни недели</Text><View style={styles.chips}>{[['Пн', 1], ['Вт', 2], ['Ср', 3], ['Чт', 4], ['Пт', 5], ['Сб', 6], ['Вс', 0]].map(([label, day]) => { const selected = value.repeatWeekdays.includes(day as number); return <Pressable accessibilityLabel={String(label)} key={String(label)} onPress={() => update({ repeatWeekdays: selected ? value.repeatWeekdays.filter((entry) => entry !== day) : [...value.repeatWeekdays, day as number] })} style={[styles.chip, selected && styles.chipSelected]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></Pressable>; })}</View></View> : null}
       </> : null}
-      <View style={styles.blockHeader}>
-        <Text style={styles.label}>Временные блоки</Text>
-        <Pressable
-          accessibilityLabel="Добавить блок времени"
-          accessibilityRole="button"
-          onPress={() => { if (defaultBlock === null) onNoFreeSlot?.(); else update({ blocks: [...value.blocks, { ...defaultBlock, id: `${defaultBlock.id}-${value.blocks.length + 1}` }] }); }}
-          style={styles.addBlockButton}>
-          <Text style={styles.addBlockText}>Добавить блок времени</Text>
-        </Pressable>
-      </View>
-      {value.blocks.map((block, index) => (
-        <View key={block.id} style={styles.block}>
-          <View style={styles.blockTitleRow}>
-            <Text style={styles.blockTitle}>Блок {index + 1}</Text>
-            <Pressable accessibilityLabel={`Удалить блок ${index + 1}`} onPress={() => update({ blocks: value.blocks.filter((entry) => entry.id !== block.id) })}>
-              <Text style={styles.removeBlockText}>Удалить</Text>
-            </Pressable>
-          </View>
-          <Field label="Дата"><PlanningDatePicker accessibilityLabel={`Дата блока ${index + 1}`} onChange={(date) => updateBlock(value, block.id, { date }, onChange)} value={block.date} /></Field>
-          <Text style={styles.label}>Начало</Text>
-          <PlanningValuePicker accessibilityLabel={`Начало блока ${index + 1}`} onChange={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} options={timeOptions} title="Начало блока" value={block.startsAt} />
-          <Text style={styles.label}>Длительность</Text>
-          <PlanningValuePicker accessibilityLabel={`Длительность блока ${index + 1}`} onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} options={durationOptions} title="Длительность блока" value={block.durationMinutes} />
-        </View>
-      ))}
     </View>
   );
+}
+
+function formatPlanningDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
+  return match === null ? 'не указана' : `${match[3]}.${match[2]}.${match[1]}`;
 }
 
 function updateBlock(value: TaskPlanningDraft, id: string, patch: Partial<TaskPlanningBlock>, onChange: (value: TaskPlanningDraft) => void) {
@@ -326,6 +337,12 @@ const styles = StyleSheet.create({
     fontSize: designTokens.typography.size.label,
     fontWeight: designTokens.typography.weight.bold,
     lineHeight: designTokens.typography.lineHeight.label,
+  },
+  derivedDate: {
+    color: designTokens.color.text.secondary,
+    fontSize: designTokens.typography.size.meta,
+    lineHeight: designTokens.typography.lineHeight.meta,
+    marginTop: designTokens.space[8],
   },
   removeBlockText: {
     color: designTokens.color.feedback.danger.foreground,

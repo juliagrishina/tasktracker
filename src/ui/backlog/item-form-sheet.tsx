@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppServices } from '../../application/app-services-provider';
 import type { CreateTimedReminderTaskWithPlanningInput, SaveTaskWithPlanningInput, ScheduleConflict } from '../../application/planning-types';
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
+import { createUuid } from '../../domain/uuid';
 import { designTokens } from '../design/tokens';
 import { formatDuration } from '../format-duration';
 import {
@@ -62,6 +63,7 @@ interface ItemFormSheetProps {
     onSave: (input: { title: string; description: string; estimatedDurationMinutes: number | null; projectId: string | null; planning: TaskPlanningDraft }) => Promise<void>;
   };
   planningContext?: {
+    createDefaultTimeBlock?: boolean;
     defaultDate: string;
     onPlanningDraftChange?: (draft: TaskPlanningDraft) => void;
   };
@@ -78,7 +80,7 @@ function formatPlanningDate(value: string): string {
 }
 
 function createItemId(type: ItemFormType): string {
-  return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return createUuid();
 }
 
 function getInitialProjectId(item: FormItem | undefined, projectId: string | null | undefined): string | null {
@@ -172,6 +174,11 @@ export function ItemFormSheet({
   const [isNoFreeSlotDialogVisible, setIsNoFreeSlotDialogVisible] = useState(false);
   const [isAlternativeDatePickerVisible, setIsAlternativeDatePickerVisible] = useState(false);
   const isPlanTaskForm = (type === 'task' || type === 'subtask') && planningContext !== undefined;
+  const canComplete = mode === 'edit' && item !== undefined && isActionableItem(item) && item.completedAt === null && onComplete !== undefined;
+  const canResume = mode === 'edit' && item !== undefined && isActionableItem(item) && item.completedAt !== null && onResume !== undefined;
+  const canDelete = mode === 'edit' && item !== undefined && isActionableItem(item) && onDelete !== undefined;
+  const usesActionGrid = mode === 'edit' && 2 + Number(canComplete) + Number(canResume) + Number(canDelete) >= 3;
+  const shouldCreateDefaultTimeBlock = isPlanTaskForm && mode === 'create' && planningContext?.createDefaultTimeBlock === true;
   const planningDate = planningDateOverride ?? planningContext?.defaultDate;
   const defaultBlock = useMemo(
     () => {
@@ -193,7 +200,8 @@ export function ItemFormSheet({
     void planningActions.getPlanScheduleBlocks(planningDate).then((nextBlocks) => {
       if (!isCurrent) return;
       setPlanBlocks(nextBlocks);
-      if (pendingAlternativeDate !== planningDate) return;
+      const shouldAddBlock = pendingAlternativeDate === planningDate || shouldCreateDefaultTimeBlock;
+      if (!shouldAddBlock) return;
       const startsAt = findFirstAvailablePlanTime({ blocks: nextBlocks, date: planningDate, durationMinutes: 60, now: new Date(), settings });
       if (startsAt === null) {
         setIsNoFreeSlotDialogVisible(true);
@@ -201,11 +209,15 @@ export function ItemFormSheet({
         return;
       }
       const block = { ...createDefaultBlock(planningDate, new Date(), settings.timeZoneId), date: planningDate, startsAt };
-      setPlanningDraft((draft) => ({ ...draft, blocks: [...draft.blocks, block], scheduleMode: 'date', scheduledOn: planningDate }));
+      setPlanningDraft((draft) => (
+        draft.blocks.length > 0 && pendingAlternativeDate !== planningDate
+          ? draft
+          : { ...draft, blocks: [...draft.blocks, block], scheduleMode: 'date', scheduledOn: planningDate }
+      ));
       setPendingAlternativeDate(null);
     });
     return () => { isCurrent = false; };
-  }, [isPlanTaskForm, pendingAlternativeDate, planningActions, planningDate, settings, visible]);
+  }, [isPlanTaskForm, pendingAlternativeDate, planningActions, planningDate, settings, shouldCreateDefaultTimeBlock, visible]);
   useEffect(() => {
     if (!visible || !isPlanTaskForm || item === undefined || !('kind' in item)) return;
     if (occurrenceEdit !== undefined) {
@@ -284,7 +296,7 @@ export function ItemFormSheet({
           };
         });
         const recurrence = planningDraft.repeatFrequency === 'none' ? null : {
-          id: `series-${taskId}`,
+          id: createUuid(),
           frequency: planningDraft.repeatFrequency,
           interval: Number(planningDraft.repeatInterval),
           weekdays: planningDraft.repeatFrequency === 'weekly' && planningDraft.repeatWeekdays.length > 0 ? planningDraft.repeatWeekdays : undefined,
@@ -408,7 +420,7 @@ export function ItemFormSheet({
             const reminderId = item?.id ?? createItemId(type);
             const reminderDate = emptyToNull(remindsOn);
             if (reminderDate === null) throw new Error('Укажите дату напоминания');
-            const taskId = `task-${reminderId}`;
+            const taskId = createUuid();
             const startsAt = new Date(getInstantInTimeZone(reminderDate, reminderTime, settings.timeZoneId));
             const timedReminderInput: CreateTimedReminderTaskWithPlanningInput = {
               reminder: { id: reminderId, ...reminderInput, createdAt: now },
@@ -417,7 +429,7 @@ export function ItemFormSheet({
               planning: {
                 taskId,
                 recurrence: null,
-                blocks: [{ id: `block-${taskId}`, taskItemId: taskId, occurrenceId: null, timeZoneId: settings.timeZoneId, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
+                blocks: [{ id: createUuid(), taskItemId: taskId, occurrenceId: null, timeZoneId: settings.timeZoneId, startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + (estimatedDurationMinutes ?? 60) * 60_000).toISOString(), createdAt: now, updatedAt: now, deletedAt: null }],
               },
             };
             const result = await planningActions.createTimedReminderTaskWithPlanning(timedReminderInput);
@@ -579,14 +591,14 @@ export function ItemFormSheet({
             {isNoFreeSlotDialogVisible ? <View style={styles.noFreeSlotDialog}><Text style={styles.noFreeSlotTitle}>{`На ${formatPlanningDate(planningDate ?? '')} нет свободного окна на 1 ч.`}</Text>{isAlternativeDatePickerVisible ? <PlanningDatePicker accessibilityLabel="Выбрать другой день" onChange={(date) => { setPlanningDateOverride(date); setPlanningDraft((draft) => ({ ...draft, scheduleMode: 'date', scheduledOn: date })); setPendingAlternativeDate(date); setIsAlternativeDatePickerVisible(false); }} value={planningDate ?? ''} /> : <><Text style={styles.noFreeSlotCopy}>Выберите другой день или укажите время вручную. При пересечении потребуется подтверждение.</Text><Pressable accessibilityLabel="Запланировать на другой день" onPress={() => setIsAlternativeDatePickerVisible(true)} style={styles.secondaryChoice}><Text style={styles.secondaryChoiceText}>Запланировать на другой день</Text></Pressable><Pressable accessibilityLabel="Все равно запланировать" onPress={() => { const block = createDefaultBlock(planningDate ?? '', new Date(), settings.timeZoneId); setPlanningDraft((draft) => ({ ...draft, blocks: [...draft.blocks, block] })); setIsNoFreeSlotDialogVisible(false); }} style={styles.primaryChoice}><Text style={styles.primaryActionText}>Все равно запланировать</Text></Pressable></>}</View> : null}
             {pendingConflict === null ? null : <View>{pendingConflict.conflicts.map((conflict) => <Text key={`${conflict.candidate.id}-${conflict.block.id}`} style={styles.error}>{`${conflict.itemTitle}: ${getTimeInTimeZone(conflict.startsAt, settings.timeZoneId)}–${getTimeInTimeZone(conflict.endsAt, settings.timeZoneId)}`}</Text>)}<Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable></View>}
           </ScrollView>
-          <View style={styles.footer}>
-            <Pressable onPress={onClose} style={[styles.action, styles.secondaryAction]}>
+          <View style={[styles.footer, usesActionGrid && styles.footerGrid]} testID="item-form-actions">
+            <Pressable onPress={onClose} style={[styles.action, usesActionGrid && styles.gridAction, styles.secondaryAction]} testID="item-form-action-cancel">
               <Text style={styles.secondaryActionText}>Отмена</Text>
             </Pressable>
-            {mode === 'edit' && item !== undefined && isActionableItem(item) && item.completedAt === null && onComplete !== undefined ? <Pressable accessibilityLabel="Выполнить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onComplete(item))} style={[styles.action, styles.completeAction, isSaving && styles.disabledAction]}><Text style={styles.primaryActionText}>Выполнено</Text></Pressable> : null}
-            {mode === 'edit' && item !== undefined && isActionableItem(item) && item.completedAt !== null && onResume !== undefined ? <Pressable accessibilityLabel="Возобновить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onResume(item))} style={[styles.action, styles.completeAction, isSaving && styles.disabledAction]}><Text style={styles.primaryActionText}>Возобновить</Text></Pressable> : null}
-            {mode === 'edit' && item !== undefined && isActionableItem(item) && onDelete !== undefined ? <Pressable accessibilityLabel="Удалить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void (async () => { if (await confirmBacklogDeletion()) await onDelete(item); })()} style={[styles.action, styles.deleteAction, isSaving && styles.disabledAction]}><Text style={styles.deleteActionText}>Удалить</Text></Pressable> : null}
-            <Pressable accessibilityState={{ disabled: isSaving }} onPress={() => void submit()} style={[styles.action, styles.primaryAction, isSaving && styles.disabledAction]}>
+            {canComplete ? <Pressable accessibilityLabel="Выполнить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onComplete(item))} style={[styles.action, usesActionGrid && styles.gridAction, styles.completeAction, isSaving && styles.disabledAction]} testID="item-form-action-complete"><Text style={styles.primaryActionText}>Выполнено</Text></Pressable> : null}
+            {canResume ? <Pressable accessibilityLabel="Возобновить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void submit(() => onResume(item))} style={[styles.action, usesActionGrid && styles.gridAction, styles.completeAction, isSaving && styles.disabledAction]} testID="item-form-action-resume"><Text style={styles.primaryActionText}>Возобновить</Text></Pressable> : null}
+            {canDelete ? <Pressable accessibilityLabel="Удалить дело из редактора" accessibilityState={{ disabled: isSaving }} onPress={() => void (async () => { if (await confirmBacklogDeletion()) await onDelete(item); })()} style={[styles.action, usesActionGrid && styles.gridAction, styles.deleteAction, isSaving && styles.disabledAction]} testID="item-form-action-delete"><Text style={styles.deleteActionText}>Удалить</Text></Pressable> : null}
+            <Pressable accessibilityState={{ disabled: isSaving }} onPress={() => void submit()} style={[styles.action, usesActionGrid && styles.gridAction, styles.primaryAction, isSaving && styles.disabledAction]} testID="item-form-action-save">
               <Text style={styles.primaryActionText}>{isSaving ? 'Сохранение…' : isPlanTaskForm ? mode === 'create' ? 'Создать' : 'Сохранить' : 'Сохранить'}</Text>
             </Pressable>
           </View>
@@ -723,12 +735,20 @@ const styles = StyleSheet.create({
     paddingVertical: designTokens.space[12],
     backgroundColor: designTokens.color.surface.raised,
   },
+  footerGrid: {
+    flexWrap: 'wrap',
+  },
   action: {
     minHeight: designTokens.size.touchTargetMin,
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: designTokens.radius.control,
+  },
+  gridAction: {
+    flex: 0,
+    flexBasis: '48%',
+    width: '48%',
   },
   primaryAction: { backgroundColor: designTokens.color.primary },
   completeAction: { backgroundColor: designTokens.color.feedback.success.base },
