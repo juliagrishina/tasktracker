@@ -14,6 +14,10 @@ function assertEnergyPercent(energyPercent: number | null): void {
   }
 }
 
+export function getDailyEnergyForDate(source: AppDataSource, isoDate: string): Promise<DailyEnergyEntry | null> {
+  return source.getDailyEnergyEntry(isoDate);
+}
+
 export async function getDailyEnergyForCurrentDay(
   source: AppDataSource,
   now = new Date(),

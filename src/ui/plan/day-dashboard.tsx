@@ -25,7 +25,7 @@ import { PlanPeriodNavigator } from './plan-period-navigator';
 import { formatPlanDayHeaderDate, type PlanViewMode } from './plan-period-model';
 import { getPlanLoadAppearance } from './plan-load-appearance';
 import { DayTimeline } from './day-timeline';
-import type { Reminder, ScheduleBlock, TaskItem } from '../../domain/entities';
+import type { DailyEnergyEntry, Reminder, ScheduleBlock, TaskItem } from '../../domain/entities';
 import type { PlanDayReadModel } from '../../application/plan-read-model';
 import type { EveningReviewItem } from '../../application/evening-review';
 
@@ -77,6 +77,7 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
   const [completedUntimedTaskKeys, setCompletedUntimedTaskKeys] = useState<ReadonlySet<string>>(new Set());
   const [isCompleting, setIsCompleting] = useState(false);
   const [eveningReviewItems, setEveningReviewItems] = useState<readonly EveningReviewItem[]>([]);
+  const [eveningReviewEnergy, setEveningReviewEnergy] = useState<DailyEnergyEntry | null>(null);
   const [isEveningReviewVisible, setIsEveningReviewVisible] = useState(false);
   const [quickActionTarget, setQuickActionTarget] = useState<QuickActionTarget | null>(null);
   const [pendingQuickAction, setPendingQuickAction] = useState<PlanTaskAction | null>(null);
@@ -257,7 +258,12 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
   };
   const openEveningReview = async () => {
     if (services === null) return;
-    setEveningReviewItems(await services.planningActions.getEveningReviewItems(selectedDate));
+    const [items, energy] = await Promise.all([
+      services.planningActions.getEveningReviewItems(selectedDate),
+      services.planningActions.getDailyEnergyForDate(selectedDate),
+    ]);
+    setEveningReviewItems(items);
+    setEveningReviewEnergy(energy);
     setIsEveningReviewVisible(true);
   };
   const runQuickAction = async (action: PlanTaskAction, scope: 'occurrence' | 'series' = 'occurrence') => {
@@ -473,7 +479,7 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
       {completionCandidate === null || isCompletionPromptDeferred ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) { setCompletionPromptDeferredDate(completionPromptDate); setCompletionCandidate(null); void services?.settingsActions.deferCompletionPromptsUntil(completionPromptDate); } }} onUnfinished={() => { if (!isCompleting) setIsUnfinishedDialogVisible(true); }} taskTitle={completionCandidate.task.title} visible={!isUnfinishedDialogVisible} />}
       {completionCandidate === null || isCompletionPromptDeferred ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
       {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
-      <EveningReviewDialog energy={services?.dailyEnergy ?? null} items={eveningReviewItems} onEditEnergy={onEditDailyEnergy} onRequestClose={() => setIsEveningReviewVisible(false)} visible={isEveningReviewVisible} />
+      <EveningReviewDialog energy={selectedDate === getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId) ? services?.dailyEnergy ?? null : eveningReviewEnergy} items={eveningReviewItems} onEditEnergy={selectedDate === getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId) ? onEditDailyEnergy : undefined} onRequestClose={() => setIsEveningReviewVisible(false)} reviewDate={selectedDate} visible={isEveningReviewVisible} />
       {quickActionTarget === null ? null : <PlanTaskActionsDialog isCompleted={quickActionTarget.isCompleted} itemKind={quickActionTarget.itemKind} onAction={chooseQuickAction} onRequestClose={() => setQuickActionTarget(null)} taskTitle={quickActionTarget.item.title} visible={pendingQuickAction === null && !isQuickDeleteConfirmVisible} />}
       {quickActionTarget === null || pendingQuickAction === null ? null : <RecurrenceScopeDialog actionLabel={pendingQuickAction === 'complete' ? 'Выполнить повторение' : pendingQuickAction === 'delete' ? 'Удалить повторение' : 'Вернуть повторение в Backlog'} onChoose={async (scope) => { if (pendingQuickAction === 'delete' && scope === 'series') { setPendingQuickAction(null); setIsQuickDeleteConfirmVisible(true); } else await runQuickAction(pendingQuickAction, scope); }} onRequestClose={() => setPendingQuickAction(null)} visible />}
       {quickActionTarget === null ? null : <DeletePlanTaskDialog deletesSeries={quickActionTarget.occurrence !== null} itemKind={quickActionTarget.itemKind} onConfirm={() => void runQuickAction('delete', 'series')} onRequestClose={() => { setIsQuickDeleteConfirmVisible(false); setPendingQuickAction(null); }} visible={isQuickDeleteConfirmVisible} />}

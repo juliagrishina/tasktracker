@@ -64,7 +64,7 @@ import type { LocalNotificationScheduler } from './notification-scheduling';
 import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveRecurrenceRevision, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveRecurrenceRevisionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 import { updatePlanningSettings, type UpdatePlanningSettingsInput } from './settings-use-cases';
-import { getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
+import { getDailyEnergyForDate, getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
 import { createSupabaseSyncGateway } from '../data/supabase-sync-gateway';
 import { supabase } from '../data/supabase-client';
 import { createSyncEngine, type SyncActivityState, type SyncEngine, type SyncEngineStore } from './sync-engine';
@@ -100,6 +100,7 @@ interface PlanningActions {
   getPlanUntimedReminders(isoDate: string): ReturnType<typeof getPlanUntimedReminders>;
   getPlanUntimedTasks(isoDate: string): ReturnType<typeof getPlanUntimedTasks>;
   getEveningReviewItems(isoDate: string): ReturnType<typeof getEveningReviewItems>;
+  getDailyEnergyForDate(isoDate: string): ReturnType<typeof getDailyEnergyForDate>;
   continueIncompleteTask(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; now?: Date }): Promise<void>;
   returnIncompleteTaskToBacklog(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; reason: string | null }): Promise<void>;
   returnPlanItemToBacklog(input: Parameters<typeof returnPlanItemToBacklog>[1]): Promise<void>;
@@ -353,6 +354,7 @@ export function AppServicesProvider({
       getPlanUntimedReminders: (isoDate) => getPlanUntimedReminders(appSource, isoDate),
       getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
       getEveningReviewItems: (isoDate) => getEveningReviewItems(appSource, isoDate),
+      getDailyEnergyForDate: (isoDate) => getDailyEnergyForDate(appSource, isoDate),
       continueIncompleteTask: (input) => continueIncompleteTask(appSource, input, notificationScheduler),
       returnIncompleteTaskToBacklog: (input) => runBacklogAction(() => returnIncompleteTaskToBacklog(appSource, input, notificationScheduler)),
       returnPlanItemToBacklog: (input) => runBacklogAction(() => returnPlanItemToBacklog(appSource, input, notificationScheduler)),

@@ -1,5 +1,6 @@
 import { createInMemoryDataSource } from '../../src/data/data-source.web';
 import {
+  getDailyEnergyForDate,
   getDailyEnergyForCurrentDay,
   saveDailyEnergyForCurrentDay,
 } from '../../src/application/energy-use-cases';
@@ -60,6 +61,17 @@ describe('daily energy use cases', () => {
       energyPercent: 80,
       createdAt: '2026-08-04T08:00:00.000Z',
       updatedAt: '2026-08-04T18:00:00.000Z',
+    });
+  });
+
+  test('reads the energy entry for an explicitly selected historic day', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveDailyEnergyEntry({ recordedOn: '2026-09-15', energyPercent: 58, createdAt: '2026-09-15T08:00:00.000Z', updatedAt: '2026-09-15T08:00:00.000Z' });
+    await source.saveDailyEnergyEntry({ recordedOn: '2026-09-21', energyPercent: 10, createdAt: '2026-09-21T08:00:00.000Z', updatedAt: '2026-09-21T08:00:00.000Z' });
+
+    await expect(getDailyEnergyForDate(source, '2026-09-15')).resolves.toMatchObject({
+      recordedOn: '2026-09-15',
+      energyPercent: 58,
     });
   });
 

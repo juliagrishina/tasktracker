@@ -9,24 +9,26 @@ interface EveningReviewDialogProps {
   items: readonly EveningReviewItem[];
   onEditEnergy?: () => void;
   onRequestClose: () => void;
+  reviewDate: string;
   visible: boolean;
 }
 
-export function EveningReviewDialog({ energy, items, onEditEnergy, onRequestClose, visible }: EveningReviewDialogProps) {
+export function EveningReviewDialog({ energy, items, onEditEnergy, onRequestClose, reviewDate, visible }: EveningReviewDialogProps) {
+  const formattedDate = formatReviewDate(reviewDate);
   return (
     <Modal animationType="fade" onRequestClose={onRequestClose} transparent visible={visible}>
       <View style={styles.overlay}>
         <View accessibilityViewIsModal style={styles.dialog}>
           <Text style={styles.title}>Вечерняя проверка</Text>
-          <Text style={styles.description}>Незавершённые дела на сегодня</Text>
-          {items.length === 0 ? <Text style={styles.empty}>На сегодня незавершённых дел нет.</Text> : <View style={styles.items}>
+          <Text style={styles.description}>Незавершённые дела на {formattedDate}</Text>
+          {items.length === 0 ? <Text style={styles.empty}>На {formattedDate} незавершённых дел нет.</Text> : <View style={styles.items}>
             {items.map((item) => <View key={`${item.kind}-${item.id}-${item.occurrence?.occursOn ?? 'single'}`} style={styles.item}>
               <Text style={styles.itemKind}>{item.kind === 'task' ? 'Задача' : 'Напоминание'}</Text>
               <Text style={styles.itemTitle}>{item.title}</Text>
             </View>)}
           </View>}
           <View style={styles.energySection}>
-            <Text style={styles.energyTitle}>Энергия за сегодня</Text>
+            <Text style={styles.energyTitle}>Энергия за {formattedDate}</Text>
             <Text style={styles.energyValue}>{energy?.energyPercent === null || energy === null ? 'Не указана' : `${energy.energyPercent}%`}</Text>
             {onEditEnergy === undefined ? null : <Pressable accessibilityLabel={energy?.energyPercent === null || energy === null ? 'Указать оценку энергии' : 'Изменить оценку энергии'} accessibilityRole="button" onPress={onEditEnergy} style={({ pressed }) => [styles.energyAction, pressed && styles.pressed]}>
               <Text style={styles.energyActionText}>{energy?.energyPercent === null || energy === null ? 'Указать оценку' : 'Изменить'}</Text>
@@ -40,6 +42,11 @@ export function EveningReviewDialog({ energy, items, onEditEnergy, onRequestClos
       </View>
     </Modal>
   );
+}
+
+function formatReviewDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-');
+  return `${day}.${month}.${year}`;
 }
 
 const styles = StyleSheet.create({
