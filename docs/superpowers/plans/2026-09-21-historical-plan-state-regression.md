@@ -289,7 +289,7 @@ Run: `git status --short`
 
 Expected: no whitespace errors and only intended source, test, and documentation changes.
 
-- [ ] **Step 4: Commit and push the documented correction**
+- [x] **Step 4: Commit and push the documented correction**
 
 ```bash
 git add docs/superpowers/specs/2026-08-22-epic-04-canonical-day-plan-design.md docs/superpowers/plans/2026-09-21-historical-plan-state-regression.md
