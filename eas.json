@@ -1,0 +1,9 @@
+{
+  "build": {
+    "qa": {
+      "distribution": "internal",
+      "channel": "qa",
+      "environment": "preview"
+    }
+  }
+}
