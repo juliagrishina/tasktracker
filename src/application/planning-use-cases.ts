@@ -629,7 +629,7 @@ export async function returnPlanItemToBacklog(source: AppDataSource, input: Retu
 
 export async function getPlanScheduleBlocks(source: AppDataSource, isoDate: string): Promise<readonly ScheduleBlock[]> {
   const [blocks, series, tasks] = await Promise.all([source.listScheduleBlocks(), source.listRecurrenceSeries(), source.listTaskItems()]);
-  const taskIds = new Set(tasks.filter((task) => task.completedAt === null || blocks.some((block) => block.taskItemId === task.id && getDateInTimeZone(task.completedAt!, block.timeZoneId) === isoDate)).map((task) => task.id));
+  const taskIds = new Set(tasks.filter((task) => task.completedAt === null || blocks.some((block) => block.taskItemId === task.id && block.occurrenceId === null && doesScheduleBlockOverlapDate(block, isoDate))).map((task) => task.id));
   const recurringTaskIds = new Set(series.filter((candidate) => candidate.itemKind === 'task').map((candidate) => candidate.itemId));
   const projected: ScheduleBlock[] = blocks.filter((block) => block.occurrenceId === null && taskIds.has(block.taskItemId) && !recurringTaskIds.has(block.taskItemId));
   projected.push(...blocks.filter((block) => block.occurrenceId !== null && taskIds.has(block.taskItemId) && recurringTaskIds.has(block.taskItemId)));

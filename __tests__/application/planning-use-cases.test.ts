@@ -327,6 +327,28 @@ describe('planning use cases', () => {
     await expect(getPlanScheduleBlocks(source, '2026-08-17')).resolves.toHaveLength(1);
   });
 
+  test('keeps a completed one-time task in the day of its planned block', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveTaskItem({ ...task, id: 'sync-task', title: 'Синк Вася Ваганов' });
+    await source.saveScheduleBlock({
+      id: 'sync-block',
+      taskItemId: 'sync-task',
+      occurrenceId: null,
+      timeZoneId: 'Europe/Moscow',
+      startsAt: '2026-09-15T17:00:00+03:00',
+      endsAt: '2026-09-15T18:00:00+03:00',
+      createdAt,
+      updatedAt: createdAt,
+      deletedAt: null,
+    });
+    await source.saveTaskItem({ ...(await source.getTaskItem('sync-task'))!, completedAt: '2026-09-21T14:34:00.000Z' });
+
+    await expect(getPlanScheduleBlocks(source, '2026-09-15')).resolves.toEqual([
+      expect.objectContaining({ id: 'sync-block', taskItemId: 'sync-task' }),
+    ]);
+    await expect(getPlanScheduleBlocks(source, '2026-09-21')).resolves.toEqual([]);
+  });
+
   test('synchronizes concrete notifications for the 90-day recurring horizon and removes a completed occurrence notification', async () => {
     const source = createInMemoryDataSource();
     const scheduler: LocalNotificationScheduler = {
