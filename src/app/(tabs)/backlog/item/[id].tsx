@@ -119,7 +119,7 @@ export default function ItemRoute() {
           item={item}
           mode="edit"
           onClose={() => setPlanning(false)}
-          onPlanned={(result: PlanningSuccessResult) => router.replace({ pathname: '/backlog/planned', params: result })}
+          onPlanned={(result: PlanningSuccessResult) => router.replace({ pathname: '/backlog/planned', params: { plannedOn: result.plannedOn, title: result.title, type: result.type } })}
           planningContext={{ defaultDate: getDateInTimeZone(new Date().toISOString(), settings.timeZoneId) }}
           type={formType}
           visible
