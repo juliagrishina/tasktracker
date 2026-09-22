@@ -35,7 +35,7 @@ describe('DailyEnergyCheckIn', () => {
     capturedOnContentSizeChange = undefined;
   });
 
-  test('scrolls its initial 75-percent selection only after the picker content is ready', async () => {
+  test('centres its stored 75-percent selection only after the picker content is ready', async () => {
     await act(async () => {
       render(
         <DailyEnergyCheckIn
@@ -54,6 +54,20 @@ describe('DailyEnergyCheckIn', () => {
       capturedOnContentSizeChange?.(320, 1008);
     });
 
-    await waitFor(() => expect(mockScrollTo).toHaveBeenCalledWith({ animated: false, y: 616 }));
+    await waitFor(() => expect(mockScrollTo).toHaveBeenCalledWith({ animated: false, y: 660 }));
+  });
+
+  test('keeps a stored zero-percent value selected instead of replacing it with the default', async () => {
+    const view = await render(
+      <DailyEnergyCheckIn
+        initialEnergyPercent={0}
+        onRequestClose={() => {}}
+        onSave={async () => {}}
+        visible
+      />,
+    );
+
+    expect(view.getByLabelText('Энергия 0%').props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByLabelText('Энергия 75%').props.accessibilityState).toEqual({ selected: false });
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ScheduleBlock } from '../../domain/entities';
@@ -39,15 +39,38 @@ function formatTimeRange(block: ScheduleBlock, timeZoneId: string): string {
   return `${getTimeInTimeZone(block.startsAt, timeZoneId)}–${getTimeInTimeZone(block.endsAt, timeZoneId)}`;
 }
 
-export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new Date(), onLongPressBlock, onPressBlock, selectedDate, timeZoneId, titleByTaskId }: DayTimelineProps) {
+export function DayTimeline({ blocks, completedBlockIds = new Set(), now, onLongPressBlock, onPressBlock, selectedDate, timeZoneId, titleByTaskId }: DayTimelineProps) {
   const scrollRef = useRef<ScrollView>(null);
+  const lastScrollKey = useRef<string | null>(null);
+  const [displayNow, setDisplayNow] = useState(() => now ?? new Date());
   const layouts = getDayTimelineBlockLayouts(blocks, selectedDate, timeZoneId);
-  const currentMinute = getCurrentMinute(selectedDate, timeZoneId, now);
-  const initialMinute = Math.max(WORKDAY_START_HOUR * 60, (currentMinute ?? WORKDAY_START_HOUR * 60) - 60);
+  const currentMinute = getCurrentMinute(selectedDate, timeZoneId, displayNow);
+  const scrollKey = `${selectedDate}:${timeZoneId}`;
 
   useEffect(() => {
+    if (lastScrollKey.current === scrollKey) return;
+    lastScrollKey.current = scrollKey;
+    const initialMinute = Math.max(WORKDAY_START_HOUR * 60, (currentMinute ?? WORKDAY_START_HOUR * 60) - 60);
     scrollRef.current?.scrollTo({ animated: false, y: Math.max(0, initialMinute * MINUTE_HEIGHT - HOUR_HEIGHT) });
-  }, [initialMinute]);
+  }, [currentMinute, scrollKey]);
+
+  useEffect(() => {
+    if (now !== undefined) {
+      setDisplayNow(now);
+      return;
+    }
+    const refresh = () => setDisplayNow(new Date());
+    const delay = 60_000 - Date.now() % 60_000;
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const timeout = setTimeout(() => {
+      refresh();
+      interval = setInterval(refresh, 60_000);
+    }, delay);
+    return () => {
+      clearTimeout(timeout);
+      if (interval !== null) clearInterval(interval);
+    };
+  }, [now]);
 
   return (
     <ScrollView
@@ -95,8 +118,8 @@ export function DayTimeline({ blocks, completedBlockIds = new Set(), now = new D
           })}
         </View>
         {currentMinute === null ? null : (
-          <View accessibilityLabel={`Текущее время ${getTimeInTimeZone(now.toISOString(), timeZoneId)}`} style={[styles.currentTime, { top: currentMinute * MINUTE_HEIGHT }]}>
-            <Text style={styles.currentTimeLabel}>{getTimeInTimeZone(now.toISOString(), timeZoneId)}</Text>
+          <View accessibilityLabel={`Текущее время ${getTimeInTimeZone(displayNow.toISOString(), timeZoneId)}`} style={[styles.currentTime, { top: currentMinute * MINUTE_HEIGHT }]}>
+            <Text style={styles.currentTimeLabel}>{getTimeInTimeZone(displayNow.toISOString(), timeZoneId)}</Text>
           </View>
         )}
       </View>

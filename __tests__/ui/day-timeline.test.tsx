@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 
 import type { ScheduleBlock } from '../../src/domain/entities';
 import { DayTimeline } from '../../src/ui/plan/day-timeline';
@@ -18,6 +18,10 @@ function block(id: string, taskItemId: string, startsAt: string, endsAt: string)
 }
 
 describe('DayTimeline', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   test('renders a scrollable full-day grid with a current-time line and overlapping blocks', async () => {
     const view = await render(
       <DayTimeline
@@ -47,5 +51,22 @@ describe('DayTimeline', () => {
 
     expect(view.getByText('Короткая встреча')).toBeOnTheScreen();
     expect(view.queryByText('09:00–09:30')).toBeNull();
+  });
+
+  test('moves the current-time line while the day view remains open', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-22T09:59:30+03:00'));
+    const view = await render(
+      <DayTimeline
+        blocks={[]}
+        selectedDate="2026-08-22"
+        timeZoneId="Europe/Moscow"
+        titleByTaskId={new Map()}
+      />,
+    );
+
+    expect(view.getByLabelText('Текущее время 09:59')).toBeOnTheScreen();
+    await act(async () => jest.advanceTimersByTime(30_000));
+    expect(view.getByLabelText('Текущее время 10:00')).toBeOnTheScreen();
   });
 });
