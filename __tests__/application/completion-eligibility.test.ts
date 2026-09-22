@@ -44,4 +44,20 @@ describe('getCompletionEligibility', () => {
     }]);
     await expect(source.listRecurrenceOccurrences('series-1')).resolves.toEqual([]);
   });
+
+  test('prompts for the latest unfinished recurring instance after its date has passed', async () => {
+    const source = createInMemoryDataSource();
+    await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow' });
+    await source.saveTaskItem({ id: 'weekly-task', kind: 'task', projectId: null, parentTaskId: null, title: 'Еженедельный отчёт', description: null, estimatedDurationMinutes: null, completedAt: null, createdAt, updatedAt: createdAt, deletedAt: null });
+    await saveTaskPlanning(source, {
+      taskId: 'weekly-task',
+      blocks: [{ id: 'weekly-block', taskItemId: 'weekly-task', occurrenceId: null, timeZoneId: 'Europe/Moscow', startsAt: '2026-08-03T09:00:00+03:00', endsAt: '2026-08-03T10:00:00+03:00', createdAt, updatedAt: createdAt, deletedAt: null }],
+      recurrence: { id: 'weekly-series', frequency: 'weekly', interval: 1, startsOn: '2026-08-03', createdAt },
+    });
+
+    await expect(getCompletionEligibility(source, new Date('2026-08-12T07:00:00.000Z'))).resolves.toContainEqual({
+      taskItemId: 'weekly-task',
+      occurrence: { seriesId: 'weekly-series', occursOn: '2026-08-10' },
+    });
+  });
 });

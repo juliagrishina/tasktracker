@@ -1,6 +1,6 @@
 import type { AppDataSource } from '../data/contracts';
 import type { EntityId, RecurrenceOccurrence, ScheduleBlock } from '../domain/entities';
-import { getDateInTimeZone } from '../domain/planning';
+import { getDateInTimeZone, getRecurrenceDates } from '../domain/planning';
 
 import { getPlanScheduleBlocks } from './planning-use-cases';
 
@@ -43,7 +43,12 @@ export async function getCompletionEligibility(source: AppDataSource, now = new 
   const activeTasks = new Map(tasks.filter((task) => task.completedAt === null).map((task) => [task.id, task]));
   const seriesByTaskId = new Map(series.filter((candidate) => candidate.itemKind === 'task').map((candidate) => [candidate.itemId, candidate]));
   const currentDate = getDateInTimeZone(now.toISOString(), settings.timeZoneId);
-  const currentBlocks = await getPlanScheduleBlocks(source, currentDate);
+  const recurrenceDates = new Set(
+    series
+      .filter((candidate) => candidate.itemKind === 'task' && candidate.startsOn <= currentDate)
+      .flatMap((candidate) => getRecurrenceDates(candidate, candidate.startsOn, currentDate)),
+  );
+  const recurrenceBlocks = (await Promise.all([...recurrenceDates].map((date) => getPlanScheduleBlocks(source, date)))).flat();
   const recurrenceOccurrences = createOccurrenceMap((await Promise.all(series.map((candidate) => source.listRecurrenceOccurrences(candidate.id)))).flat());
   const candidates: Candidate[] = [];
 
@@ -56,7 +61,7 @@ export async function getCompletionEligibility(source: AppDataSource, now = new 
     }
 
     const occurrenceBlocks = new Map<string, { blocks: ScheduleBlock[]; occurrence: { occursOn: string; seriesId: EntityId } }>();
-    for (const block of currentBlocks.filter((candidate) => candidate.taskItemId === task.id)) {
+    for (const block of recurrenceBlocks.filter((candidate) => candidate.taskItemId === task.id)) {
       const virtual = parseVirtualOccurrence(block.occurrenceId);
       const stored = block.occurrenceId === null ? null : recurrenceOccurrences.get(block.occurrenceId);
       const occurrence = virtual ?? (stored === undefined || stored === null ? null : { seriesId: stored.seriesId, occursOn: stored.occursOn });
@@ -66,10 +71,13 @@ export async function getCompletionEligibility(source: AppDataSource, now = new 
       current.blocks.push(block);
       occurrenceBlocks.set(key, current);
     }
+    const eligibleOccurrences: Candidate[] = [];
     for (const group of occurrenceBlocks.values()) {
       const last = latestBlock(group.blocks);
-      if (last !== null && hasEnded(last, now)) candidates.push({ taskItemId: task.id, occurrence: group.occurrence, endsAt: last.endsAt });
+      if (last !== null && hasEnded(last, now)) eligibleOccurrences.push({ taskItemId: task.id, occurrence: group.occurrence, endsAt: last.endsAt });
     }
+    const latestOccurrence = eligibleOccurrences.reduce<Candidate | null>((latest, candidate) => latest === null || candidate.endsAt > latest.endsAt ? candidate : latest, null);
+    if (latestOccurrence !== null) candidates.push(latestOccurrence);
   }
 
   return candidates
