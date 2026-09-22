@@ -120,6 +120,19 @@ describe('SettingsStatePanel', () => {
     await waitFor(() => expect(onAccountDataAction).toHaveBeenCalledWith({ operation: 'delete_account', password: 'Current!Pass1', code: '123456' }));
   });
 
+  test('shows a resend cooldown instead of a generic connection error for account-data confirmation', async () => {
+    const view = await render(<SettingsStatePanel
+      account={{ kind: 'authenticated', displayName: 'Юлия', email: 'julia@example.com', emailConfirmed: true, pendingEmail: null }}
+      onRequestAccountDataCode={jest.fn().mockResolvedValue({ kind: 'resendCooldown', availableAtMs: Date.now() + 60_000 })}
+      settings={getDefaultSettings()}
+    />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Удалить аккаунт' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Отправить код подтверждения' }));
+
+    await waitFor(() => expect(view.getByText('Новый код можно запросить через минуту.')).toBeOnTheScreen());
+  });
+
   test('keeps the Microsoft 365 refresh action inside local demo state', async () => {
     const view = await render(<SettingsStatePanel settings={getDefaultSettings()} />);
 

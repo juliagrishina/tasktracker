@@ -11,6 +11,15 @@ describe('Supabase password management gateway', () => {
     expect(passwordVerifier.auth.signInWithOtp).toHaveBeenCalledWith({ email: 'maria@example.com', options: { shouldCreateUser: false } });
   });
 
+  test('identifies a rate-limited email code request without exposing provider details', async () => {
+    const client = createFakeClient();
+    const passwordVerifier = createPasswordVerifier();
+    passwordVerifier.auth.signInWithOtp.mockResolvedValue({ error: Object.assign(new Error('too many requests'), { status: 429 }) });
+    const gateway = createSupabasePasswordManagementGateway(client, passwordVerifier);
+
+    await expect(gateway.sendChangeCode()).rejects.toMatchObject({ kind: 'rateLimited' });
+  });
+
   test('keeps the current device signed in after code verification and revokes every other session', async () => {
     const client = createFakeClient();
     const passwordVerifier = createPasswordVerifier();

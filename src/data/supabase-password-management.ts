@@ -106,6 +106,7 @@ async function currentEmail(client: SupabasePasswordManagementClient): Promise<s
 
 function mapError(error: Error, expectedKind: 'invalidCurrentPassword' | 'invalidCode' | 'requestFailed'): PasswordManagementGatewayError {
   const status = 'status' in error && typeof error.status === 'number' ? error.status : null;
+  if (status === 429) return new PasswordManagementGatewayError('rateLimited');
   if (expectedKind !== 'requestFailed' && status === 400) return new PasswordManagementGatewayError(expectedKind);
   return new PasswordManagementGatewayError('requestFailed');
 }

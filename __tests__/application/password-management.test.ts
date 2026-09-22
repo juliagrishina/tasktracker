@@ -68,6 +68,14 @@ describe('password management', () => {
     });
   });
 
+  test('reports a resend cooldown when the email provider rate-limits a confirmation code', async () => {
+    const gateway = createGateway();
+    gateway.sendChangeCode.mockRejectedValue(new PasswordManagementGatewayError('rateLimited'));
+    const service = createPasswordManagement({ gateway, now: () => 1_000 });
+
+    await expect(service.requestPasswordChangeCode()).resolves.toEqual({ kind: 'resendCooldown', availableAtMs: 61_000 });
+  });
+
   test('uses a neutral recovery request and creates a password from the verified recovery session', async () => {
     const gateway = createGateway();
     const service = createPasswordManagement({ gateway, now: () => 1_000 });

@@ -90,7 +90,13 @@ export function SettingsStatePanel({ account = { kind: 'withoutAccount' }, notif
   };
   const requestAccountDataCode = async () => {
     const result = await onRequestAccountDataCode?.();
-    setFeedback(result?.kind === 'codeSent' ? 'Код подтверждения отправлен на email.' : 'Не удалось отправить код. Проверьте подключение или запросите его позднее.');
+    setFeedback(result?.kind === 'codeSent'
+      ? 'Код подтверждения отправлен на email.'
+      : result?.kind === 'resendCooldown'
+        ? 'Новый код можно запросить через минуту.'
+        : result?.kind === 'requestFailed'
+          ? result.message
+          : 'Не удалось отправить код. Проверьте подключение или запросите его позднее.');
   };
   const completeAccountOperation = async () => {
     if (accountOperation === null || onAccountDataAction === undefined) return;

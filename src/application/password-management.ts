@@ -14,7 +14,7 @@ type PendingCode = {
 };
 
 export class PasswordManagementGatewayError extends Error {
-  constructor(readonly kind: 'invalidCurrentPassword' | 'invalidCode' | 'requestFailed') {
+  constructor(readonly kind: 'invalidCurrentPassword' | 'invalidCode' | 'rateLimited' | 'requestFailed') {
     super(kind);
   }
 }
@@ -69,7 +69,10 @@ export function createPasswordManagement({
 
     try {
       await gateway.sendRecoveryCode({ email });
-    } catch {
+    } catch (error) {
+      if (error instanceof PasswordManagementGatewayError && error.kind === 'rateLimited') {
+        return { kind: 'resendCooldown', availableAtMs: currentTime + RESEND_COOLDOWN_MS };
+      }
       return { kind: 'requestFailed', message: 'Не удалось отправить код. Проверьте email и повторите попытку через минуту.' };
     }
 
@@ -105,6 +108,9 @@ export function createPasswordManagement({
     } catch (error) {
       if (error instanceof PasswordManagementGatewayError && error.kind === 'invalidCurrentPassword') {
         return { kind: 'validationError', message: 'Текущий пароль неверный.' };
+      }
+      if (error instanceof PasswordManagementGatewayError && error.kind === 'rateLimited') {
+        return { kind: 'resendCooldown', availableAtMs: currentTime + RESEND_COOLDOWN_MS };
       }
       return { kind: 'requestFailed', message: 'Не удалось отправить код. Проверьте подключение к интернету.' };
     }
