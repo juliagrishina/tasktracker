@@ -20,6 +20,32 @@ test('renders time blocks before recurrence controls', async () => {
   expect(tree.indexOf('Временные блоки')).toBeLessThan(tree.indexOf('Повторение'));
 });
 
+test('renders the no-free-slot notice directly after time blocks', async () => {
+  const view = await render(
+    <TaskPlanningFields
+      defaultBlock={null}
+      onChange={jest.fn()}
+      showRepeat
+      timeBlockNotice={<Text>Нет свободного окна</Text>}
+      value={createInitialTaskPlanningDraft('2026-08-30')}
+    />,
+  );
+
+  const tree = JSON.stringify(view.toJSON());
+  const timeBlocksIndex = tree.indexOf('Временные блоки');
+  const noticeIndex = tree.indexOf('Нет свободного окна');
+  const repeatIndex = tree.indexOf('Повторение');
+
+  expect(noticeIndex).toBeGreaterThan(timeBlocksIndex);
+  expect(noticeIndex).toBeLessThan(repeatIndex);
+});
+
+test('preserves a 24-hour duration when opening a time block editor', async () => {
+  const view = await render(<TaskPlanningFields defaultBlock={{ id: 'block-1', date: '2026-08-30', startsAt: '09:00', durationMinutes: '1440' }} onChange={() => {}} value={{ ...createInitialTaskPlanningDraft('2026-08-30'), blocks: [{ id: 'block-1', date: '2026-08-30', startsAt: '09:00', durationMinutes: '1440' }] }} />);
+
+  expect(view.getByLabelText('Длительность блока 1')).toHaveTextContent(/24 ч/u);
+});
+
 test('derives the first block date from the task date while extra blocks retain their own date', async () => {
   function DateModeProbe() {
     const [draft, setDraft] = useState({

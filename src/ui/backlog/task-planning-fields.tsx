@@ -1,9 +1,9 @@
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { designTokens } from '../design/tokens';
-import { formatDuration } from '../format-duration';
 import { PlanningValuePicker, type PlanningValueOption } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
+import { blockDurationOptions } from './duration-options';
 import { getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 import { createUuid } from '../../domain/uuid';
 
@@ -33,6 +33,7 @@ export interface TaskPlanningFieldsProps {
   onChange: (value: TaskPlanningDraft) => void;
   onNoFreeSlot?: () => void;
   showRepeat?: boolean;
+  timeBlockNotice?: import('react').ReactNode;
   value: TaskPlanningDraft;
 }
 
@@ -53,10 +54,6 @@ const repeatOptions: { label: string; value: TaskRepeatFrequency }[] = [
 const timeOptions: readonly PlanningValueOption[] = Array.from({ length: 288 }, (_, index) => {
   const value = `${String(Math.floor(index / 12)).padStart(2, '0')}:${String((index % 12) * 5).padStart(2, '0')}`;
   return { label: value, value };
-});
-const durationOptions: readonly PlanningValueOption[] = Array.from({ length: 96 }, (_, index) => {
-  const minutes = (index + 1) * 5;
-  return { label: formatDuration(minutes), value: String(minutes) };
 });
 
 export function createInitialTaskPlanningDraft(defaultDate?: string): TaskPlanningDraft {
@@ -120,7 +117,7 @@ export function validateTaskPlanningDraft(value: TaskPlanningDraft): string | nu
   return invalidBlockIndex === -1 ? null : `Заполните корректно блок времени ${invalidBlockIndex + 1}`;
 }
 
-export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showRepeat = true, value }: TaskPlanningFieldsProps) {
+export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showRepeat = true, timeBlockNotice, value }: TaskPlanningFieldsProps) {
   const update = (patch: Partial<TaskPlanningDraft>) => onChange({ ...value, ...patch });
   const updateScheduledDate = (scheduledOn: string) => update({
     scheduledOn,
@@ -177,9 +174,10 @@ export function TaskPlanningFields({ defaultBlock, onChange, onNoFreeSlot, showR
           <Text style={styles.label}>Начало</Text>
           <PlanningValuePicker accessibilityLabel={`Начало блока ${index + 1}`} onChange={(startsAt) => updateBlock(value, block.id, { startsAt }, onChange)} options={timeOptions} title="Начало блока" value={block.startsAt} />
           <Text style={styles.label}>Длительность</Text>
-          <PlanningValuePicker accessibilityLabel={`Длительность блока ${index + 1}`} onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} options={durationOptions} title="Длительность блока" value={block.durationMinutes} />
+          <PlanningValuePicker accessibilityLabel={`Длительность блока ${index + 1}`} onChange={(durationMinutes) => updateBlock(value, block.id, { durationMinutes }, onChange)} options={blockDurationOptions} title="Длительность блока" value={block.durationMinutes} />
         </View>;
       })}
+      {timeBlockNotice}
       {showRepeat ? <>
         <Text style={styles.label}>Повторение</Text>
         <View style={styles.chips}>

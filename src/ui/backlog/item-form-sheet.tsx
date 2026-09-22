@@ -15,7 +15,6 @@ import type { CreateTimedReminderTaskWithPlanningInput, SaveTaskWithPlanningInpu
 import type { Project, Reminder, TaskItem } from '../../domain/entities';
 import { createUuid } from '../../domain/uuid';
 import { designTokens } from '../design/tokens';
-import { formatDuration } from '../format-duration';
 import {
   createDefaultBlock,
   createInitialTaskPlanningDraft,
@@ -26,6 +25,7 @@ import {
 import { PlanningValuePicker } from './planning-value-picker';
 import { PlanningDatePicker } from './planning-date-picker';
 import { confirmBacklogDeletion } from './confirmation';
+import { estimatedDurationOptions } from './duration-options';
 import type { PlanningSuccessResult } from './planning-success';
 import { findFirstAvailablePlanTime, getInstantInTimeZone, getDateInTimeZone, getTimeInTimeZone } from '../../domain/planning';
 
@@ -36,13 +36,6 @@ type ActionableItem = TaskItem | Reminder;
 type PendingConflict =
   | { kind: 'task'; input: SaveTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] }
   | { kind: 'timedReminder'; input: CreateTimedReminderTaskWithPlanningInput; conflicts: readonly ScheduleConflict[] };
-const estimateOptions = [
-  { label: 'Без оценки', value: '' },
-  ...Array.from({ length: 96 }, (_, index) => {
-    const minutes = (index + 1) * 5;
-    return { label: formatDuration(minutes), value: String(minutes) };
-  }),
-];
 
 interface ItemFormSheetProps {
   visible: boolean;
@@ -482,6 +475,30 @@ export function ItemFormSheet({
     (entry) => entry.project.id === selectedProjectId,
   )?.project;
 
+  const noFreeSlotNotice = isNoFreeSlotDialogVisible ? (
+    <View style={styles.noFreeSlotDialog}>
+      <Text style={styles.noFreeSlotTitle}>{`На ${formatPlanningDate(planningDate ?? '')} нет свободного окна на 1 ч.`}</Text>
+      {isAlternativeDatePickerVisible ? (
+        <PlanningDatePicker
+          accessibilityLabel="Выбрать другой день"
+          onChange={(date) => {
+            setPlanningDateOverride(date);
+            setPlanningDraft((draft) => ({ ...draft, scheduleMode: 'date', scheduledOn: date }));
+            setPendingAlternativeDate(date);
+            setIsAlternativeDatePickerVisible(false);
+          }}
+          value={planningDate ?? ''}
+        />
+      ) : (
+        <>
+          <Text style={styles.noFreeSlotCopy}>Выберите другой день или укажите время вручную. При пересечении потребуется подтверждение.</Text>
+          <Pressable accessibilityLabel="Запланировать на другой день" onPress={() => setIsAlternativeDatePickerVisible(true)} style={styles.secondaryChoice}><Text style={styles.secondaryChoiceText}>Запланировать на другой день</Text></Pressable>
+          <Pressable accessibilityLabel="Все равно запланировать" onPress={() => { const block = createDefaultBlock(planningDate ?? '', new Date(), settings.timeZoneId); setPlanningDraft((draft) => ({ ...draft, blocks: [...draft.blocks, block] })); setIsNoFreeSlotDialogVisible(false); }} style={styles.primaryChoice}><Text style={styles.primaryActionText}>Все равно запланировать</Text></Pressable>
+        </>
+      )}
+    </View>
+  ) : null;
+
   return (
     <Modal animationType="slide" onRequestClose={onClose} transparent visible={visible}>
       <SafeAreaView style={styles.overlay}>
@@ -544,7 +561,7 @@ export function ItemFormSheet({
             {type === 'task' || type === 'subtask' || type === 'reminder' ? (
               <View>
                 <Text style={styles.label}>Оценочная длительность</Text>
-                <PlanningValuePicker accessibilityLabel="Оценочная длительность, мин." onChange={setDuration} options={estimateOptions} title="Оценочная длительность" value={duration} />
+                <PlanningValuePicker accessibilityLabel="Оценочная длительность, мин." onChange={setDuration} options={estimatedDurationOptions} title="Оценочная длительность" value={duration} />
               </View>
             ) : null}
             {isPlanTaskForm ? (
@@ -556,6 +573,7 @@ export function ItemFormSheet({
                 }}
                 onNoFreeSlot={() => { setIsNoFreeSlotDialogVisible(true); setIsAlternativeDatePickerVisible(false); }}
                 showRepeat={occurrenceEdit?.showRepeat}
+                timeBlockNotice={noFreeSlotNotice}
                 value={planningDraft}
               />
             ) : null}
@@ -594,7 +612,7 @@ export function ItemFormSheet({
               </View>
             ) : null}
             {error === null ? null : <Text style={styles.error}>{error}</Text>}
-            {isNoFreeSlotDialogVisible ? <View style={styles.noFreeSlotDialog}><Text style={styles.noFreeSlotTitle}>{`На ${formatPlanningDate(planningDate ?? '')} нет свободного окна на 1 ч.`}</Text>{isAlternativeDatePickerVisible ? <PlanningDatePicker accessibilityLabel="Выбрать другой день" onChange={(date) => { setPlanningDateOverride(date); setPlanningDraft((draft) => ({ ...draft, scheduleMode: 'date', scheduledOn: date })); setPendingAlternativeDate(date); setIsAlternativeDatePickerVisible(false); }} value={planningDate ?? ''} /> : <><Text style={styles.noFreeSlotCopy}>Выберите другой день или укажите время вручную. При пересечении потребуется подтверждение.</Text><Pressable accessibilityLabel="Запланировать на другой день" onPress={() => setIsAlternativeDatePickerVisible(true)} style={styles.secondaryChoice}><Text style={styles.secondaryChoiceText}>Запланировать на другой день</Text></Pressable><Pressable accessibilityLabel="Все равно запланировать" onPress={() => { const block = createDefaultBlock(planningDate ?? '', new Date(), settings.timeZoneId); setPlanningDraft((draft) => ({ ...draft, blocks: [...draft.blocks, block] })); setIsNoFreeSlotDialogVisible(false); }} style={styles.primaryChoice}><Text style={styles.primaryActionText}>Все равно запланировать</Text></Pressable></>}</View> : null}
+            {!isPlanTaskForm ? noFreeSlotNotice : null}
             {pendingConflict === null ? null : <View>{pendingConflict.conflicts.map((conflict) => <Text key={`${conflict.candidate.id}-${conflict.block.id}`} style={styles.error}>{`${conflict.itemTitle}: ${getTimeInTimeZone(conflict.startsAt, settings.timeZoneId)}–${getTimeInTimeZone(conflict.endsAt, settings.timeZoneId)}`}</Text>)}<Pressable accessibilityLabel="Сохранить с пересечением" onPress={() => void (async () => { setIsSaving(true); try { const result = pendingConflict.kind === 'task' ? await planningActions.saveTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }) : await planningActions.createTimedReminderTaskWithPlanning({ ...pendingConflict.input, planning: { ...pendingConflict.input.planning, forceConflicts: true } }); if (result.conflict !== null) throw new Error('Конфликт времени не был разрешён'); setPendingConflict(null); onSaved?.(); onClose(); } catch (caughtError) { setError(caughtError instanceof Error ? caughtError.message : 'Не удалось сохранить изменения'); } finally { setIsSaving(false); } })()} style={styles.conflictAction}><Text style={styles.primaryActionText}>Сохранить с пересечением</Text></Pressable></View>}
           </ScrollView>
           <View style={[styles.footer, usesActionGrid && styles.footerGrid]} testID="item-form-actions">
