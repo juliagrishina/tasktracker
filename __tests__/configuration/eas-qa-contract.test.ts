@@ -61,6 +61,6 @@ describe('EAS QA delivery contract', () => {
     expect(guide).toContain('npm run qa:publish');
     expect(guide).toContain('--channel qa --environment preview');
     expect(guide).toContain('не публикуйте без явного запроса');
-    expect(guide).toContain('planmeplan.ru');
+    expect(guide).toContain('planmyplan.ru');
   });
 });

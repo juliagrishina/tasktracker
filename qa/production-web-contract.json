@@ -1,0 +1,8 @@
+{
+  "siteUrl": "https://planmyplan.ru",
+  "supabaseUrl": "https://lskslmsqjrgbbgvzdoqs.supabase.co",
+  "publicVariableNames": [
+    "EXPO_PUBLIC_SUPABASE_URL",
+    "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+  ]
+}

@@ -9,7 +9,7 @@
 - QA контур использует отдельный Expo EAS project и отдельный канал обновлений `qa`.
 - Каждая публикация собирается только из активного worktree и получает отдельную ревизию QA канала.
 - В QA bundle попадают только `EXPO_PUBLIC_SUPABASE_URL` и `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` staging Supabase. Это публичные клиентские параметры; service-role, SMTP, OTP, ngrok и Edge secrets не попадают в bundle, Git или EAS environment.
-- Production `planmeplan.ru`, production Supabase, production Expo release и их настройки не меняются.
+- Production `planmyplan.ru`, production Supabase, production Expo release и их настройки не меняются.
 - QA не является production delivery channel и не создаёт App Store или TestFlight сборку.
 
 ## Архитектура

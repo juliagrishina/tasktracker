@@ -9,7 +9,7 @@ describe('Epic 11 Auth protection contract', () => {
     const productionEnv = readRepositoryFile('supabase', 'production-auth.env.example');
 
     expect(config).toContain('site_url = "http://localhost:8081"');
-    expect(config).toContain('"https://planmeplan.ru"');
+    expect(config).toContain('"https://planmyplan.ru"');
     expect(config).toContain('otp_length = 6');
     expect(config).toContain('otp_expiry = 600');
     expect(config).toContain('[auth.rate_limit]');

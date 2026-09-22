@@ -239,7 +239,7 @@ Document these exact sections in `docs/operations/eas-qa-update.md`:
 2. New-worktree preparation: copy `.env.example` to ignored `.env.local`, set the two public staging variables, run `npm run qa:verify`.
 3. Explicit delivery: after user approval run `npm run qa:publish -- --message "Epic 11: authentication manual acceptance"`; the EAS command receives `--channel qa --environment preview` through the script.
 4. iPhone acceptance: open the QR/link returned by EAS Update in Expo Go, confirm the app connects to staging, then run only the manual checks for the current Epic.
-5. Prohibitions: never use `planmeplan.ru`, production Supabase values, production EAS environment, `eas build`, TestFlight, or any secret in this flow.
+5. Prohibitions: never use `planmyplan.ru`, production Supabase values, production EAS environment, `eas build`, TestFlight, or any secret in this flow.
 6. Recovery: stop on a guard failure, fix only `.env.local` or the two remote `preview` values, and publish again only with explicit approval.
 
 - [ ] **Step 5: Verify configuration and documentation**

@@ -9,8 +9,8 @@ committed.
 
 - Enable Email/Password, email confirmation, anonymous sign-in and manual
   identity linking. Keep phone and OAuth providers disabled.
-- Set the Site URL to `https://planmeplan.ru` and allow exactly
-  `https://planmeplan.ru` plus the deployed callback URLs.
+- Set the Site URL to `https://planmyplan.ru` and allow exactly
+  `https://planmyplan.ru` plus the deployed callback URLs.
 - Configure a production SMTP provider with the `SUPABASE_AUTH_SMTP_*` values
   from the secure deployment secret store. Send a real registration,
   email-change and recovery message before release.
@@ -23,7 +23,7 @@ committed.
 - Enable **Require current password when updating**. The password-change flow
   sends `current_password` to Auth so the current device stays signed in while
   every other session is revoked.
-- Register an hCaptcha site for both `planmeplan.ru` and local development,
+- Register an hCaptcha site for both `planmyplan.ru` and local development,
   then configure its **secret** in the dashboard. Enable CAPTCHA only together
   with a web and native client implementation that supplies a CAPTCHA token;
   this repository must not ship an enabled CAPTCHA switch without that token.

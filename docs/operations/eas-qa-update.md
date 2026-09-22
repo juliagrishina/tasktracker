@@ -1,6 +1,6 @@
 # QA-публикации для iPhone через Expo Go
 
-Этот процесс предназначен только для ручной проверки веток TaskTracker в Expo Go. Он использует отдельный EAS-проект, канал обновлений `qa` и staging Supabase `zwckrqbdepgvenanyans`. Production-сайт `planmeplan.ru`, production Supabase, production EAS-среда, TestFlight и App Store в этот процесс не входят.
+Этот процесс предназначен только для ручной проверки веток TaskTracker в Expo Go. Он использует отдельный EAS-проект, канал обновлений `qa` и staging Supabase `zwckrqbdepgvenanyans`. Production-сайт `planmyplan.ru`, production Supabase, production EAS-среда, TestFlight и App Store в этот процесс не входят.
 
 ## Что настроено один раз
 
