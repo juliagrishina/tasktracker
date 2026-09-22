@@ -12,7 +12,7 @@ import { formatDuration } from '../../../../ui/format-duration';
 import { SurfaceCard } from '../../../../ui/primitives/surface-card';
 import { ScreenShell } from '../../../../ui/screen-shell';
 import { getDateInTimeZone } from '../../../../domain/planning';
-import { PlanningSuccess, type PlanningSuccessResult } from '../../../../ui/backlog/planning-success';
+import type { PlanningSuccessResult } from '../../../../ui/backlog/planning-success';
 
 type BacklogDetailItem = Project | Reminder | TaskItem;
 
@@ -62,17 +62,12 @@ export default function ItemRoute() {
   const [editing, setEditing] = useState(false);
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [planning, setPlanning] = useState(false);
-  const [planningResult, setPlanningResult] = useState<PlanningSuccessResult | null>(null);
   const kind = firstValue(params.kind) as BacklogItemKind | undefined;
   const taskItems = [
     ...backlog.unassignedTasks.flatMap(({ task, subtasks }) => [task, ...subtasks]),
     ...backlog.projects.flatMap(({ tasks }) => tasks.flatMap(({ task, subtasks }) => [task, ...subtasks])),
   ];
   const item = findActiveItem(firstValue(params.id), kind, backlog.reminders, taskItems);
-
-  if (planningResult !== null) {
-    return <ScreenShell onBack={() => router.back()} title="Готово"><PlanningSuccess onGoToPlan={() => router.replace({ pathname: '/', params: { date: planningResult.plannedOn } })} result={planningResult} /></ScreenShell>;
-  }
 
   if (item === undefined || kind === undefined) {
     return (
@@ -124,7 +119,7 @@ export default function ItemRoute() {
           item={item}
           mode="edit"
           onClose={() => setPlanning(false)}
-          onPlanned={setPlanningResult}
+          onPlanned={(result: PlanningSuccessResult) => router.replace({ pathname: '/backlog/planned', params: result })}
           planningContext={{ defaultDate: getDateInTimeZone(new Date().toISOString(), settings.timeZoneId) }}
           type={formType}
           visible

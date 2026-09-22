@@ -5,6 +5,18 @@ import { designTokens } from '../design/tokens';
 export type PlannedItemType = 'task' | 'subtask' | 'reminder';
 export interface PlanningSuccessResult { plannedOn: string; title: string; type: PlannedItemType; }
 
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export function getPlanningSuccessResultFromParams(params: { plannedOn?: string | string[]; title?: string | string[]; type?: string | string[] }): PlanningSuccessResult | null {
+  const plannedOn = firstParam(params.plannedOn);
+  const title = firstParam(params.title);
+  const type = firstParam(params.type);
+  if (plannedOn === undefined || title === undefined || (type !== 'task' && type !== 'subtask' && type !== 'reminder')) return null;
+  return { plannedOn, title, type };
+}
+
 function successCopy(type: PlannedItemType): string {
   return type === 'reminder' ? 'Напоминание успешно запланировано' : type === 'subtask' ? 'Подзадача успешно запланирована' : 'Задача успешно запланирована';
 }
