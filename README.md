@@ -56,6 +56,7 @@ npm run web:export
 - [Epic 01 manual checklist](docs/testing/epic-01-manual-checklist.md)
 - [Epic 02 manual checklist](docs/testing/epic-02-manual-checklist.md)
 - [Epic 11 account and cloud-sync E2E checklist](docs/testing/epic-11-auth-and-sync-e2e-checklist.md)
+- [Production web/PWA deploy on VPS](docs/operations/production-vps-web-deploy.md)
 
 ## Документация
 
