@@ -23,8 +23,8 @@ export function UnfinishedTaskDialog({ error = null, isActing, onContinue, onMov
           <Text style={styles.title}>Что сделать с незавершённым делом?</Text>
           <Text style={styles.description}>«{taskTitle}» не завершено. Выберите следующее действие.</Text>
           {error === null ? null : <Text accessibilityLiveRegion="polite" style={styles.error}>{error}</Text>}
-          <Pressable accessibilityLabel="Продолжить дело на 30 минут" accessibilityRole="button" disabled={isActing} onPress={onContinue} style={({ pressed }) => [styles.action, styles.continueAction, pressed && styles.pressed, isActing && styles.disabled]}>
-            <Text style={styles.continueActionText}>Продолжить на 30 минут</Text>
+          <Pressable accessibilityLabel="Продлить дело" accessibilityRole="button" disabled={isActing} onPress={onContinue} style={({ pressed }) => [styles.action, styles.continueAction, pressed && styles.pressed, isActing && styles.disabled]}>
+            <Text style={styles.continueActionText}>Продлить</Text>
           </Pressable>
           <Pressable accessibilityLabel="Перенести дело на другое время" accessibilityRole="button" disabled={isActing} onPress={onMove} style={({ pressed }) => [styles.action, styles.moveAction, pressed && styles.pressed, isActing && styles.disabled]}>
             <Text style={styles.moveActionText}>Перенести</Text>

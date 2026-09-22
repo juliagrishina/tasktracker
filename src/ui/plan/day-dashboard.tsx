@@ -312,25 +312,6 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
     }
     void runQuickAction(action);
   };
-  const continueCandidate = async () => {
-    if (services === null || completionCandidate === null) return;
-    setCompletionError(null);
-    setIsCompleting(true);
-    try {
-      await services.planningActions.continueIncompleteTask({ taskId: completionCandidate.task.id, occurrence: completionCandidate.eligibility.occurrence, now: now ?? new Date() });
-      setBlocks(await services.planningActions.getPlanScheduleBlocks(selectedDate));
-      setCompletionCandidate(null);
-      setIsUnfinishedDialogVisible(false);
-      setFeedback('Дело продлено на 30 минут');
-      if (completionCandidate.eligibility.occurrence === null) onEditTask?.(completionCandidate.task);
-      else onEditRecurrence?.(completionCandidate.task, completionCandidate.eligibility.occurrence.seriesId, completionCandidate.eligibility.occurrence.occursOn);
-      onRefresh?.();
-    } catch (caughtError) {
-      setCompletionError(caughtError instanceof Error ? caughtError.message : 'Не удалось продлить дело');
-    } finally {
-      setIsCompleting(false);
-    }
-  };
   const returnCandidateToBacklog = async (reason: string | null) => {
     if (services === null || completionCandidate === null) return;
     setCompletionError(null);
@@ -477,7 +458,7 @@ export function DayDashboard({ mode = 'day', now, onChangeDate, onCreateTask, on
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceMoveDialog key={`untimed-${selectedUntimedTask.occursOn}`} occursOn={selectedUntimedTask.occursOn} onMove={async (targetDate, scope) => { if (services === null) return; await services.planningActions.moveRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, targetDate, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedMoveDialogVisible(false); }} onRequestClose={() => setIsUntimedMoveDialogVisible(false)} visible={isUntimedMoveDialogVisible} />}
       {selectedUntimedTask === null || selectedUntimedTask.seriesId === null || selectedUntimedTask.occursOn === null ? null : <RecurrenceScopeDialog actionLabel="Отменить повторение" onChoose={async (scope) => { if (services === null) return; await services.planningActions.removeRecurrenceOccurrence({ seriesId: selectedUntimedTask.seriesId!, occursOn: selectedUntimedTask.occursOn!, scope }); setUntimedTasks(await services.planningActions.getPlanUntimedTasks(selectedDate)); onRefresh?.(); setSelectedUntimedTask(null); setIsUntimedRemoveDialogVisible(false); }} onRequestClose={() => setIsUntimedRemoveDialogVisible(false)} visible={isUntimedRemoveDialogVisible} />}
       {completionCandidate === null || isCompletionPromptDeferred ? null : <CompletionDialog error={completionError} isCompleting={isCompleting} onComplete={() => void completeCandidate()} onRequestClose={() => { if (!isCompleting) { setCompletionPromptDeferredDate(completionPromptDate); setCompletionCandidate(null); void services?.settingsActions.deferCompletionPromptsUntil(completionPromptDate); } }} onUnfinished={() => { if (!isCompleting) setIsUnfinishedDialogVisible(true); }} taskTitle={completionCandidate.task.title} visible={!isUnfinishedDialogVisible} />}
-      {completionCandidate === null || isCompletionPromptDeferred ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={() => void continueCandidate()} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
+      {completionCandidate === null || isCompletionPromptDeferred ? null : <UnfinishedTaskDialog error={completionError} isActing={isCompleting} onContinue={handleUnfinishedMove} onMove={handleUnfinishedMove} onRequestClose={() => { if (!isCompleting) setIsUnfinishedDialogVisible(false); }} onReturnToBacklog={(reason) => void returnCandidateToBacklog(reason)} taskTitle={completionCandidate.task.title} visible={isUnfinishedDialogVisible} />}
       {followUpCandidate === null ? null : <FollowUpReminderDialog completedOn={followUpCandidate.completedOn} error={completionError} isCreating={isCompleting} onCreate={(remindsOn) => void createFollowUpReminder(remindsOn)} onSkip={() => { if (!isCompleting) setFollowUpCandidate(null); }} taskTitle={followUpCandidate.task.title} visible />}
       <EveningReviewDialog energy={selectedDate === getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId) ? services?.dailyEnergy ?? null : eveningReviewEnergy} items={eveningReviewItems} onEditEnergy={selectedDate === getDateInTimeZone((now ?? new Date()).toISOString(), settings.timeZoneId) ? onEditDailyEnergy : undefined} onRequestClose={() => setIsEveningReviewVisible(false)} reviewDate={selectedDate} visible={isEveningReviewVisible} />
       {quickActionTarget === null ? null : <PlanTaskActionsDialog isCompleted={quickActionTarget.isCompleted} itemKind={quickActionTarget.itemKind} onAction={chooseQuickAction} onRequestClose={() => setQuickActionTarget(null)} taskTitle={quickActionTarget.item.title} visible={pendingQuickAction === null && !isQuickDeleteConfirmVisible} />}

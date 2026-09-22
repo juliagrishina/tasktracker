@@ -61,7 +61,7 @@ import { getCompletionEligibility, type CompletionEligibility } from './completi
 import { getEveningReviewItems, synchronizeEveningReviewNotification } from './evening-review';
 import { localNotificationScheduler } from './local-notification-scheduler';
 import type { LocalNotificationScheduler } from './notification-scheduling';
-import { continueIncompleteTask, createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveRecurrenceRevision, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
+import { createTimedReminderTaskWithPlanning, getPlanScheduleBlocks, getPlanUntimedReminders, getPlanUntimedTasks, getTaskPlanningSnapshot, moveRecurrenceOccurrence, removeRecurrenceOccurrence, returnIncompleteTaskToBacklog, returnPlanItemToBacklog, returnTaskToBacklog, saveOccurrenceException, saveRecurrenceRevision, saveTaskPlanning, saveTaskWithPlanning, setRecurrenceOccurrenceState, synchronizeRecurrenceNotifications, syncReminderRecurrence } from './planning-use-cases';
 import type { CreateTimedReminderTaskWithPlanningInput, MoveRecurrenceOccurrenceInput, SaveOccurrenceExceptionInput, SaveRecurrenceRevisionInput, SaveTaskPlanningInput, SaveTaskPlanningResult, SaveTaskWithPlanningInput } from './planning-types';
 import { updatePlanningSettings, type UpdatePlanningSettingsInput } from './settings-use-cases';
 import { getDailyEnergyForDate, getDailyEnergyForCurrentDay, saveDailyEnergyForCurrentDay } from './energy-use-cases';
@@ -101,7 +101,6 @@ interface PlanningActions {
   getPlanUntimedTasks(isoDate: string): ReturnType<typeof getPlanUntimedTasks>;
   getEveningReviewItems(isoDate: string): ReturnType<typeof getEveningReviewItems>;
   getDailyEnergyForDate(isoDate: string): ReturnType<typeof getDailyEnergyForDate>;
-  continueIncompleteTask(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; now?: Date }): Promise<void>;
   returnIncompleteTaskToBacklog(input: { taskId: string; occurrence: { seriesId: string; occursOn: string } | null; reason: string | null }): Promise<void>;
   returnPlanItemToBacklog(input: Parameters<typeof returnPlanItemToBacklog>[1]): Promise<void>;
   returnTaskToBacklog(input: { taskId: string; reason: string | null }): Promise<void>;
@@ -355,7 +354,6 @@ export function AppServicesProvider({
       getPlanUntimedTasks: (isoDate) => getPlanUntimedTasks(appSource, isoDate),
       getEveningReviewItems: (isoDate) => getEveningReviewItems(appSource, isoDate),
       getDailyEnergyForDate: (isoDate) => getDailyEnergyForDate(appSource, isoDate),
-      continueIncompleteTask: (input) => continueIncompleteTask(appSource, input, notificationScheduler),
       returnIncompleteTaskToBacklog: (input) => runBacklogAction(() => returnIncompleteTaskToBacklog(appSource, input, notificationScheduler)),
       returnPlanItemToBacklog: (input) => runBacklogAction(() => returnPlanItemToBacklog(appSource, input, notificationScheduler)),
       returnTaskToBacklog: (input) => runBacklogAction(() => returnTaskToBacklog(appSource, input, notificationScheduler)),

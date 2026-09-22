@@ -320,7 +320,7 @@ describe('DayDashboard', () => {
     await waitFor(() => expect(onEditRecurrence).toHaveBeenCalledWith(expect.objectContaining({ id: 'editable-recurring-task' }), 'editable-recurring-series', '2026-08-28'));
   });
 
-  test('offers explicit unfinished actions and continues the task by 30 minutes', async () => {
+  test('opens the task editor to extend an unfinished task without changing its block automatically', async () => {
     const source = createInMemoryDataSource();
     const createdAt = '2026-08-01T00:00:00.000Z';
     await source.saveSettings({ ...getDefaultSettings(), timeZoneId: 'Europe/Moscow', timeZoneMode: 'manual' });
@@ -336,8 +336,8 @@ describe('DayDashboard', () => {
     expect(view.getByLabelText('Перенести дело на другое время')).toBeOnTheScreen();
     expect(view.getByLabelText('Причина возврата в Backlog')).toBeOnTheScreen();
     expect(view.getByLabelText('Вернуть дело в Backlog')).toBeOnTheScreen();
-    await fireEvent.press(view.getByLabelText('Продолжить дело на 30 минут'));
-    await waitFor(async () => expect(await source.getScheduleBlock('unfinished-block')).toMatchObject({ endsAt: '2026-08-28T07:30:00.000Z' }));
+    await fireEvent.press(view.getByLabelText('Продлить дело'));
+    await expect(source.getScheduleBlock('unfinished-block')).resolves.toMatchObject({ endsAt: '2026-08-28T10:00:00+03:00' });
     expect(editTask).toHaveBeenCalledWith(expect.objectContaining({ id: 'unfinished-task' }));
   });
 

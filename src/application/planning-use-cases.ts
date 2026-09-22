@@ -334,10 +334,6 @@ export interface UnfinishedTaskActionInput {
   now?: Date;
 }
 
-function withThirtyMoreMinutes(block: ScheduleBlock, updatedAt: string): ScheduleBlock {
-  return { ...block, endsAt: new Date(new Date(block.endsAt).getTime() + 30 * 60_000).toISOString(), updatedAt };
-}
-
 async function synchronizeBlocks(source: AppDataSource, task: TaskItem, blocks: readonly ScheduleBlock[], now: Date, scheduler: LocalNotificationScheduler | undefined): Promise<readonly ScheduleBlock[]> {
   if (scheduler === undefined) return blocks;
   const settings = await source.getSettings();
@@ -414,59 +410,6 @@ export async function synchronizeRecurrenceNotifications(source: AppDataSource, 
       });
     }
   }
-}
-
-export async function continueIncompleteTask(source: AppDataSource, input: UnfinishedTaskActionInput, scheduler?: LocalNotificationScheduler): Promise<void> {
-  const task = await source.getTaskItem(input.taskId);
-  if (task === null) throw new Error('Задача для продолжения не найдена');
-  const actionTime = input.now ?? new Date();
-  const updatedAt = actionTime.toISOString();
-
-  if (input.occurrence === null) {
-    const blocks = (await source.listScheduleBlocksForTaskItem(task.id)).filter((block) => block.occurrenceId === null);
-    const latest = blocks.reduce<ScheduleBlock | null>((result, block) => result === null || new Date(block.endsAt).getTime() > new Date(result.endsAt).getTime() ? block : result, null);
-    if (latest === null) throw new Error('Для задачи нет блока, который можно продлить');
-    const extended = await synchronizeBlocks(source, task, [withThirtyMoreMinutes(latest, updatedAt)], actionTime, scheduler);
-    await source.saveScheduleBlock(extended[0]!);
-    return;
-  }
-
-  const series = await source.getRecurrenceSeries(input.occurrence.seriesId);
-  if (series === null || series.itemKind !== 'task' || series.itemId !== task.id) throw new Error('Повторение задачи не найдено');
-  await assertTaskRecurrenceOccurrence(source, series, input.occurrence.occursOn);
-  const existing = (await source.listRecurrenceOccurrences(series.id)).find((occurrence) => occurrence.occursOn === input.occurrence!.occursOn);
-  const occurrenceId = existing?.id ?? stableLegacyUuid('recurrence_occurrences', `${series.id}:${input.occurrence.occursOn}`);
-  const effective = await getEffectiveTaskRecurrence(source, series, input.occurrence.occursOn);
-  if (effective === null) throw new Error('Экземпляр не принадлежит серии повторения');
-  const masterBlocks = effective.blockTemplates === null
-    ? (await source.listScheduleBlocksForTaskItem(task.id)).filter((block) => block.occurrenceId === null)
-    : fromBlockTemplates(effective.blockTemplates, task.id, updatedAt);
-  const currentBlocks = existing?.blocksOverridden
-    ? (await source.listScheduleBlocks()).filter((block) => block.occurrenceId === occurrenceId)
-    : masterBlocks.map((block) => ({ ...shiftScheduleBlockToDate(block, input.occurrence!.occursOn), id: stableLegacyUuid('schedule_blocks', `${occurrenceId}:${block.id}`), occurrenceId, createdAt: updatedAt, updatedAt, deletedAt: null }));
-  const latestId = currentBlocks.reduce<string | null>((result, block) => result === null || new Date(block.endsAt).getTime() > new Date(currentBlocks.find((candidate) => candidate.id === result)!.endsAt).getTime() ? block.id : result, null);
-  if (latestId === null) throw new Error('Для повторения нет блока, который можно продлить');
-  const extendedBlocks = currentBlocks.map((block) => block.id === latestId ? withThirtyMoreMinutes(block, updatedAt) : { ...block, updatedAt });
-  const scheduledBlocks = await synchronizeBlocks(source, task, extendedBlocks, actionTime, scheduler);
-  await source.transaction(async () => {
-    await persistOccurrenceException(source, {
-      occurrence: {
-        id: occurrenceId,
-        seriesId: series.id,
-        occursOn: input.occurrence!.occursOn,
-        cancelledAt: null,
-        completedAt: existing?.completedAt ?? null,
-        blocksOverridden: true,
-        taskPatch: existing?.taskPatch ?? null,
-        reminderPatch: null,
-        createdAt: existing?.createdAt ?? updatedAt,
-        updatedAt,
-        deletedAt: null,
-      },
-      blocks: scheduledBlocks,
-    }, scheduler);
-  });
-  if (scheduler !== undefined) await synchronizeRecurrenceNotifications(source, scheduler, actionTime);
 }
 
 export async function returnIncompleteTaskToBacklog(source: AppDataSource, input: UnfinishedTaskActionInput & { reason: string | null }, scheduler?: LocalNotificationScheduler): Promise<void> {
