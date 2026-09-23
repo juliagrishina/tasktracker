@@ -236,7 +236,7 @@ describe('PlanScreen period views', () => {
     await fireEvent.changeText(view.getByDisplayValue('Повторяющаяся задача'), 'Изменённый экземпляр');
     await waitFor(() => expect(view.getByDisplayValue('Изменённый экземпляр')).toBeOnTheScreen());
     await fireEvent.press(view.getByText('Сохранить'));
-    await waitFor(async () => expect((await source.listRecurrenceOccurrences('recurring-plan-series'))[0]).toMatchObject({ taskPatch: { title: 'Изменённый экземпляр' } }));
+    await waitFor(async () => expect((await source.listRecurrenceOccurrences('recurring-plan-series')).find((occurrence) => occurrence.occursOn === '2026-08-05')).toMatchObject({ taskPatch: { title: 'Изменённый экземпляр' } }));
     await expect(source.getTaskItem('recurring-plan-task')).resolves.toMatchObject({ title: 'Повторяющаяся задача' });
   });
 
