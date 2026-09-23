@@ -42,7 +42,8 @@ function formatTimeRange(block: ScheduleBlock, timeZoneId: string): string {
 export function DayTimeline({ blocks, completedBlockIds = new Set(), now, onLongPressBlock, onPressBlock, selectedDate, timeZoneId, titleByTaskId }: DayTimelineProps) {
   const scrollRef = useRef<ScrollView>(null);
   const lastScrollKey = useRef<string | null>(null);
-  const [displayNow, setDisplayNow] = useState(() => now ?? new Date());
+  const [liveNow, setLiveNow] = useState(() => new Date());
+  const displayNow = now ?? liveNow;
   const layouts = getDayTimelineBlockLayouts(blocks, selectedDate, timeZoneId);
   const currentMinute = getCurrentMinute(selectedDate, timeZoneId, displayNow);
   const scrollKey = `${selectedDate}:${timeZoneId}`;
@@ -55,11 +56,8 @@ export function DayTimeline({ blocks, completedBlockIds = new Set(), now, onLong
   }, [currentMinute, scrollKey]);
 
   useEffect(() => {
-    if (now !== undefined) {
-      setDisplayNow(now);
-      return;
-    }
-    const refresh = () => setDisplayNow(new Date());
+    if (now !== undefined) return;
+    const refresh = () => setLiveNow(new Date());
     const delay = 60_000 - Date.now() % 60_000;
     let interval: ReturnType<typeof setInterval> | null = null;
     const timeout = setTimeout(() => {
