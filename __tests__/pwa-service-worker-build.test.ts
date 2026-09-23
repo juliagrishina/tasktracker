@@ -48,7 +48,7 @@ describe('PWA service worker build', () => {
     });
   });
 
-  test('creates a non-claiming static-only Workbox configuration', () => {
+  test('creates a static-only Workbox configuration that activates an update immediately', () => {
     const config = createPwaServiceWorkerConfig('C:/tmp/dist');
 
     expect(config).toMatchObject({
@@ -57,8 +57,8 @@ describe('PWA service worker build', () => {
       cleanupOutdatedCaches: true,
       inlineWorkboxRuntime: true,
       sourcemap: false,
-      skipWaiting: false,
-      clientsClaim: false,
+      skipWaiting: true,
+      clientsClaim: true,
     });
     expect(config).not.toHaveProperty('runtimeCaching');
     expect(config).not.toHaveProperty('navigateFallback');

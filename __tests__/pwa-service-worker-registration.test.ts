@@ -3,13 +3,15 @@ import { serviceWorkerRegistrationScript } from '../src/pwa/service-worker-regis
 const fileSystem = jest.requireActual<{ readFileSync(path: string, encoding: string): string }>('node:fs');
 
 describe('PWA service worker registration', () => {
-  test('registers the root worker after load without forcing an update', () => {
+  test('activates an updated worker and reloads only a previously controlled client', () => {
     expect(serviceWorkerRegistrationScript).toContain("'serviceWorker' in navigator");
     expect(serviceWorkerRegistrationScript).toContain("window.addEventListener('load'");
     expect(serviceWorkerRegistrationScript).toContain("register('/sw.js', { updateViaCache: 'none' })");
+    expect(serviceWorkerRegistrationScript).toContain("navigator.serviceWorker.addEventListener('controllerchange'");
+    expect(serviceWorkerRegistrationScript).toContain("worker.postMessage({ type: 'SKIP_WAITING' })");
+    expect(serviceWorkerRegistrationScript).toContain("registration.addEventListener('updatefound'");
+    expect(serviceWorkerRegistrationScript).toContain('window.location.reload()');
     expect(serviceWorkerRegistrationScript).toContain('.catch(() => undefined)');
-    expect(serviceWorkerRegistrationScript).not.toContain('skipWaiting');
-    expect(serviceWorkerRegistrationScript).not.toContain('clients.claim');
   });
 
   test('injects the registration snippet into the web HTML entry', () => {

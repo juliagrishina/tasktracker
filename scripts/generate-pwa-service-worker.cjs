@@ -11,8 +11,8 @@ function createPwaServiceWorkerConfig(distDirectory = defaultDistDirectory) {
     cleanupOutdatedCaches: true,
     inlineWorkboxRuntime: true,
     sourcemap: false,
-    skipWaiting: false,
-    clientsClaim: false,
+    skipWaiting: true,
+    clientsClaim: true,
   };
 }
 
