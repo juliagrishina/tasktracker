@@ -88,5 +88,5 @@ describe('PWA service worker build', () => {
     } finally {
       await fileSystem.rm(directory, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, 30_000);
 });

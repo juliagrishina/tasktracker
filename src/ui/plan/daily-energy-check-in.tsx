@@ -8,7 +8,7 @@ const defaultEnergyPercent = 75;
 const pickerRowHeight = designTokens.size.touchTargetMin;
 
 function scrollOffsetForEnergy(value: number): number {
-  return Math.max(0, energyValues.indexOf(value) * pickerRowHeight);
+  return Math.max(0, energyValues.indexOf(value) * pickerRowHeight - pickerRowHeight);
 }
 
 interface DailyEnergyCheckInProps {
@@ -35,6 +35,12 @@ export function DailyEnergyCheckIn({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const scrollPickerToEnergy = (energyPercent: number) => {
+    const scroll = () => pickerRef.current?.scrollTo({ animated: false, y: scrollOffsetForEnergy(energyPercent) });
+    scroll();
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scroll);
+  };
+
   useEffect(() => {
     if (!visible) {
       pendingInitialScroll.current = false;
@@ -50,7 +56,7 @@ export function DailyEnergyCheckIn({
       pendingInitialScroll.current = true;
       if (!pickerContentIsReady.current) return;
       pendingInitialScroll.current = false;
-      pickerRef.current?.scrollTo({ animated: false, y: scrollOffsetForEnergy(selectedValue) });
+      scrollPickerToEnergy(selectedValue);
     });
     return () => { isCurrent = false; };
   }, [initialEnergyPercent, visible]);
@@ -99,13 +105,12 @@ export function DailyEnergyCheckIn({
                 if (!visible || !pendingInitialScroll.current) return;
                 pendingInitialScroll.current = false;
                 const selectedValue = initialEnergyPercent ?? defaultEnergyPercent;
-                pickerRef.current?.scrollTo({ animated: false, y: scrollOffsetForEnergy(selectedValue) });
+                scrollPickerToEnergy(selectedValue);
               }}
               onMomentumScrollEnd={(event) => {
                 const index = Math.max(0, Math.min(energyValues.length - 1, Math.round(event.nativeEvent.contentOffset.y / pickerRowHeight)));
                 setSelectedEnergyPercent(energyValues[index]);
               }}
-              contentContainerStyle={styles.pickerContent}
               ref={pickerRef}
               showsVerticalScrollIndicator={false}
               snapToInterval={pickerRowHeight}>
@@ -144,7 +149,6 @@ const styles = StyleSheet.create({
   title: { color: designTokens.color.text.primary, fontSize: designTokens.typography.size.sectionTitle, fontWeight: designTokens.typography.weight.bold, lineHeight: designTokens.typography.lineHeight.sectionTitle },
   description: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.body, lineHeight: designTokens.typography.lineHeight.body },
   pickerFrame: { borderColor: designTokens.color.border.subtle, borderRadius: designTokens.radius.control, borderWidth: 1, height: pickerRowHeight * 3, overflow: 'hidden' },
-  pickerContent: { paddingVertical: pickerRowHeight },
   pickerRow: { alignItems: 'center', height: pickerRowHeight, justifyContent: 'center' },
   pickerRowSelected: { backgroundColor: designTokens.color.primarySoft },
   pickerValue: { color: designTokens.color.text.secondary, fontSize: designTokens.typography.size.body, fontWeight: designTokens.typography.weight.semibold, lineHeight: designTokens.typography.lineHeight.body },
